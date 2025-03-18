@@ -33,5 +33,5 @@
 
 #bib & obj
 
-/bin/
-/obj/
+/bin/*
+/obj/*
