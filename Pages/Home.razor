@@ -1,0 +1,193 @@
+﻿@page "/"
+
+@inject HttpClient Http
+
+<PageTitle>Home</PageTitle>
+<center>
+<pre><b>
+   ________                __   ________     _____                      __  
+  / ____/ /___  __  ______/ /  /  _/ __ \   / ___/___  ____ ___________/ /_ 
+ / /   / / __ \/ / / / __  /   / // /_/ /   \__ \/ _ \/ __ `/ ___/ ___/ __ \
+/ /___/ / /_/ / /_/ / /_/ /  _/ // ____/   ___/ /  __/ /_/ / /  / /__/ / / /
+\____/_/\____/\__,_/\__,_/  /___/_/       /____/\___/\__,_/_/   \___/_/ /_/ 
+</b></pre><br>
+
+<img src="/images/ascii-art.png" alt="Albatross" width=75% border="0" /> <br><br>
+
+<input @bind="ipAddress" placeholder="Enter IP address..." />
+<button class="btn btn-primary" @onclick="ValidateAndSearchAsync" disabled="@isSearching">Search</button> <br><br>
+
+@if (isSearching)
+{
+    <div class="spinner-border text-primary" role="status">
+        <span class="visually-hidden">Loading...</span>
+    </div>
+    <p>Searching IP ranges...</p>
+}
+
+<p role="status">@statusMessage</p>
+
+@if (matchedServices != null && matchedServices.Any())
+{
+    <div class="results">
+        <h3>Matching Azure Services:</h3>
+        <ul>
+            @foreach (var service in matchedServices)
+            {
+                <li>@service</li>
+            }
+        </ul>
+    </div>
+}
+
+</center>
+
+@code {
+    private string ipAddress = string.Empty;
+    private string statusMessage = string.Empty;
+    private List<string>? matchedServices;
+    private bool isSearching = false;
+
+    private async Task ValidateAndSearchAsync()
+    {
+        await ValidateAndSearch();
+    }
+
+    private async Task ValidateAndSearch()
+    {
+        matchedServices = null;
+
+        if (!IsValidIPAddress(ipAddress))
+        {
+            statusMessage = "Invalid IP address. Please enter a valid IPv4 or IPv6 address.";
+            return;
+        }
+
+        isSearching = true;
+        statusMessage = string.Empty;
+        StateHasChanged();
+
+        try
+        {
+            // Parse the entered IP address
+            IPAddress enteredIp = IPAddress.Parse(ipAddress);
+
+            // Fetch and parse Azure.json
+            string jsonContent = await Http.GetStringAsync("ip-manifests/Azure.json");
+            var azureData = JsonSerializer.Deserialize<AzureIpRanges>(jsonContent);
+
+            if (azureData?.values == null)
+            {
+                statusMessage = "Error: Could not load Azure IP data";
+                return;
+            }
+
+            // Find matching services
+            matchedServices = new List<string>();
+            foreach (var value in azureData.values)
+            {
+                if (value.properties != null && value.properties.addressPrefixes != null)
+                {
+                    foreach (var prefix in value.properties.addressPrefixes)
+                    {
+                        if (IsIpInRange(enteredIp, prefix) && !string.IsNullOrEmpty(value.name))
+                        {
+                            matchedServices.Add(value.name);
+                            break;
+                        }
+                    }
+                }
+            }
+
+            if (matchedServices.Any())
+            {
+                statusMessage = "Found matching Azure services!";
+            }
+            else
+            {
+                statusMessage = "No matching Azure services found for this IP address.";
+            }
+        }
+        catch (Exception ex)
+        {
+            statusMessage = $"Error during search: {ex.Message}";
+        }
+        finally
+        {
+            isSearching = false;
+        }
+    }
+
+    private bool IsValidIPAddress(string ip)
+    {
+        return IPAddress.TryParse(ip, out _);
+    }
+
+    private bool IsIpInRange(IPAddress ip, string cidrRange)
+    {
+        try
+        {
+            // Split CIDR range into IP and prefix length
+            string[] parts = cidrRange.Split('/');
+            if (parts.Length != 2)
+                return false;
+
+            IPAddress networkAddress = IPAddress.Parse(parts[0]);
+            int prefixLength = int.Parse(parts[1]);
+
+            // Convert IP addresses to bytes for comparison
+            byte[] ipBytes = ip.GetAddressBytes();
+            byte[] networkBytes = networkAddress.GetAddressBytes();
+
+            if (ipBytes.Length != networkBytes.Length)
+                return false; // Different IP versions
+
+            // Compare the network portions
+            int numBytes = prefixLength / 8;
+            int remainingBits = prefixLength % 8;
+
+            // Compare full bytes
+            for (int i = 0; i < numBytes && i < ipBytes.Length; i++)
+            {
+                if (ipBytes[i] != networkBytes[i])
+                    return false;
+            }
+
+            // Compare remaining bits if any
+            if (remainingBits > 0 && numBytes < ipBytes.Length)
+            {
+                int mask = 0xFF << (8 - remainingBits);
+                if ((ipBytes[numBytes] & mask) != (networkBytes[numBytes] & mask))
+                    return false;
+            }
+
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private class AzureIpRanges
+    {
+        public int changeNumber { get; set; }
+        public string? cloud { get; set; }
+        public List<AzureService>? values { get; set; }
+    }
+
+    private class AzureService
+    {
+        public string? name { get; set; }
+        public string? id { get; set; }
+        public ServiceProperties? properties { get; set; }
+    }
+
+    private class ServiceProperties
+    {
+        public string[]? addressPrefixes { get; set; }
+        public string[]? networkFeatures { get; set; }
+        public string[]? platformFeatures { get; set; }
+        public string? systemService { get; set; }
+    }
+}

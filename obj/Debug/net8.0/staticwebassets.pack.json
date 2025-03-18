@@ -1,0 +1,109 @@
+{
+  "Files": [
+    {
+      "Id": "/Users/drewkenn/Library/CloudStorage/OneDrive-Personal/GIT/Albatross/bin/Debug/net8.0/wwwroot/_framework/blazor.webassembly.js",
+      "PackagePath": "staticwebassets/_framework/blazor.webassembly.js"
+    },
+    {
+      "Id": "/Users/drewkenn/Library/CloudStorage/OneDrive-Personal/GIT/Albatross/obj/Debug/net8.0/compressed/wsw6qtdr9t.gz",
+      "PackagePath": "staticwebassets/_framework/blazor.webassembly.js.gz"
+    },
+    {
+      "Id": "/Users/drewkenn/Library/CloudStorage/OneDrive-Personal/GIT/Albatross/obj/Debug/net8.0/scopedcss/bundle/Albatross.styles.css",
+      "PackagePath": "staticwebassets/Albatross.styles.css"
+    },
+    {
+      "Id": "/Users/drewkenn/Library/CloudStorage/OneDrive-Personal/GIT/Albatross/wwwroot/css/app.css",
+      "PackagePath": "staticwebassets/css/app.css"
+    },
+    {
+      "Id": "/Users/drewkenn/Library/CloudStorage/OneDrive-Personal/GIT/Albatross/wwwroot/css/bootstrap/bootstrap.min.css",
+      "PackagePath": "staticwebassets/css/bootstrap/bootstrap.min.css"
+    },
+    {
+      "Id": "/Users/drewkenn/Library/CloudStorage/OneDrive-Personal/GIT/Albatross/wwwroot/css/bootstrap/bootstrap.min.css.map",
+      "PackagePath": "staticwebassets/css/bootstrap/bootstrap.min.css.map"
+    },
+    {
+      "Id": "/Users/drewkenn/Library/CloudStorage/OneDrive-Personal/GIT/Albatross/wwwroot/favicon.png",
+      "PackagePath": "staticwebassets/favicon.png"
+    },
+    {
+      "Id": "/Users/drewkenn/Library/CloudStorage/OneDrive-Personal/GIT/Albatross/wwwroot/icon-192.png",
+      "PackagePath": "staticwebassets/icon-192.png"
+    },
+    {
+      "Id": "/Users/drewkenn/Library/CloudStorage/OneDrive-Personal/GIT/Albatross/wwwroot/images/AWS.webp",
+      "PackagePath": "staticwebassets/images/AWS.webp"
+    },
+    {
+      "Id": "/Users/drewkenn/Library/CloudStorage/OneDrive-Personal/GIT/Albatross/wwwroot/images/Azure.png",
+      "PackagePath": "staticwebassets/images/Azure.png"
+    },
+    {
+      "Id": "/Users/drewkenn/Library/CloudStorage/OneDrive-Personal/GIT/Albatross/wwwroot/images/GCP.webp",
+      "PackagePath": "staticwebassets/images/GCP.webp"
+    },
+    {
+      "Id": "/Users/drewkenn/Library/CloudStorage/OneDrive-Personal/GIT/Albatross/wwwroot/images/albatross-pan.avif",
+      "PackagePath": "staticwebassets/images/albatross-pan.avif"
+    },
+    {
+      "Id": "/Users/drewkenn/Library/CloudStorage/OneDrive-Personal/GIT/Albatross/wwwroot/images/albatross-pan1.png",
+      "PackagePath": "staticwebassets/images/albatross-pan1.png"
+    },
+    {
+      "Id": "/Users/drewkenn/Library/CloudStorage/OneDrive-Personal/GIT/Albatross/wwwroot/images/albatross.avif",
+      "PackagePath": "staticwebassets/images/albatross.avif"
+    },
+    {
+      "Id": "/Users/drewkenn/Library/CloudStorage/OneDrive-Personal/GIT/Albatross/wwwroot/images/albatross1.png",
+      "PackagePath": "staticwebassets/images/albatross1.png"
+    },
+    {
+      "Id": "/Users/drewkenn/Library/CloudStorage/OneDrive-Personal/GIT/Albatross/wwwroot/images/ascii-art.png",
+      "PackagePath": "staticwebassets/images/ascii-art.png"
+    },
+    {
+      "Id": "/Users/drewkenn/Library/CloudStorage/OneDrive-Personal/GIT/Albatross/wwwroot/images/tross.png",
+      "PackagePath": "staticwebassets/images/tross.png"
+    },
+    {
+      "Id": "/Users/drewkenn/Library/CloudStorage/OneDrive-Personal/GIT/Albatross/wwwroot/index.html",
+      "PackagePath": "staticwebassets/index.html"
+    },
+    {
+      "Id": "/Users/drewkenn/Library/CloudStorage/OneDrive-Personal/GIT/Albatross/wwwroot/ip-manifests/Azure.json",
+      "PackagePath": "staticwebassets/ip-manifests/Azure.json"
+    },
+    {
+      "Id": "/Users/drewkenn/Library/CloudStorage/OneDrive-Personal/GIT/Albatross/wwwroot/old_favicon.png",
+      "PackagePath": "staticwebassets/old_favicon.png"
+    },
+    {
+      "Id": "/Users/drewkenn/Library/CloudStorage/OneDrive-Personal/GIT/Albatross/wwwroot/old_icon-192.png",
+      "PackagePath": "staticwebassets/old_icon-192.png"
+    },
+    {
+      "Id": "/Users/drewkenn/Library/CloudStorage/OneDrive-Personal/GIT/Albatross/wwwroot/sample-data/weather.json",
+      "PackagePath": "staticwebassets/sample-data/weather.json"
+    },
+    {
+      "Id": "obj/Debug/net8.0/staticwebassets/msbuild.Albatross.Microsoft.AspNetCore.StaticWebAssets.props",
+      "PackagePath": "build\\Microsoft.AspNetCore.StaticWebAssets.props"
+    },
+    {
+      "Id": "obj/Debug/net8.0/staticwebassets/msbuild.build.Albatross.props",
+      "PackagePath": "build\\Albatross.props"
+    },
+    {
+      "Id": "obj/Debug/net8.0/staticwebassets/msbuild.buildMultiTargeting.Albatross.props",
+      "PackagePath": "buildMultiTargeting\\Albatross.props"
+    },
+    {
+      "Id": "obj/Debug/net8.0/staticwebassets/msbuild.buildTransitive.Albatross.props",
+      "PackagePath": "buildTransitive\\Albatross.props"
+    }
+  ],
+  "ElementsToRemove": []
+}

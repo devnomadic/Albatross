@@ -1,0 +1,114 @@
+.page {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+}
+
+main {
+    flex: 1;
+}
+
+.sidebar {
+    background-image: linear-gradient(180deg, rgb(5, 39, 103) 0%, #ffffff 70%);
+}
+
+#image {
+    /* width: 100px; Set the desired width */
+    /* height: 100px; Set the desired height */
+    background-image: url('/images/albatross.avif');
+    background-size: cover; /* Ensure the image covers the entire div */
+    background-position: center; /* Center the image */
+}
+
+.top-row {
+    background-color: #3a0647;
+    background-image: linear-gradient(90deg, rgb(5, 39, 103) 0%, hwb(231 49% 39%) 70%);
+    border-bottom: 1px solid #3a0647;
+    justify-content: flex-end;
+    height: 3.5rem;
+    display: flex;
+    align-items: center;
+
+}
+
+.top-row ::deep a, .top-row ::deep .btn-link {
+    white-space: nowrap;
+    margin-left: 1.5rem;
+    text-decoration: none;
+    color: #d7d7d7;
+}
+
+.top-row ::deep a:hover, .top-row ::deep .btn-link:hover {
+    text-decoration: underline;
+}
+
+.top-row ::deep a:first-child {
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.footer {
+    position: fixed;
+    left: 0;
+    bottom: 0;
+    width: 100%;
+    background-color: rgba(255, 255, 255, 0.9);
+    color: black;
+    text-align: center;
+    padding: 5px 0;
+    box-shadow: 0 -2px 5px rgba(0, 0, 0, 0.1);
+    z-index: 100;
+}
+
+.footer img {
+    margin: 0;
+    transition: transform 0.2s ease-in-out;
+}
+
+.footer img:hover {
+    transform: scale(1.1);
+}
+
+@media (max-width: 640.98px) {
+    .top-row {
+        justify-content: space-between;
+    }
+
+    .top-row ::deep a, .top-row ::deep .btn-link {
+        margin-left: 0;
+    }
+
+    .footer img {
+        margin: 0;
+    }
+}
+
+@media (min-width: 641px) {
+    .page {
+        flex-direction: row;
+    }
+
+    .sidebar {
+        width: 250px;
+        height: 100vh;
+        position: sticky;
+        top: 0;
+    }
+
+    .top-row {
+        position: sticky;
+        top: 0;
+        z-index: 1;
+    }
+
+    .top-row.auth ::deep a:first-child {
+        flex: 1;
+        text-align: right;
+        width: 0;
+    }
+
+    .top-row, article {
+        padding-left: 2rem !important;
+        padding-right: 1.5rem !important;
+    }
+}
