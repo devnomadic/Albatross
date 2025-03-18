@@ -34,3 +34,4 @@
 #bib & obj
 /bin/
 /obj/
+.DS_Store
