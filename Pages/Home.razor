@@ -15,7 +15,28 @@
 <img src="/images/ascii-art.png" alt="Albatross" width=75% border="0" /> <br><br>
 
 <input @bind="ipAddress" placeholder="Enter IP address..." />
-<button class="btn btn-primary" @onclick="ValidateAndSearchAsync" disabled="@isSearching">Search</button> <br><br>
+<button class="btn btn-primary" @onclick="ValidateAndSearchAsync" disabled="@isSearching">Search</button>
+<button class="btn btn-info" @onclick="ToggleDescription" style="margin-left: 10px;">
+    <span class="oi oi-info"></span> About
+</button>
+<br><br>
+
+@if (showDescription)
+{
+    <div class="description-panel">
+        <div class="card">
+            <div class="card-header">
+                <h4>About Cloud IP Search</h4>
+                <button class="btn btn-sm btn-close" @onclick="ToggleDescription"></button>
+            </div>
+            <div class="card-body">
+                <p>Cloud IP Search helps you identify which cloud service providers own specific IP addresses.</p>
+                <p>Enter any IPv4 or IPv6 address to see if it belongs to Microsoft Azure services.</p>
+                <p>The tool searches through official IP range manifests to match your query with known cloud infrastructure.</p>
+            </div>
+        </div>
+    </div>
+}
 
 @if (isSearching)
 {
@@ -31,12 +52,12 @@
 {
     <div class="results">
         <h3>Matching Azure Services:</h3>
-        <ul>
+        <div>
             @foreach (var service in matchedServices)
             {
-                <li>@service</li>
+                <div>@service</div>
             }
-        </ul>
+        </div>
     </div>
 }
 
@@ -47,6 +68,12 @@
     private string statusMessage = string.Empty;
     private List<string>? matchedServices;
     private bool isSearching = false;
+    private bool showDescription = false;
+
+    private void ToggleDescription()
+    {
+        showDescription = !showDescription;
+    }
 
     private async Task ValidateAndSearchAsync()
     {
