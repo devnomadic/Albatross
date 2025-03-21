@@ -1,4 +1,5 @@
 ﻿@inherits LayoutComponentBase
+@using System.Reflection
 
 <div class="page">
 
@@ -24,7 +25,7 @@
             @Body
         </article>
         <div class="footer">
-            <div class="build-number">Build: @BuildVersion</div>
+            <div class="build-number">Build: @BuildInfo</div>
             <div class="cloud-logos">
                 <img src="/images/Azure.png" alt="Azure" width=5% border="0" />
                 <img src="/images/AWS.webp" alt="AWS" width=5% border="0" />
@@ -35,10 +36,15 @@
 </div>
 
 @code {
-    private string BuildVersion { get; set; } = "1.0.0"; // Replace with actual version logic
-
+    string BuildInfo;
+    
     protected override void OnInitialized()
     {
-        base.OnInitialized();
+        Assembly assembly = typeof(Program).Assembly;
+        var version = assembly.GetName().Version;
+        var title = assembly.GetCustomAttribute<AssemblyTitleAttribute>()?.Title ?? "Albatross";
+        var buildDate = DateTime.Now.ToString("yyyy-MM-dd");
+        
+        BuildInfo = $"{title} v{version}";
     }
 }
