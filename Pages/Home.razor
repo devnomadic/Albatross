@@ -31,7 +31,7 @@
             </div>
             <div class="card-body">
                 <p>Cloud IP Search helps you identify which cloud service providers own specific IP addresses.</p>
-                <p>Enter any IPv4 or IPv6 address to see if it belongs to Microsoft Azure services.</p>
+                <p>Enter any IPv4 or IPv6 address to see if it belongs to Microsoft Azure, AWS, or Google Cloud Platform services.</p>
                 <p>The tool searches through official IP range manifests to match your query with known cloud infrastructure.</p>
             </div>
         </div>
@@ -48,12 +48,38 @@
 
 <p role="status">@statusMessage</p>
 
-@if (matchedServices != null && matchedServices.Any())
+@if (azureMatchedServices != null && azureMatchedServices.Any())
 {
     <div class="results">
         <h3>Matching Azure Services:</h3>
         <div>
-            @foreach (var service in matchedServices)
+            @foreach (var service in azureMatchedServices)
+            {
+                <div>@service</div>
+            }
+        </div>
+    </div>
+}
+
+@if (awsMatchedServices != null && awsMatchedServices.Any())
+{
+    <div class="results">
+        <h3>Matching AWS Services:</h3>
+        <div>
+            @foreach (var service in awsMatchedServices)
+            {
+                <div>@service</div>
+            }
+        </div>
+    </div>
+}
+
+@if (gcpMatchedServices != null && gcpMatchedServices.Any())
+{
+    <div class="results">
+        <h3>Matching GCP Services:</h3>
+        <div>
+            @foreach (var service in gcpMatchedServices)
             {
                 <div>@service</div>
             }
@@ -66,7 +92,9 @@
 @code {
     private string ipAddress = string.Empty;
     private string statusMessage = string.Empty;
-    private List<string>? matchedServices;
+    private List<string>? azureMatchedServices;
+    private List<string>? awsMatchedServices;
+    private List<string>? gcpMatchedServices;
     private bool isSearching = false;
     private bool showDescription = false;
 
@@ -82,7 +110,9 @@
 
     private async Task ValidateAndSearch()
     {
-        matchedServices = null;
+        azureMatchedServices = null;
+        awsMatchedServices = null;
+        gcpMatchedServices = null;
 
         if (!IsValidIPAddress(ipAddress))
         {
@@ -98,41 +128,91 @@
         {
             // Parse the entered IP address
             IPAddress enteredIp = IPAddress.Parse(ipAddress);
+            bool foundMatch = false;
 
-            // Fetch and parse Azure.json
-            string jsonContent = await Http.GetStringAsync("ip-manifests/Azure.json");
-            var azureData = JsonSerializer.Deserialize<AzureIpRanges>(jsonContent);
+            // Search Azure IP ranges
+            string azureJsonContent = await Http.GetStringAsync("ip-manifests/Azure.json");
+            var azureData = JsonSerializer.Deserialize<AzureIpRanges>(azureJsonContent);
 
-            if (azureData?.values == null)
+            if (azureData?.values != null)
             {
-                statusMessage = "Error: Could not load Azure IP data";
-                return;
-            }
-
-            // Find matching services
-            matchedServices = new List<string>();
-            foreach (var value in azureData.values)
-            {
-                if (value.properties != null && value.properties.addressPrefixes != null)
+                // Find matching Azure services
+                azureMatchedServices = new List<string>();
+                foreach (var value in azureData.values)
                 {
-                    foreach (var prefix in value.properties.addressPrefixes)
+                    if (value.properties != null && value.properties.addressPrefixes != null)
                     {
-                        if (IsIpInRange(enteredIp, prefix) && !string.IsNullOrEmpty(value.name))
+                        foreach (var prefix in value.properties.addressPrefixes)
                         {
-                            matchedServices.Add(value.name);
-                            break;
+                            if (IsIpInRange(enteredIp, prefix) && !string.IsNullOrEmpty(value.name))
+                            {
+                                azureMatchedServices.Add(value.name);
+                                foundMatch = true;
+                                break;
+                            }
                         }
                     }
                 }
             }
 
-            if (matchedServices.Any())
+            // Search AWS IP ranges
+            string awsJsonContent = await Http.GetStringAsync("ip-manifests/AWS.json");
+            var awsData = JsonSerializer.Deserialize<AwsIpRanges>(awsJsonContent);
+
+            if (awsData?.prefixes != null)
             {
-                statusMessage = "Found matching Azure services!";
+                // Find matching AWS services
+                awsMatchedServices = new List<string>();
+                foreach (var prefix in awsData.prefixes)
+                {
+                    if (!string.IsNullOrEmpty(prefix.ip_prefix) && !string.IsNullOrEmpty(prefix.service))
+                    {
+                        if (IsIpInRange(enteredIp, prefix.ip_prefix))
+                        {
+                            string serviceInfo = $"{prefix.service} ({prefix.region})";
+                            if (!awsMatchedServices.Contains(serviceInfo))
+                            {
+                                awsMatchedServices.Add(serviceInfo);
+                                foundMatch = true;
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Search GCP IP ranges
+            string gcpJsonContent = await Http.GetStringAsync("ip-manifests/GCP.json");
+            var gcpData = JsonSerializer.Deserialize<GcpIpRanges>(gcpJsonContent);
+
+            if (gcpData?.prefixes != null)
+            {
+                // Find matching GCP services
+                gcpMatchedServices = new List<string>();
+                foreach (var prefix in gcpData.prefixes)
+                {
+                    string ipRange = prefix.ipv4Prefix ?? prefix.ipv6Prefix;
+                    if (!string.IsNullOrEmpty(ipRange) && !string.IsNullOrEmpty(prefix.service))
+                    {
+                        if (IsIpInRange(enteredIp, ipRange))
+                        {
+                            string serviceInfo = $"{prefix.service} ({prefix.scope})";
+                            if (!gcpMatchedServices.Contains(serviceInfo))
+                            {
+                                gcpMatchedServices.Add(serviceInfo);
+                                foundMatch = true;
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (foundMatch)
+            {
+                statusMessage = "Found matching cloud services!";
             }
             else
             {
-                statusMessage = "No matching Azure services found for this IP address.";
+                statusMessage = "No matching cloud services found for this IP address.";
             }
         }
         catch (Exception ex)
@@ -216,5 +296,36 @@
         public string[]? networkFeatures { get; set; }
         public string[]? platformFeatures { get; set; }
         public string? systemService { get; set; }
+    }
+
+    private class AwsIpRanges
+    {
+        public string? syncToken { get; set; }
+        public string? createDate { get; set; }
+        public List<AwsPrefix>? prefixes { get; set; }
+        public List<AwsPrefix>? ipv6_prefixes { get; set; }
+    }
+
+    private class AwsPrefix
+    {
+        public string? ip_prefix { get; set; }
+        public string? region { get; set; }
+        public string? service { get; set; }
+        public string? network_border_group { get; set; }
+    }
+
+    private class GcpIpRanges
+    {
+        public string? syncToken { get; set; }
+        public string? creationTime { get; set; }
+        public List<GcpPrefix>? prefixes { get; set; }
+    }
+
+    private class GcpPrefix
+    {
+        public string? ipv4Prefix { get; set; }
+        public string? ipv6Prefix { get; set; }
+        public string? service { get; set; }
+        public string? scope { get; set; }
     }
 }
