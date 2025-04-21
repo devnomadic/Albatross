@@ -27,9 +27,9 @@
         <div class="footer">
             <div class="build-number">Build: @BuildInfo</div>
             <div class="cloud-logos">
-                <img src="/images/Azure.png" alt="Azure" width=5% border="0" />
-                <img src="/images/AWS.webp" alt="AWS" width=5% border="0" />
-                <img src="/images/GCP.webp" alt="GCP" width=5% border="0" />
+                <img src="/images/Azure.png" alt="Azure" width="3%" border="0" />
+                <img src="/images/AWS.webp" alt="AWS" width="3%" border="0" />
+                <img src="/images/GCP.webp" alt="GCP" width="3%" border="0" />
             </div>
         </div>
     </main>
@@ -45,6 +45,7 @@
         var title = assembly.GetCustomAttribute<AssemblyTitleAttribute>()?.Title ?? "Albatross";
         var buildDate = DateTime.Now.ToString("yyyy-MM-dd");
         
-        BuildInfo = $"{title} v{version}";
+        @* BuildInfo = $"{title} v{version}"; *@
+        BuildInfo = $"{title}";
     }
 }
