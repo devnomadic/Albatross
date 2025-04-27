@@ -1,0 +1,47 @@
+/* JSON Output Styling */
+.json-output {
+    font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+    font-size: 14px;
+    line-height: 1.5;
+    max-height: 60vh;
+    max-width: 100%;
+    overflow-x: auto;
+    overflow-y: auto;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    border-radius: 4px;
+    text-align: left;
+}
+
+.card-container {
+    max-width: 90%;
+    margin: 0 auto;
+}
+
+@media (max-width: 768px) {
+    .json-output {
+        font-size: 12px;
+        max-height: 50vh;
+    }
+}
+
+/* Highlight.js custom styles */
+.hljs-attr {
+    color: #91d7ff; /* Property names */
+}
+
+.hljs-string {
+    color: #b5cea8; /* String values */
+}
+
+.hljs-number {
+    color: #b5cea8; /* Number values */
+}
+
+.hljs-literal {
+    color: #569cd6; /* true/false/null */
+}
+
+.hljs-punctuation {
+    color: #d4d4d4; /* Braces, brackets, commas */
+} 

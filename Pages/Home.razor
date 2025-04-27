@@ -1,8 +1,19 @@
 ﻿@page "/"
 
 @inject HttpClient Http
+@inject Albatross.Services.AbuseIPDBService AbuseIPDBService
+@using System.Text.Json
+@inject IJSRuntime JSRuntime
 
 <PageTitle>Home</PageTitle>
+
+<!-- External CSS and JS references -->
+<link rel="stylesheet" href="css/json-formatter.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.7.0/styles/vs2015.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.7.0/highlight.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.7.0/languages/json.min.js"></script>
+<script src="js/json-highlight.js"></script>
+
 <center>
 
 <!-- 
@@ -23,6 +34,9 @@
 <button class="btn btn-info" @onclick="ToggleDescription" style="margin-left: 10px;">
     <span class="oi oi-info"></span> About
 </button>
+<button class="btn btn-warning" @onclick="CheckAbuseIPDBAsync" disabled="@isCheckingAbuse" style="margin-left: 10px;">
+    <span class="oi oi-shield"></span> Check IP Reputation
+</button>
 <br><br>
 
 @if (showDescription)
@@ -37,20 +51,11 @@
                 <p>Cloud IP Search helps you identify which cloud service providers own specific IP addresses.</p>
                 <p>Enter any IPv4 or IPv6 address to see if it belongs to Microsoft Azure, AWS, or Google Cloud Platform services.</p>
                 <p>The tool searches through official IP range manifests to match your query with known cloud infrastructure.</p>
+                <p>You can also check IP reputation via AbuseIPDB to identify potentially malicious IP addresses.</p>
             </div>
         </div>
     </div>
 }
-
-@if (isSearching)
-{
-    <div class="spinner-border text-primary" role="status">
-        <span class="visually-hidden">Loading...</span>
-    </div>
-    <p>Searching IP ranges...</p>
-}
-
-<p role="status">@statusMessage</p>
 
 @if (azureMatchedServices != null && azureMatchedServices.Any())
 {
@@ -91,6 +96,37 @@
     </div>
 }
 
+@if (isSearching || isCheckingAbuse)
+{
+    <div class="spinner-border text-primary" role="status">
+        <span class="visually-hidden">Loading...</span>
+    </div>
+    <p>@(isCheckingAbuse ? "Checking IP reputation..." : "Searching IP ranges...")</p>
+}
+
+<p role="status">@statusMessage</p>
+
+@if (abuseIpResult != null)
+{
+    <div class="results mt-4 card-container">
+        <h3>IP Reputation Results for @(abuseIpResult.Data?.IpAddress ?? ipAddress)</h3>
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5>AbuseIPDB JSON Response</h5>
+                <button class="btn btn-sm btn-outline-secondary" @onclick="ToggleJsonDisplay">
+                    @(showJson ? "Hide JSON" : "Show JSON")
+                </button>
+            </div>
+            @if (showJson)
+            {
+                <div class="card-body">
+                    <pre class="bg-dark text-light p-3 rounded json-output" id="jsonOutput">@formattedJson</pre>
+                </div>
+            }
+        </div>
+    </div>
+}
+
 </center>
 
 @code {
@@ -101,15 +137,115 @@
     private List<string>? gcpMatchedServices;
     private bool isSearching = false;
     private bool showDescription = false;
+    private bool isCheckingAbuse = false;
+    private bool showJson = true; // Default to showing JSON
+    private string formattedJson = string.Empty;
+    private Albatross.Services.AbuseIPDBApiResponse abuseIpResult;
+    
+    // Called when component is initialized
+    protected override void OnInitialized()
+    {
+        base.OnInitialized();
+    }
+    
+    // Called after the component has rendered
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!string.IsNullOrEmpty(formattedJson) && showJson)
+        {
+            await ApplyJsonHighlighting();
+        }
+    }
+    
+    // Method to apply syntax highlighting to JSON
+    private async Task ApplyJsonHighlighting()
+    {
+        try
+        {
+            await JSRuntime.InvokeVoidAsync("highlightJson");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error highlighting JSON: {ex.Message}");
+        }
+    }
 
     private void ToggleDescription()
     {
         showDescription = !showDescription;
     }
+    
+    private async void ToggleJsonDisplay()
+    {
+        showJson = !showJson;
+        
+        // When toggling to show the JSON, apply highlighting after render
+        if (showJson && !string.IsNullOrEmpty(formattedJson))
+        {
+            StateHasChanged();
+            await Task.Delay(50); // Small delay to ensure rendering completes
+            await ApplyJsonHighlighting();
+        }
+    }
 
     private async Task ValidateAndSearchAsync()
     {
         await ValidateAndSearch();
+    }
+
+    private async Task CheckAbuseIPDBAsync()
+    {
+        if (!IsValidIPAddress(ipAddress))
+        {
+            statusMessage = "Invalid IP address. Please enter a valid IPv4 or IPv6 address.";
+            return;
+        }
+
+        isCheckingAbuse = true;
+        statusMessage = string.Empty;
+        abuseIpResult = null;
+        formattedJson = string.Empty;
+        StateHasChanged();
+
+        try
+        {
+            // Log to browser console for debugging
+            await JSRuntime.InvokeVoidAsync("console.log", "Checking IP: " + ipAddress);
+            
+            abuseIpResult = await AbuseIPDBService.CheckIPAsync(ipAddress, 30, true);
+            
+            // Format the JSON for display
+            var options = new JsonSerializerOptions { WriteIndented = true };
+            formattedJson = JsonSerializer.Serialize(abuseIpResult, options);
+            
+            // Log the JSON to browser console
+            await JSRuntime.InvokeVoidAsync("console.log", "Response JSON: " + formattedJson);
+            
+            // Debug check
+            if (string.IsNullOrEmpty(formattedJson))
+            {
+                formattedJson = "No data returned from API.";
+            }
+            
+            statusMessage = "IP reputation check completed.";
+            
+            // Force UI update
+            StateHasChanged();
+            
+            // Apply syntax highlighting after the component has rendered
+            await Task.Delay(50); // Small delay to ensure rendering completes
+            await ApplyJsonHighlighting();
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("console.error", "Error: " + ex.Message);
+            statusMessage = $"Error checking IP reputation: {ex.Message}";
+            formattedJson = $"Error: {ex.Message}";
+        }
+        finally
+        {
+            isCheckingAbuse = false;
+        }
     }
 
     private async Task ValidateAndSearch()
@@ -278,6 +414,13 @@
         {
             return false;
         }
+    }
+
+    private string GetScoreClass(int score)
+    {
+        if (score < 25) return "text-success";
+        if (score < 75) return "text-warning";
+        return "text-danger";
     }
 
     private class AzureIpRanges
