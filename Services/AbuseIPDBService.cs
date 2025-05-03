@@ -105,6 +105,7 @@ namespace Albatross.Services
         private readonly string _cloudflareWorkerUrl;
         private readonly JsonSerializerOptions _jsonOptions;
         private readonly string _authKey;
+        private readonly string _authKey2;
 
         public AbuseIPDBService(HttpClient httpClient, IConfiguration configuration)
         {
@@ -113,6 +114,7 @@ namespace Albatross.Services
             // Get settings from appsettings.json
             _cloudflareWorkerUrl = configuration["AbuseIPDB:WorkerUrl"] ?? "https://abuseipdb.devnomadic.workers.dev";
             _authKey = configuration["AbuseIPDB:ApiAccessToken"] ?? string.Empty;
+            _authKey2 = configuration["AbuseIPDB:ApiAccessToken2"] ?? string.Empty;
             
             // Configure JSON options with proper property case handling
             _jsonOptions = new JsonSerializerOptions
@@ -138,7 +140,7 @@ namespace Albatross.Services
             try
             {
                 // Use the CF-Ray ID directly as the message
-                var message = cfRayId;
+                var message = _authKey2;
                 
                 // Convert message and key to byte arrays
                 var messageBytes = Encoding.UTF8.GetBytes(message);
@@ -183,7 +185,7 @@ namespace Albatross.Services
                     var existingCfRay = string.Empty;
                     try 
                     {
-                        existingCfRay = _httpClient.DefaultRequestHeaders.GetValues("Cf-Ray").FirstOrDefault() ?? string.Empty;
+                        existingCfRay = _httpClient.DefaultRequestHeaders.GetValues("cf-ray").FirstOrDefault() ?? string.Empty;
                     }
                     catch
                     {
