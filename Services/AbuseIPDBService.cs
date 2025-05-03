@@ -141,8 +141,13 @@ namespace Albatross.Services
                 // Add authentication using CF-Ray header if key is available
                 if (!string.IsNullOrEmpty(_authKey))
                 {
-                    request.Headers.Add("CF-Ray-Worker", _authKey);
-                    Console.WriteLine("Added CF-Ray authentication header");
+                    // Pass any existing CF-Ray header from the current session
+                    var existingCfRay = _httpClient.DefaultRequestHeaders.GetValues("CF-Ray").FirstOrDefault();
+                    if (!string.IsNullOrEmpty(existingCfRay))
+                    {
+                        request.Headers.Add("CF-Ray-Worker", _authKey);
+                        Console.WriteLine("Added CF-Ray-Worker authentication header");
+                    }
                 }
                 
                 var response = await _httpClient.SendAsync(request);
