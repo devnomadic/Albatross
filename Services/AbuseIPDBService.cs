@@ -7,6 +7,8 @@ using System.Collections.Generic;
 using System;
 using System.Diagnostics;
 using Microsoft.Extensions.Configuration;
+using System.Security.Cryptography;
+using System.Text;
 
 namespace Albatross.Services
 {
@@ -122,6 +124,42 @@ namespace Albatross.Services
         }
 
         /// <summary>
+        /// Generates an HMAC-SHA256 token using the auth key and CF-Ray ID
+        /// </summary>
+        /// <param name="cfRayId">The CF-Ray ID to use in the HMAC generation</param>
+        /// <returns>Base64-encoded HMAC hash</returns>
+        private string GenerateHmacToken(string cfRayId)
+        {
+            if (string.IsNullOrEmpty(_authKey) || string.IsNullOrEmpty(cfRayId))
+            {
+                return string.Empty;
+            }
+
+            try
+            {
+                // Use the CF-Ray ID directly as the message
+                var message = cfRayId;
+                
+                // Convert message and key to byte arrays
+                var messageBytes = Encoding.UTF8.GetBytes(message);
+                var keyBytes = Encoding.UTF8.GetBytes(_authKey);
+                
+                // Create and compute the HMAC
+                using (var hmac = new HMACSHA256(keyBytes))
+                {
+                    var hashBytes = hmac.ComputeHash(messageBytes);
+                    // Convert hash to Base64 string
+                    return Convert.ToBase64String(hashBytes);
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error generating HMAC token: {ex.Message}");
+                return string.Empty;
+            }
+        }
+
+        /// <summary>
         /// Checks an IP address against AbuseIPDB through a Cloudflare Worker
         /// </summary>
         /// <param name="ipAddress">The IP address to check</param>
@@ -138,15 +176,33 @@ namespace Albatross.Services
                 // Create request message to add custom headers
                 var request = new HttpRequestMessage(HttpMethod.Get, requestUrl);
                 
-                // Add authentication using CF-Ray header if key is available
+                // Add authentication using HMAC if auth key is available
                 if (!string.IsNullOrEmpty(_authKey))
                 {
-                    // Pass any existing CF-Ray header from the current session
-                    var existingCfRay = _httpClient.DefaultRequestHeaders.GetValues("CF-Ray").FirstOrDefault();
+                    // Get the CF-Ray header from the current session
+                    var existingCfRay = string.Empty;
+                    try 
+                    {
+                        existingCfRay = _httpClient.DefaultRequestHeaders.GetValues("Cf-Ray").FirstOrDefault() ?? string.Empty;
+                    }
+                    catch
+                    {
+                        // If the header doesn't exist, we'll use a timestamp-based fallback
+                        existingCfRay = DateTimeOffset.UtcNow.ToString("yyyyMMddHHmmss");
+                    }
+                    
                     if (!string.IsNullOrEmpty(existingCfRay))
                     {
-                        request.Headers.Add("CF-Ray-Worker", _authKey);
-                        Console.WriteLine("Added CF-Ray-Worker authentication header");
+                        // Generate HMAC token
+                        var hmacToken = GenerateHmacToken(existingCfRay);
+                        
+                        // Add the original CF-Ray (or timestamp) for verification
+                        request.Headers.Add("X-CF-Ray-ID", existingCfRay);
+                        
+                        // Add the HMAC token
+                        request.Headers.Add("Worker-Token", hmacToken);
+                        
+                        Console.WriteLine("Added Worker-Token authentication header with HMAC");
                     }
                 }
                 
