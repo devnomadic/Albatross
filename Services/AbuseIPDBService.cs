@@ -126,20 +126,19 @@ namespace Albatross.Services
         }
 
         /// <summary>
-        /// Generates an HMAC-SHA256 token using the auth key and CF-Ray ID
+        /// Generates an HMAC-SHA256 token using the auth key and static token
         /// </summary>
-        /// <param name="cfRayId">The CF-Ray ID to use in the HMAC generation</param>
         /// <returns>Base64-encoded HMAC hash</returns>
-        private string GenerateHmacToken(string cfRayId)
+        private string GenerateHmacToken()
         {
-            if (string.IsNullOrEmpty(_authKey) || string.IsNullOrEmpty(cfRayId))
+            if (string.IsNullOrEmpty(_authKey) || string.IsNullOrEmpty(_authKey2))
             {
                 return string.Empty;
             }
 
             try
             {
-                // Use the CF-Ray ID directly as the message
+                // Use the second auth key as the message and first auth key as the HMAC key
                 var message = _authKey2;
                 
                 // Convert message and key to byte arrays
@@ -178,34 +177,16 @@ namespace Albatross.Services
                 // Create request message to add custom headers
                 var request = new HttpRequestMessage(HttpMethod.Get, requestUrl);
                 
-                // Add authentication using HMAC if auth key is available
-                if (!string.IsNullOrEmpty(_authKey))
+                // Add authentication using HMAC if auth keys are available
+                if (!string.IsNullOrEmpty(_authKey) && !string.IsNullOrEmpty(_authKey2))
                 {
-                    // Get the CF-Ray header from the current session
-                    var existingCfRay = string.Empty;
-                    try 
-                    {
-                        existingCfRay = _httpClient.DefaultRequestHeaders.GetValues("cf-ray").FirstOrDefault() ?? string.Empty;
-                    }
-                    catch
-                    {
-                        // If the header doesn't exist, we'll use a timestamp-based fallback
-                        existingCfRay = DateTimeOffset.UtcNow.ToString("yyyyMMddHHmmss");
-                    }
+                    // Generate HMAC token
+                    var hmacToken = GenerateHmacToken();
                     
-                    if (!string.IsNullOrEmpty(existingCfRay))
-                    {
-                        // Generate HMAC token
-                        var hmacToken = GenerateHmacToken(existingCfRay);
-                        
-                        // Add the original CF-Ray (or timestamp) for verification
-                        request.Headers.Add("X-CF-Ray-ID", existingCfRay);
-                        
-                        // Add the HMAC token
-                        request.Headers.Add("Worker-Token", hmacToken);
-                        
-                        Console.WriteLine("Added Worker-Token authentication header with HMAC");
-                    }
+                    // Add the HMAC token for authentication
+                    request.Headers.Add("Worker-Token", hmacToken);
+                    
+                    Console.WriteLine("Added Worker-Token authentication header with HMAC");
                 }
                 
                 var response = await _httpClient.SendAsync(request);
