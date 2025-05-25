@@ -1,5 +1,14 @@
 html, body {
-    font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+    font-family: 'Quantico', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+    height: 100%;
+    margin: 0;
+    padding: 0;
+}
+
+#app {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
 }
 
 h1:focus {
@@ -123,4 +132,34 @@ code {
 @keyframes fadeIn {
     from { opacity: 0; }
     to { opacity: 1; }
+}
+
+/* IP Input styling for IPv6 support */
+.ip-input {
+    width: 400px;
+    max-width: 90vw;
+    font-family: 'Quantico', monospace;
+    font-size: 1rem;
+    padding: 8px 12px;
+    border: 2px solid #dee2e6;
+    border-radius: 4px;
+    margin-right: 10px;
+    margin-bottom: 20px;
+    transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+}
+
+.ip-input:focus {
+    border-color: #86b7fe;
+    outline: 0;
+    box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
+}
+
+.ip-input::placeholder {
+    color: #6c757d;
+    opacity: 1;
+}
+
+/* Button spacing */
+.btn {
+    margin-bottom: 20px;
 }

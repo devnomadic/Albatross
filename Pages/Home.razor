@@ -29,7 +29,7 @@
 <img src="/images/ascii-text-art.png" alt="CloudIPSearch" width=30% border="0" /> <br><br>
 <img src="/images/ascii-art.png" alt="Albatross" width=50% border="0" /> <br><br>
 
-<input @bind="ipAddress" placeholder="Enter IP address..." />
+<input @bind="ipAddress" placeholder="Enter IPv4 or IPv6 address..." class="ip-input form-control" />
 <button class="btn btn-primary" @onclick="ValidateAndSearchAsync" disabled="@isSearching">Search</button>
 <button class="btn btn-info" @onclick="ToggleDescription" style="margin-left: 10px;">
     <span class="oi oi-info"></span> About

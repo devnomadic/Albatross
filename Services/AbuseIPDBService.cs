@@ -111,10 +111,10 @@ namespace Albatross.Services
         {
             _httpClient = httpClient;
             
-            // Get settings from appsettings.json
+            // Get settings from appsettings.json and decode Base64 encoded keys
             _cloudflareWorkerUrl = configuration["AbuseIPDB:WorkerUrl"] ?? "https://abuseipdb.devnomadic.workers.dev";
-            _authKey = configuration["AbuseIPDB:ApiAccessToken"] ?? string.Empty;
-            _authKey2 = configuration["AbuseIPDB:ApiAccessToken2"] ?? string.Empty;
+            _authKey = DecodeBase64(configuration["AbuseIPDB:ApiAccessToken"]) ?? string.Empty;
+            _authKey2 = DecodeBase64(configuration["AbuseIPDB:ApiAccessToken2"]) ?? string.Empty;
             
             // Configure JSON options with proper property case handling
             _jsonOptions = new JsonSerializerOptions
@@ -123,6 +123,26 @@ namespace Albatross.Services
                 WriteIndented = true,
                 DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
             };
+        }
+
+        /// <summary>
+        /// Decodes a Base64 encoded string
+        /// </summary>
+        private static string? DecodeBase64(string? encodedValue)
+        {
+            if (string.IsNullOrEmpty(encodedValue))
+                return encodedValue;
+                
+            try
+            {
+                var bytes = Convert.FromBase64String(encodedValue);
+                return Encoding.UTF8.GetString(bytes);
+            }
+            catch
+            {
+                // If decoding fails, return the original value (for backward compatibility)
+                return encodedValue;
+            }
         }
 
         /// <summary>
