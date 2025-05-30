@@ -119,14 +119,40 @@ code {
     animation: fadeIn 0.3s;
 }
 
-.card-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
+/* Specifically target the description panel card header */
+.description-panel .card .card-header {
+    padding: 0.25rem 1rem !important;
+    min-height: 32px !important;
+    height: 32px !important;
+    box-sizing: border-box !important;
 }
 
-.card-header h4 {
-    margin: 0;
+.description-panel .card .card-header h5 {
+    margin: 0 !important;
+    padding: 0 !important;
+    font-size: 0.9rem !important;
+    line-height: 1.1 !important;
+    font-weight: 500 !important;
+}
+
+/* Apply ultra-compact styling to all card headers */
+.card .card-header {
+    display: flex !important;
+    justify-content: space-between !important;
+    align-items: center !important;
+    padding: 0.25rem 1rem !important;
+    min-height: 32px !important;
+    height: 32px !important;
+    box-sizing: border-box !important;
+}
+
+.card .card-header h4,
+.card .card-header h5 {
+    margin: 0 !important;
+    padding: 0 !important;
+    font-size: 0.9rem !important;
+    line-height: 1.1 !important;
+    font-weight: 500 !important;
 }
 
 @keyframes fadeIn {
@@ -176,4 +202,351 @@ pre {
     max-width: 100%;
     box-sizing: border-box;
     overflow-wrap: break-word;
+}
+
+/* Base footer icon styling - scaled up and better spacing */
+.footer img {
+    width: 40px !important;
+    height: 40px !important;
+    max-width: 40px;
+    margin: 0 8px;
+    transition: transform 0.2s ease-in-out;
+}
+
+.footer img:hover {
+    transform: scale(1.15);
+}
+
+/* Footer layout override to center cloud logos with search box */
+.footer {
+    position: relative !important;
+    display: flex !important;
+    justify-content: center !important;
+    align-items: center !important;
+}
+
+.build-number {
+    position: absolute;
+    left: 15px;
+    top: 50%;
+    transform: translateY(-50%);
+}
+
+.cloud-logos {
+    justify-self: center;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+/* Wide screen display optimizations */
+@media (min-width: 1200px) {
+    .content {
+        max-width: 1140px;
+        margin: 0 auto;
+        padding-left: 2rem;
+        padding-right: 2rem;
+    }
+    
+    /* Scale down input and button sizes for wide screens */
+    .ip-input {
+        width: 350px;
+        font-size: 0.95rem;
+    }
+    
+    .btn {
+        font-size: 0.9rem;
+        padding: 0.5rem 1rem;
+    }
+    
+    /* Limit card width on wide screens */
+    .card-container {
+        max-width: 900px;
+        margin: 0 auto;
+    }
+    
+    /* Reduce header sizes on wide screens */
+    h1 {
+        font-size: 2rem;
+    }
+    
+    h3 {
+        font-size: 1.5rem;
+    }    /* Footer scaling for wide screens */
+    .footer {
+        padding: 12px calc((100vw - 1140px) / 2 + 15px);
+    }
+    
+    .footer img {
+        width: 45px !important;
+        height: 45px !important;
+        max-width: 45px;
+    }
+      .build-number {
+        font-size: 0.75rem;
+    }
+}
+
+@media (min-width: 1400px) {
+    .content {
+        max-width: 1320px;
+    }
+    
+    /* Further scale down for very wide screens */
+    .ip-input {
+        width: 320px;
+        font-size: 0.9rem;
+    }
+    
+    .btn {
+        font-size: 0.85rem;
+        padding: 0.45rem 0.9rem;
+    }
+    
+    /* More conservative sizing for ultra-wide screens */
+    .card-container {
+        max-width: 800px;
+    }
+    
+    h1 {
+        font-size: 1.8rem;
+    }
+    
+    h3 {
+        font-size: 1.3rem;
+    }    /* Footer scaling for extra wide screens */
+    .footer {
+        padding: 10px calc((100vw - 1320px) / 2 + 15px);
+    }
+    
+    .footer img {
+        width: 42px !important;
+        height: 42px !important;
+        max-width: 42px;
+    }
+      .build-number {
+        font-size: 0.7rem;
+    }
+}
+
+@media (min-width: 1600px) {
+    .content {
+        max-width: 1400px;
+    }
+    
+    /* Even more conservative for 4K and ultra-wide monitors */
+    .ip-input {
+        width: 300px;
+        font-size: 0.85rem;
+    }
+    
+    .card-container {
+        max-width: 700px;
+    }
+    
+    /* Keep text readable but not massive */
+    body {
+        font-size: 0.9rem;
+    }
+    
+    h1 {
+        font-size: 1.6rem;
+    }
+    
+    h3 {
+        font-size: 1.2rem;
+    }    /* Footer scaling for 4K and ultra-wide monitors */
+    .footer {
+        padding: 8px calc((100vw - 1400px) / 2 + 15px);
+    }
+    
+    .footer img {
+        width: 40px !important;
+        height: 40px !important;
+        max-width: 40px;
+    }
+      .build-number {
+        font-size: 0.65rem;
+    }
+}
+
+/* Force reduced card headers - cache buster */
+body .card .card-header {
+    padding: 0.25rem 1rem !important;
+    height: 32px !important;
+    max-height: 32px !important;
+    overflow: hidden !important;
+}
+
+body .card .card-header h4,
+body .card .card-header h5 {
+    font-size: 0.9rem !important;
+    line-height: 1.1 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+}
+
+body .btn-sm {
+    font-size: 0.75rem !important;
+    padding: 0.125rem 0.25rem !important;
+}
+
+/* Ultra-high specificity CSS overrides for card headers */
+html body div.card div.card-header {
+    padding: 0.25rem 1rem !important;
+    height: 32px !important;
+    max-height: 32px !important;
+    min-height: 32px !important;
+    line-height: 32px !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    box-sizing: border-box !important;
+    overflow: hidden !important;
+}
+
+html body div.card div.card-header h4,
+html body div.card div.card-header h5 {
+    font-size: 0.9rem !important;
+    line-height: 1.1 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    height: auto !important;
+    display: inline-block !important;
+}
+
+/* Specific targeting for Blazor components */
+.description-panel .card .card-header,
+.results .card .card-header,
+.card-container .card .card-header {
+    padding: 0.25rem 1rem !important;
+    height: 32px !important;
+    max-height: 32px !important;
+    min-height: 32px !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    box-sizing: border-box !important;
+}
+
+/* Override any Bootstrap default padding */
+.card-header[class*="card-header"] {
+    padding: 0.25rem 1rem !important;
+    height: 32px !important;
+}
+
+/* Force card headers to be compact with consistent styling */
+.card .card-header {
+    height: 32px !important;
+    min-height: 32px !important;
+    max-height: 32px !important;
+    padding: 0.25rem 0.75rem !important;
+    margin: 0 !important;
+    line-height: 1.2 !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    overflow: hidden !important;
+}
+
+/* More specific targeting for card headers */
+div.card div.card-header {
+    height: 32px !important;
+    min-height: 32px !important;
+    max-height: 32px !important;
+    padding: 0.25rem 0.75rem !important;
+    margin: 0 !important;
+    line-height: 1.2 !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    overflow: hidden !important;
+}
+
+/* Ultra-specific targeting for card headers */
+html body div.card div.card-header {
+    height: 32px !important;
+    min-height: 32px !important;
+    max-height: 32px !important;
+    padding: 0.25rem 0.75rem !important;
+    margin: 0 !important;
+    line-height: 1.2 !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    overflow: hidden !important;
+}
+
+/* Ensure close button is properly centered within card headers */
+.card .card-header .btn-close {
+    padding: 0.125rem 0.25rem !important;
+    margin: 0 !important;
+    font-size: 0.75rem !important;
+    line-height: 1 !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    height: 24px !important;
+    width: 24px !important;
+    flex-shrink: 0 !important;
+}
+
+/* More specific targeting for close buttons in card headers */
+div.card div.card-header .btn-close {
+    padding: 0.125rem 0.25rem !important;
+    margin: 0 !important;
+    font-size: 0.75rem !important;
+    line-height: 1 !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    height: 24px !important;
+    width: 24px !important;
+    flex-shrink: 0 !important;
+}
+
+/* Ultra-specific targeting for close buttons */
+html body div.card div.card-header .btn-close {
+    padding: 0.125rem 0.25rem !important;
+    margin: 0 !important;
+    font-size: 0.75rem !important;
+    line-height: 1 !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    height: 24px !important;
+    width: 24px !important;
+    flex-shrink: 0 !important;
+}
+
+/* Ensure all buttons in card headers are properly centered */
+.card .card-header .btn {
+    margin: 0 !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    flex-shrink: 0 !important;
+    line-height: 1 !important;
+}
+
+/* More specific targeting for buttons in card headers */
+div.card div.card-header .btn {
+    margin: 0 !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    flex-shrink: 0 !important;
+    line-height: 1 !important;
+}
+
+/* Ultra-specific targeting for buttons in card headers */
+html body div.card div.card-header .btn {
+    margin: 0 !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    flex-shrink: 0 !important;
+    line-height: 1 !important;
 }

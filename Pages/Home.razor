@@ -36,8 +36,64 @@
             };
             document.head.appendChild(json_script);
         };
-        document.head.appendChild(hljs_script);
-    })();
+        document.head.appendChild(hljs_script);    })();
+    
+    // Force compact card headers after page load
+    window.addEventListener('DOMContentLoaded', function() {
+        function forceCompactHeaders() {
+            const cardHeaders = document.querySelectorAll('.card-header');
+            cardHeaders.forEach(header => {
+                header.style.setProperty('padding', '0.25rem 1rem', 'important');
+                header.style.setProperty('height', '32px', 'important');
+                header.style.setProperty('max-height', '32px', 'important');
+                header.style.setProperty('min-height', '32px', 'important');
+                header.style.setProperty('display', 'flex', 'important');
+                header.style.setProperty('align-items', 'center', 'important');
+                header.style.setProperty('justify-content', 'space-between', 'important');
+                header.style.setProperty('box-sizing', 'border-box', 'important');
+                header.style.setProperty('overflow', 'hidden', 'important');
+                
+                const headings = header.querySelectorAll('h4, h5');
+                headings.forEach(heading => {
+                    heading.style.setProperty('font-size', '0.9rem', 'important');
+                    heading.style.setProperty('line-height', '1.1', 'important');
+                    heading.style.setProperty('margin', '0', 'important');
+                    heading.style.setProperty('padding', '0', 'important');
+                });
+            });
+        }
+        
+        // Apply immediately
+        forceCompactHeaders();
+        
+        // Also apply after a short delay to catch any dynamic content
+        setTimeout(forceCompactHeaders, 500);
+        
+        // Set up a mutation observer to catch dynamically added card headers
+        const observer = new MutationObserver(function(mutations) {
+            mutations.forEach(function(mutation) {
+                if (mutation.type === 'childList') {
+                    mutation.addedNodes.forEach(function(node) {
+                        if (node.nodeType === 1) { // Element node
+                            const newHeaders = node.querySelectorAll ? node.querySelectorAll('.card-header') : [];
+                            newHeaders.forEach(header => {
+                                header.style.setProperty('padding', '0.25rem 1rem', 'important');
+                                header.style.setProperty('height', '32px', 'important');
+                                header.style.setProperty('max-height', '32px', 'important');
+                                header.style.setProperty('min-height', '32px', 'important');
+                                header.style.setProperty('display', 'flex', 'important');
+                                header.style.setProperty('align-items', 'center', 'important');
+                                header.style.setProperty('justify-content', 'space-between', 'important');
+                                header.style.setProperty('box-sizing', 'border-box', 'important');
+                            });
+                        }
+                    });
+                }
+            });
+        });
+        
+        observer.observe(document.body, { childList: true, subtree: true });
+    });
 </script>
 
 <center>
@@ -51,8 +107,8 @@
 \____/_/\____/\__,_/\__,_/  /___/_/       /____/\___/\__,_/_/   \___/_/ /_/ 
 </b></pre><br>
 -->
-
-<img src="/images/ascii-text-art.png" alt="CloudIPSearch" width=30% border="0" /> <br><br>
+<img src="/images/ascii-text-art.png" alt="CloudIPSearch" width="30%" style="padding-bottom: 5px;" border="0"/> <br>
+<img src="/images/ascii-text-art-albatross.png" alt="ascii-text-art-albatross" width=10% border="0" /> <br><br>
 <img src="/images/ascii-art.png" alt="Albatross" width=50% border="0" /> <br><br>
 
 <input @bind="ipAddress" placeholder="Enter IPv4 or IPv6 address..." class="ip-input form-control" />
@@ -66,12 +122,11 @@
 <br><br>
 
 @if (showDescription)
-{
-    <div class="description-panel">
-        <div class="card">
-            <div class="card-header">
-                <h4>About Cloud IP Search</h4>
-                <button class="btn btn-sm btn-close" @onclick="ToggleDescription"></button>
+{    <div class="description-panel">
+        <div class="card">            
+            <div class="card-header d-flex justify-content-between align-items-center" style="padding: 0.25rem 1rem !important; min-height: 32px !important; height: 32px !important; max-height: 32px !important; box-sizing: border-box !important; overflow: hidden !important;">
+                <h5 style="margin: 0 !important; padding: 0 !important; font-size: 0.9rem !important; line-height: 1.1 !important; font-weight: 500 !important;">About Cloud IP Search</h5>
+                <button class="btn btn-sm btn-close" @onclick="ToggleDescription" style="font-size: 0.75rem !important; padding: 0.125rem 0.25rem !important; margin: 0 !important; height: 24px !important; width: 24px !important; display: flex !important; align-items: center !important; justify-content: center !important; flex-shrink: 0 !important;"></button>
             </div>
             <div class="card-body">
                 <p>Cloud IP Search helps you identify which cloud service providers own specific IP addresses.</p>
@@ -135,14 +190,14 @@
 @if (abuseIpResult != null)
 {
     <div class="results mt-4 card-container">
-        <h3>IP Reputation Results for @(abuseIpResult.Data?.IpAddress ?? ipAddress)</h3>
-        <div class="card">
-            <div class="card-header d-flex justify-content-between align-items-center">
-                <h5>AbuseIPDB JSON Response</h5>
-                <button class="btn btn-sm btn-outline-secondary" @onclick="ToggleJsonDisplay">
+        <h3>IP Reputation Results for @(abuseIpResult.Data?.IpAddress ?? ipAddress)</h3>        
+        <div class="card">            
+            <div class="card-header d-flex justify-content-between align-items-center" style="padding: 0.25rem 1rem !important; min-height: 32px !important; height: 32px !important; max-height: 32px !important; box-sizing: border-box !important; overflow: hidden !important;">
+                <h5 style="margin: 0 !important; padding: 0 !important; font-size: 0.9rem !important; line-height: 1.1 !important; font-weight: 500 !important;">AbuseIPDB JSON Response</h5>
+                <button class="btn btn-sm btn-outline-secondary" @onclick="ToggleJsonDisplay" style="font-size: 0.75rem !important; padding: 0.125rem 0.25rem !important; margin: 0 !important; height: 24px !important; display: flex !important; align-items: center !important; justify-content: center !important; flex-shrink: 0 !important;">
                     @(showJson ? "Hide JSON" : "Show JSON")
                 </button>
-            </div> @if (showJson)
+            </div>@if (showJson)
             {
                 <div class="card-body json-container">
                     <pre class="bg-dark text-light p-3 rounded json-output" id="jsonOutput">@formattedJson</pre>
