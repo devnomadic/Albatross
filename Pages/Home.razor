@@ -5,14 +5,40 @@
 @using System.Text.Json
 @inject IJSRuntime JSRuntime
 
-<PageTitle>Home</PageTitle>
+<PageTitle>Albatross</PageTitle>
 
 <!-- External CSS and JS references -->
 <link rel="stylesheet" href="css/json-formatter.css">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.7.0/styles/vs2015.min.css">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.7.0/highlight.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.7.0/languages/json.min.js"></script>
-<script src="js/json-highlight.js"></script>
+<script>
+    // Global flag to track highlight.js availability
+    window.hljsReady = false;
+    
+    // Load highlight.js scripts in proper order
+    (function() {
+        // First load the main highlight.js library
+        var hljs_script = document.createElement('script');
+        hljs_script.src = 'https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.7.0/highlight.min.js';
+        hljs_script.onload = function() {
+            // Then load the JSON language support
+            var json_script = document.createElement('script');
+            json_script.src = 'https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.7.0/languages/json.min.js';
+            json_script.onload = function() {
+                // Finally load our custom JSON highlighting
+                var custom_script = document.createElement('script');
+                custom_script.src = 'js/json-highlight.js';
+                custom_script.onload = function() {
+                    // Mark as ready once everything is loaded
+                    window.hljsReady = true;
+                    console.log('highlight.js and JSON support loaded successfully');
+                };
+                document.head.appendChild(custom_script);
+            };
+            document.head.appendChild(json_script);
+        };
+        document.head.appendChild(hljs_script);
+    })();
+</script>
 
 <center>
 
@@ -116,10 +142,9 @@
                 <button class="btn btn-sm btn-outline-secondary" @onclick="ToggleJsonDisplay">
                     @(showJson ? "Hide JSON" : "Show JSON")
                 </button>
-            </div>
-            @if (showJson)
+            </div> @if (showJson)
             {
-                <div class="card-body">
+                <div class="card-body json-container">
                     <pre class="bg-dark text-light p-3 rounded json-output" id="jsonOutput">@formattedJson</pre>
                 </div>
             }
@@ -140,7 +165,7 @@
     private bool isCheckingAbuse = false;
     private bool showJson = true; // Default to showing JSON
     private string formattedJson = string.Empty;
-    private Albatross.Services.AbuseIPDBApiResponse abuseIpResult;
+    private Albatross.Services.AbuseIPDBApiResponse? abuseIpResult;
     
     // Called when component is initialized
     protected override void OnInitialized()
@@ -156,13 +181,23 @@
             await ApplyJsonHighlighting();
         }
     }
-    
-    // Method to apply syntax highlighting to JSON
+      // Method to apply syntax highlighting to JSON
     private async Task ApplyJsonHighlighting()
     {
         try
         {
-            await JSRuntime.InvokeVoidAsync("highlightJson");
+            // Check if highlight.js is ready before trying to use it
+            bool isReady = await JSRuntime.InvokeAsync<bool>("eval", "window.hljsReady === true");
+            if (isReady)
+            {
+                await JSRuntime.InvokeVoidAsync("highlightJson");
+            }
+            else
+            {
+                // Retry after a short delay if not ready
+                await Task.Delay(100);
+                await ApplyJsonHighlighting();
+            }
         }
         catch (Exception ex)
         {
@@ -327,15 +362,14 @@
             if (gcpData?.prefixes != null)
             {
                 // Find matching GCP services
-                gcpMatchedServices = new List<string>();
-                foreach (var prefix in gcpData.prefixes)
+                gcpMatchedServices = new List<string>();                foreach (var prefix in gcpData.prefixes)
                 {
-                    string ipRange = prefix.ipv4Prefix ?? prefix.ipv6Prefix;
+                    string? ipRange = prefix.ipv4Prefix ?? prefix.ipv6Prefix;
                     if (!string.IsNullOrEmpty(ipRange) && !string.IsNullOrEmpty(prefix.service))
                     {
                         if (IsIpInRange(enteredIp, ipRange))
                         {
-                            string serviceInfo = $"{prefix.service} ({prefix.scope})";
+                            string serviceInfo = $"{prefix.service} ({prefix.scope ?? "Global"})";
                             if (!gcpMatchedServices.Contains(serviceInfo))
                             {
                                 gcpMatchedServices.Add(serviceInfo);

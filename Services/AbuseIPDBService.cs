@@ -6,7 +6,6 @@ using System.Text.Json.Serialization;
 using System.Collections.Generic;
 using System;
 using System.Diagnostics;
-using Microsoft.Extensions.Configuration;
 using System.Security.Cryptography;
 using System.Text;
 
@@ -107,14 +106,14 @@ namespace Albatross.Services
         private readonly string _authKey;
         private readonly string _authKey2;
 
-        public AbuseIPDBService(HttpClient httpClient, IConfiguration configuration)
+        public AbuseIPDBService(HttpClient httpClient)
         {
             _httpClient = httpClient;
             
-            // Get settings from appsettings.json and decode Base64 encoded keys
-            _cloudflareWorkerUrl = configuration["AbuseIPDB:WorkerUrl"] ?? "https://abuseipdb.devnomadic.workers.dev";
-            _authKey = DecodeBase64(configuration["AbuseIPDB:ApiAccessToken"]) ?? string.Empty;
-            _authKey2 = DecodeBase64(configuration["AbuseIPDB:ApiAccessToken2"]) ?? string.Empty;
+            // Hardcoded configuration values for security (less discoverable than appsettings.json)
+            _cloudflareWorkerUrl = "https://abuseipdb.devnomadic.workers.dev";
+            _authKey = DecodeBase64("YWxiYXRyb3NzLWFidXNlaXBkYi1jbGllbnQ=") ?? string.Empty;
+            _authKey2 = DecodeBase64("YWxiYXRyb3NzLWFidXNlaXBkYi1jbGllbnQy") ?? string.Empty;
             
             // Configure JSON options with proper property case handling
             _jsonOptions = new JsonSerializerOptions

@@ -10,13 +10,11 @@ builder.RootComponents.Add<HeadOutlet>("head::after");
 builder.Services.AddScoped(sp => new HttpClient { BaseAddress = new Uri(builder.HostEnvironment.BaseAddress) });
 builder.Services.AddScoped<AbuseIPDBService>(sp => 
     new AbuseIPDBService(
-        sp.GetRequiredService<HttpClient>(), 
-        sp.GetRequiredService<IConfiguration>()
+        sp.GetRequiredService<HttpClient>()
     )
 );
 
-// Set API access token through appsettings.json, environment variables or a server auth endpoint
-// For development, you can add this to appsettings.Development.json
-// In production, consider using a server API endpoint to get the token securely
+// API access tokens are now hardcoded in the service for security purposes
+// This makes them less discoverable than storing them in appsettings.json
 
 await builder.Build().RunAsync();
