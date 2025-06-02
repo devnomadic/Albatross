@@ -207,10 +207,13 @@ pre {
 /* Base footer icon styling - scaled up and better spacing */
 .footer img {
     width: 40px !important;
-    height: 40px !important;
+    height: auto !important;
     max-width: 40px;
+    max-height: 40px;
     margin: 0 8px;
     transition: transform 0.2s ease-in-out;
+    display: inline-block;
+    object-fit: contain;
 }
 
 .footer img:hover {
@@ -549,4 +552,159 @@ html body div.card div.card-header .btn {
     justify-content: center !important;
     flex-shrink: 0 !important;
     line-height: 1 !important;
+}
+
+/* Mobile phone specific footer styling */
+@media (max-width: 767px) {
+    .footer {
+        position: relative !important;
+        display: flex !important;
+        flex-direction: column !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+        padding: 10px !important;
+        text-align: center !important;
+    }
+    
+    .build-number {
+        margin-bottom: 10px !important;
+        font-size: 0.65rem !important;
+    }
+    
+    .build-label::after {
+        content: "\A" !important;
+        white-space: pre !important;
+    }
+    
+    .build-label, .build-value {
+        display: block !important;
+        text-align: center !important;
+    }
+    
+    .cloud-logos {
+        text-align: center !important;
+        margin-top: 5px !important;
+        display: flex !important;
+        justify-content: center !important;
+        align-items: center !important;
+        gap: 8px !important;
+    }
+    
+    .footer img {
+        width: 32px !important;
+        height: auto !important;
+        max-width: 32px !important;
+        margin: 0 !important;
+        display: inline-block !important;
+    }
+}
+
+/* Extra small phone screens */
+@media (max-width: 480px) {
+    .footer {
+        padding: 6px !important;
+    }
+    
+    .build-number {
+        font-size: 0.6rem !important;
+        margin-bottom: 8px !important;
+    }
+    
+    .cloud-logos {
+        gap: 6px !important;
+    }
+    
+    .footer img {
+        width: 28px !important;
+        max-width: 28px !important;
+    }
+}
+
+/* Very small screens (narrow phones) */
+@media (max-width: 360px) {
+    .footer {
+        padding: 4px !important;
+    }
+    
+    .build-number {
+        font-size: 0.55rem !important;
+        margin-bottom: 6px !important;
+    }
+    
+    .cloud-logos {
+        gap: 4px !important;
+    }
+    
+    .footer img {
+        width: 24px !important;
+        max-width: 24px !important;
+    }
+}
+
+/* Ensure footer is always visible on all screen sizes */
+.footer {
+    display: flex !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+}
+
+/* Mobile scaling for ASCII art images on phone screens */
+@media (max-width: 767px) {
+    /* CloudIPSearch ASCII art - scale up from 30% to 60% */
+    img[alt="CloudIPSearch"] {
+        width: 60% !important;
+        max-width: 90% !important;
+    }
+    
+    /* ASCII text art albatross - scale up from 10% to 25% */
+    img[alt="ascii-text-art-albatross"] {
+        width: 25% !important;
+        max-width: 40% !important;
+    }
+    
+    /* Main Albatross ASCII art - scale up from 50% to 75% */
+    img[alt="Albatross"] {
+        width: 75% !important;
+        max-width: 85% !important;
+    }
+}
+
+@media (max-width: 480px) {
+    /* CloudIPSearch ASCII art - even larger for small phones */
+    img[alt="CloudIPSearch"] {
+        width: 70% !important;
+        max-width: 95% !important;
+    }
+    
+    /* ASCII text art albatross - larger for small phones */
+    img[alt="ascii-text-art-albatross"] {
+        width: 30% !important;
+        max-width: 45% !important;
+    }
+    
+    /* Main Albatross ASCII art - larger for small phones */
+    img[alt="Albatross"] {
+        width: 85% !important;
+        max-width: 95% !important;
+    }
+}
+
+@media (max-width: 360px) {
+    /* CloudIPSearch ASCII art - maximum size for very small phones */
+    img[alt="CloudIPSearch"] {
+        width: 80% !important;
+        max-width: 98% !important;
+    }
+    
+    /* ASCII text art albatross - maximum size for very small phones */
+    img[alt="ascii-text-art-albatross"] {
+        width: 35% !important;
+        max-width: 50% !important;
+    }
+    
+    /* Main Albatross ASCII art - maximum size for very small phones */
+    img[alt="Albatross"] {
+        width: 90% !important;
+        max-width: 98% !important;
+    }
 }

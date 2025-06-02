@@ -23,17 +23,18 @@
         -->
         <article class="content px-4">
             @Body
-        </article>
-        <div class="footer">
-            <div class="build-number">Build: @BuildInfo</div>
-            <div class="cloud-logos">
-                <a href="/manifests/azure-manifest.json" target="_blank">
+        </article>        <div class="footer">
+            <div class="build-number">
+                <span class="build-label">Build:</span>
+                <span class="build-value">@BuildInfo</span>
+            </div><div class="cloud-logos">
+                <a href="/ip-manifests/Azure.json" target="_blank">
                     <img src="/images/Azure.png" alt="Azure" width="3%" border="0" />
                 </a>
-                <a href="/manifests/aws-manifest.json" target="_blank">
+                <a href="/ip-manifests/AWS.json" target="_blank">
                     <img src="/images/AWS.webp" alt="AWS" width="3%" border="0" />
                 </a>
-                <a href="/manifests/gcp-manifest.json" target="_blank">
+                <a href="/ip-manifests/GCP.json" target="_blank">
                     <img src="/images/GCP.webp" alt="GCP" width="3%" border="0" />
                 </a>
                 <a href="https://www.abuseipdb.com" target="_blank">
@@ -45,7 +46,7 @@
 </div>
 
 @code {
-    string BuildInfo;
+    string BuildInfo = string.Empty;
     
     protected override void OnInitialized()
     {

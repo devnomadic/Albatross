@@ -65,16 +65,22 @@ main {
     padding: 15px;
     border-top: 1px solid #dee2e6;
     margin-top: auto;
-    display: flex;
+    display: flex !important;
     justify-content: space-between;
     align-items: center;
     flex-shrink: 0;
+    visibility: visible !important;
+    opacity: 1 !important;
 }
 
 .build-number {
     font-size: 0.8rem;
     color: #666;
     font-family: monospace;
+}
+
+.build-label, .build-value {
+    display: inline;
 }
 
 .cloud-logos {
@@ -98,17 +104,49 @@ main {
 
     .top-row ::deep a, .top-row ::deep .btn-link {
         margin-left: 0;
-    }    .footer {
+    }
+    
+    .footer {
         flex-direction: column;
-        padding: 15px 10px;
+        padding: 10px;
+        display: flex !important;
+        visibility: visible !important;
     }
 
     .build-number {
-        margin-bottom: 5px;
+        margin-bottom: 8px;
+        text-align: center;
+        font-size: 0.65rem;
+    }
+    
+    /* Add line break between "Build:" and build number on mobile */
+    .build-label::after {
+        content: "\A";
+        white-space: pre;
+    }
+    
+    .build-label, .build-value {
+        display: block;
+        text-align: center;
+    }
+    
+    .build-value {
+        margin-top: 2px;
+    }
+    
+    .cloud-logos {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        gap: 8px;
     }
 
     .footer img {
+        width: 32px;
+        height: auto;
+        max-width: 32px;
         margin: 0;
+        display: inline-block;
     }
 }
 
