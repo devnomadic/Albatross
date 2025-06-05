@@ -580,7 +580,7 @@ html body div.card div.card-header .btn {
     line-height: 1 !important;
 }
 
-/* Mobile phone specific footer styling */
+/* Mobile phone specific footer styling - compact for better space usage */
 @media (max-width: 767px) {
     .footer {
         position: relative !important;
@@ -588,12 +588,12 @@ html body div.card div.card-header .btn {
         flex-direction: column !important;
         visibility: visible !important;
         opacity: 1 !important;
-        padding: 10px !important;
+        padding: 6px !important;
         text-align: center !important;
     }
     
     .build-number {
-        margin-bottom: 10px !important;
+        margin-bottom: 6px !important;
         font-size: 0.65rem !important;
     }
     
@@ -609,7 +609,7 @@ html body div.card div.card-header .btn {
     
     .cloud-logos {
         text-align: center !important;
-        margin-top: 5px !important;
+        margin-top: 3px !important;
         display: flex !important;
         justify-content: center !important;
         align-items: center !important;
@@ -625,19 +625,20 @@ html body div.card div.card-header .btn {
     }
 }
 
-/* Extra small phone screens */
+/* Extra small phone screens - even more compact */
 @media (max-width: 480px) {
     .footer {
-        padding: 6px !important;
+        padding: 4px !important;
     }
     
     .build-number {
         font-size: 0.6rem !important;
-        margin-bottom: 8px !important;
+        margin-bottom: 4px !important;
     }
     
     .cloud-logos {
         gap: 6px !important;
+        margin-top: 2px !important;
     }
     
     .footer img {
@@ -646,19 +647,20 @@ html body div.card div.card-header .btn {
     }
 }
 
-/* Very small screens (narrow phones) */
+/* Very small screens (narrow phones) - most compact */
 @media (max-width: 360px) {
     .footer {
-        padding: 4px !important;
+        padding: 3px !important;
     }
     
     .build-number {
         font-size: 0.55rem !important;
-        margin-bottom: 6px !important;
+        margin-bottom: 3px !important;
     }
     
     .cloud-logos {
         gap: 4px !important;
+        margin-top: 1px !important;
     }
     
     .footer img {

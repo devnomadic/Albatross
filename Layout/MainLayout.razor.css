@@ -79,28 +79,28 @@ main {
     box-sizing: border-box;
 }
 
-/* Ensure footer stays at bottom on mobile */
+/* Ensure footer stays at bottom on mobile with reduced height */
 @media (max-width: 767px) {
     .footer {
         position: relative !important;
         margin-top: auto !important;
         flex-shrink: 0 !important;
-        min-height: 80px !important;
-        padding: 10px !important;
+        min-height: 50px !important;
+        padding: 8px !important;
     }
 }
 
 @media (max-width: 480px) {
     .footer {
-        min-height: 100px !important;
-        padding: 8px !important;
+        min-height: 45px !important;
+        padding: 6px !important;
     }
 }
 
 @media (max-width: 360px) {
     .footer {
-        min-height: 120px !important;
-        padding: 6px !important;
+        min-height: 40px !important;
+        padding: 4px !important;
     }
 }
 
