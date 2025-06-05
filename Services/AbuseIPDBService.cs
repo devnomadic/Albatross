@@ -110,7 +110,7 @@ namespace Albatross.Services
             _httpClient = httpClient;
             
             // Hardcoded configuration values for security (less discoverable than appsettings.json)
-            _cloudflareWorkerUrl = "https://abuseipdb.devnomadic.workers.dev";
+            _cloudflareWorkerUrl = "https://abuseipdb.devnomadic.workers.dev/".ToLower();
             _authKey = DecodeBase64("YWxiYXRyb3NzLWFidXNlaXBkYi1jbGllbnQ=") ?? string.Empty;
             
             // Configure JSON options with proper property case handling
@@ -189,7 +189,8 @@ namespace Albatross.Services
         {
             try
             {
-                var requestUrl = $"{_cloudflareWorkerUrl}?ipAddress={ipAddress}&maxAgeInDays={maxAgeInDays}&verbose={verbose}";
+                var verboseParam = verbose.ToString().ToLower();
+                var requestUrl = $"{_cloudflareWorkerUrl}?ipAddress={ipAddress}&maxAgeInDays={maxAgeInDays}&verbose={verboseParam}".ToLower();
                 Console.WriteLine($"Requesting: {requestUrl}");
                 
                 // Create request message to add custom headers
