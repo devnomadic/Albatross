@@ -3,17 +3,20 @@
     display: flex;
     flex-direction: column;
     min-height: 100vh;
+    min-height: 100dvh; /* Use dynamic viewport height for better mobile support */
 }
 
 main {
     flex: 1;
     display: flex;
     flex-direction: column;
+    min-height: 0; /* Allow flex items to shrink */
 }
 
 .content {
     flex: 1;
     padding-bottom: 20px;
+    min-height: 0; /* Allow flex items to shrink */
 }
 
 .sidebar {
@@ -71,6 +74,34 @@ main {
     flex-shrink: 0;
     visibility: visible !important;
     opacity: 1 !important;
+    min-height: 60px;
+    z-index: 1000;
+    box-sizing: border-box;
+}
+
+/* Ensure footer stays at bottom on mobile */
+@media (max-width: 767px) {
+    .footer {
+        position: relative !important;
+        margin-top: auto !important;
+        flex-shrink: 0 !important;
+        min-height: 80px !important;
+        padding: 10px !important;
+    }
+}
+
+@media (max-width: 480px) {
+    .footer {
+        min-height: 100px !important;
+        padding: 8px !important;
+    }
+}
+
+@media (max-width: 360px) {
+    .footer {
+        min-height: 120px !important;
+        padding: 6px !important;
+    }
 }
 
 .build-number {

@@ -104,7 +104,6 @@ namespace Albatross.Services
         private readonly string _cloudflareWorkerUrl;
         private readonly JsonSerializerOptions _jsonOptions;
         private readonly string _authKey;
-        private readonly string _authKey2;
 
         public AbuseIPDBService(HttpClient httpClient)
         {
@@ -113,7 +112,6 @@ namespace Albatross.Services
             // Hardcoded configuration values for security (less discoverable than appsettings.json)
             _cloudflareWorkerUrl = "https://abuseipdb.devnomadic.workers.dev";
             _authKey = DecodeBase64("YWxiYXRyb3NzLWFidXNlaXBkYi1jbGllbnQ=") ?? string.Empty;
-            _authKey2 = DecodeBase64("YWxiYXRyb3NzLWFidXNlaXBkYi1jbGllbnQy") ?? string.Empty;
             
             // Configure JSON options with proper property case handling
             _jsonOptions = new JsonSerializerOptions
@@ -145,20 +143,21 @@ namespace Albatross.Services
         }
 
         /// <summary>
-        /// Generates an HMAC-SHA256 token using the auth key and static token
+        /// Generates an HMAC-SHA256 token using the auth key and full request URL
         /// </summary>
+        /// <param name="requestUrl">The full request URL including query parameters</param>
         /// <returns>Base64-encoded HMAC hash</returns>
-        private string GenerateHmacToken()
+        private string GenerateHmacToken(string requestUrl)
         {
-            if (string.IsNullOrEmpty(_authKey) || string.IsNullOrEmpty(_authKey2))
+            if (string.IsNullOrEmpty(_authKey) || string.IsNullOrEmpty(requestUrl))
             {
                 return string.Empty;
             }
 
             try
             {
-                // Use the second auth key as the message and first auth key as the HMAC key
-                var message = _authKey2;
+                // Use the full request URL (including arguments) as the message and auth key as the HMAC key
+                var message = requestUrl;
                 
                 // Convert message and key to byte arrays
                 var messageBytes = Encoding.UTF8.GetBytes(message);
@@ -196,11 +195,11 @@ namespace Albatross.Services
                 // Create request message to add custom headers
                 var request = new HttpRequestMessage(HttpMethod.Get, requestUrl);
                 
-                // Add authentication using HMAC if auth keys are available
-                if (!string.IsNullOrEmpty(_authKey) && !string.IsNullOrEmpty(_authKey2))
+                // Add authentication using HMAC if auth key and worker URL are available
+                if (!string.IsNullOrEmpty(_authKey) && !string.IsNullOrEmpty(_cloudflareWorkerUrl))
                 {
-                    // Generate HMAC token
-                    var hmacToken = GenerateHmacToken();
+                    // Generate HMAC token using the full request URL
+                    var hmacToken = GenerateHmacToken(requestUrl);
                     
                     // Add the HMAC token for authentication
                     request.Headers.Add("Worker-Token", hmacToken);
