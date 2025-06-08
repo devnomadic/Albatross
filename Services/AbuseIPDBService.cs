@@ -152,7 +152,7 @@ namespace Albatross.Services
             {
                 // Fallback if BuildConstants are not available - default to production
                 Debug.WriteLine("BuildConstants not available, using production worker as fallback");
-                return "https://abuseipdb.workers.dev/";
+                return "https://abuseipdb.devnomadic.workers.dev/";
             }
         }
 

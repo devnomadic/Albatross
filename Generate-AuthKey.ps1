@@ -30,10 +30,10 @@ try {
     
     # Determine worker URL based on environment
     $workerUrl = switch ($Environment.ToLower()) {
-        "preview" { "https://abuseipdb-preview.workers.dev/" }
-        "development" { "https://abuseipdb-preview.workers.dev/" }
-        "dev" { "https://abuseipdb-preview.workers.dev/" }
-        default { "https://abuseipdb.workers.dev/" }
+        "preview" { "https://abuseipdb-preview.devnomadic.workers.dev/" }
+        "development" { "https://abuseipdb-preview.devnomadic.workers.dev/" }
+        "dev" { "https://abuseipdb-preview.devnomadic.workers.dev/" }
+        default { "https://abuseipdb.devnomadic.workers.dev/" }
     }
     
     Write-BuildLog "Worker URL: $workerUrl"

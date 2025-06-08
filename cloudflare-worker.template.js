@@ -61,7 +61,7 @@ const ALLOWED_ORIGINS = [
   "*.albatross.pages.dev",
   ".albatross.pages.dev",
   // Preview worker domain
-  "https://abuseipdb-preview.workers.dev",
+  "https://abuseipdb-preview.devnomadic.workers.dev",
   // Add more allowed origins as needed
 ];
 
