@@ -1,0 +1,35 @@
+{
+  "name": "albatross-worker",
+  "version": "1.0.0",
+  "description": "Cloudflare Worker for Albatross AbuseIPDB API Proxy",
+  "main": "cloudflare-worker.js",
+  "scripts": {
+    "deploy": "wrangler deploy",
+    "deploy:staging": "wrangler deploy --env staging",
+    "deploy:production": "wrangler deploy --env production",
+    "deploy:preview": "wrangler deploy --env preview",
+    "dev": "wrangler dev",
+    "tail": "wrangler tail",
+    "publish": "wrangler deploy",
+    "preview": "wrangler dev --local"
+  },
+  "keywords": [
+    "cloudflare",
+    "worker",
+    "abuseipdb",
+    "api-proxy",
+    "blazor"
+  ],
+  "author": "Your Name",
+  "license": "MIT",
+  "devDependencies": {
+    "wrangler": "^3.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yourusername/Albatross.git"
+  }
+}

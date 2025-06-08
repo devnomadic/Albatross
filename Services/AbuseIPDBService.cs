@@ -8,6 +8,7 @@ using System;
 using System.Diagnostics;
 using System.Security.Cryptography;
 using System.Text;
+using Albatross.Generated;
 
 namespace Albatross.Services
 {
@@ -109,9 +110,21 @@ namespace Albatross.Services
         {
             _httpClient = httpClient;
             
-            // Hardcoded configuration values for security (less discoverable than appsettings.json)
+            // Use build-time generated authentication key for enhanced security
             _cloudflareWorkerUrl = "https://abuseipdb.devnomadic.workers.dev/".ToLower();
-            _authKey = DecodeBase64("YWxiYXRyb3NzLWFidXNlaXBkYi1jbGllbnQ=") ?? string.Empty;
+            
+            // Try to use generated key first, fallback to hardcoded for development
+            try
+            {
+                _authKey = BuildConstants.AuthKey;
+                Debug.WriteLine($"Using generated auth key (Build ID: {BuildConstants.BuildId})");
+            }
+            catch (Exception)
+            {
+                // Fallback for development when BuildConstants might not be generated yet
+                _authKey = DecodeBase64("YWxiYXRyb3NzLWFidXNlaXBkYi1jbGllbnQ=") ?? "albatross-abuseipdb-client";
+                Debug.WriteLine("Using fallback auth key for development");
+            }
             
             // Configure JSON options with proper property case handling
             _jsonOptions = new JsonSerializerOptions

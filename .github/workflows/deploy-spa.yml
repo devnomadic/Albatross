@@ -1,0 +1,153 @@
+# Deploy Blazor WebAssembly SPA
+name: Deploy SPA
+
+on:
+  push:
+    paths:
+      - '**/*.cs'
+      - '**/*.razor'
+      - '**/*.csproj'
+      - 'wwwroot/**'
+      - '!cloudflare-worker.js'
+    branches: [ main, master ]
+  workflow_dispatch:
+    inputs:
+      deploy_target:
+        description: 'Deployment target'
+        required: true
+        default: 'github-pages'
+        type: choice
+        options:
+          - github-pages
+          - cloudflare-pages
+          - both
+
+env:
+  DOTNET_VERSION: '8.0.x'
+
+jobs:
+  build:
+    name: Build Blazor App
+    runs-on: ubuntu-latest
+    
+    outputs:
+      build-version: ${{ steps.version.outputs.version }}
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: ${{ env.DOTNET_VERSION }}
+        
+    - name: Cache .NET packages
+      uses: actions/cache@v4
+      with:
+        path: ~/.nuget/packages
+        key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj') }}
+        restore-keys: |
+          ${{ runner.os }}-nuget-
+        
+    - name: Restore dependencies
+      run: dotnet restore
+      
+    - name: Update IP manifests
+      run: |
+        if [ -f "./update-manifests.sh" ]; then
+          chmod +x ./update-manifests.sh
+          ./update-manifests.sh
+        else
+          echo "Manifest update script not found, skipping"
+        fi
+      
+    - name: Get build version
+      id: version
+      run: |
+        VERSION=$(date +"%Y%m%d-%H%M")
+        echo "version=$VERSION" >> $GITHUB_OUTPUT
+        echo "Build version: $VERSION"
+      
+    - name: Build application
+      run: dotnet build --configuration Release --no-restore
+      
+    - name: Run tests (if any)
+      run: |
+        if ls *.Tests.csproj 1> /dev/null 2>&1; then
+          dotnet test --no-build --configuration Release --verbosity normal
+        else
+          echo "No test projects found, skipping tests"
+        fi
+      
+    - name: Publish application
+      run: dotnet publish --configuration Release --output ./dist --no-build
+      
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: blazor-app-${{ steps.version.outputs.version }}
+        path: ./dist/wwwroot/
+        retention-days: 30
+
+  deploy-github-pages:
+    name: Deploy to GitHub Pages
+    runs-on: ubuntu-latest
+    needs: build
+    if: |
+      (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master') &&
+      (github.event.inputs.deploy_target == 'github-pages' || github.event.inputs.deploy_target == 'both' || github.event.inputs.deploy_target == '')
+    
+    steps:
+    - name: Download build artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: blazor-app-${{ needs.build.outputs.build-version }}
+        path: ./dist
+        
+    - name: Deploy to GitHub Pages
+      uses: peaceiris/actions-gh-pages@v3
+      with:
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+        publish_dir: ./dist
+        force_orphan: true
+        commit_message: "Deploy SPA build ${{ needs.build.outputs.build-version }}"
+
+  deploy-cloudflare-pages:
+    name: Deploy to Cloudflare Pages
+    runs-on: ubuntu-latest
+    needs: build
+    if: |
+      (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master') &&
+      (github.event.inputs.deploy_target == 'cloudflare-pages' || github.event.inputs.deploy_target == 'both')
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      
+    - name: Download build artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: blazor-app-${{ needs.build.outputs.build-version }}
+        path: ./dist
+        
+    - name: Deploy to Cloudflare Pages
+      uses: cloudflare/pages-action@v1
+      with:
+        apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        projectName: ${{ secrets.CLOUDFLARE_PROJECT_NAME }}
+        directory: ./dist
+        gitHubToken: ${{ secrets.GITHUB_TOKEN }}
+        
+    - name: Comment deployment URL
+      if: github.event_name == 'pull_request'
+      uses: actions/github-script@v7
+      with:
+        script: |
+          github.rest.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            body: '🚀 Preview deployment available at: https://${{ secrets.CLOUDFLARE_PROJECT_NAME }}.pages.dev'
+          });

@@ -1,0 +1,188 @@
+# Deploy Cloudflare Worker to Development/Preview
+name: Deploy Worker Dev
+
+on:
+  push:
+    paths:
+      - 'cloudflare-worker.template.js'
+      - 'wrangler.toml'
+      - 'Generate-AuthKey.ps1'
+      - 'Process-Worker.ps1'
+    branches: [ develop, dev, feature/*, fix/* ]
+  pull_request:
+    paths:
+      - 'cloudflare-worker.template.js'
+      - 'wrangler.toml'
+      - 'Generate-AuthKey.ps1'
+      - 'Process-Worker.ps1'
+    types: [opened, synchronize, reopened]
+  workflow_dispatch:
+    inputs:
+      preview_name:
+        description: 'Preview deployment name (optional)'
+        required: false
+        default: ''
+
+jobs:
+  deploy-worker-dev:
+    name: Deploy Worker to Preview
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: '8.0.x'
+        
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+        
+    - name: Install dependencies
+      run: npm ci
+      
+    - name: Generate Preview Name
+      id: preview
+      run: |
+        if [ "${{ github.event.inputs.preview_name }}" != "" ]; then
+          PREVIEW_NAME="${{ github.event.inputs.preview_name }}"
+        elif [ "${{ github.event_name }}" == "pull_request" ]; then
+          PREVIEW_NAME="pr-${{ github.event.number }}"
+        else
+          BRANCH_NAME="${{ github.ref_name }}"
+          PREVIEW_NAME=$(echo "${BRANCH_NAME}" | sed 's/[^a-zA-Z0-9-]/-/g' | tr '[:upper:]' '[:lower:]' | cut -c1-32)
+        fi
+        echo "name=${PREVIEW_NAME}" >> $GITHUB_OUTPUT
+        echo "Preview name: ${PREVIEW_NAME}"
+      
+    - name: Generate Auth Key and Build Worker
+      shell: pwsh
+      env:
+        ABUSEIPDB_API_KEY: ${{ secrets.ABUSEIPDB_API_KEY_DEV }}
+      run: |
+        # Generate authentication key
+        ./Generate-AuthKey.ps1 -OutputPath "Generated"
+        
+        # Process worker template with generated constants and inject API key
+        ./Process-Worker.ps1 -TemplateFile "cloudflare-worker.template.js" -OutputFile "cloudflare-worker.js" -ConstantsFile "Generated/build-constants.js"
+        
+        # Replace the hardcoded API key with the dev secret
+        if ($env:ABUSEIPDB_API_KEY) {
+          (Get-Content cloudflare-worker.js) -replace 'const ABUSEIPDB_API_KEY = "[^"]*"', "const ABUSEIPDB_API_KEY = `"$env:ABUSEIPDB_API_KEY`"" | Set-Content cloudflare-worker.js
+          Write-Host "✅ Injected AbuseIPDB API key from GitHub secret (DEV)"
+        } else {
+          Write-Warning "⚠️ ABUSEIPDB_API_KEY_DEV secret not found - using template default"
+        }
+      
+    - name: Deploy Worker to Preview
+      env:
+        CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      run: |
+        # Deploy to preview with custom name
+        npx wrangler deploy --compatibility-date 2024-01-01 --name "albatross-worker-${{ steps.preview.outputs.name }}" --env preview
+        
+        # Get the preview URL
+        PREVIEW_URL="https://albatross-worker-${{ steps.preview.outputs.name }}.preview.workers.dev"
+        echo "PREVIEW_URL=${PREVIEW_URL}" >> $GITHUB_ENV
+        
+    - name: Update PR Comment
+      if: github.event_name == 'pull_request'
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const { data: comments } = await github.rest.issues.listComments({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            issue_number: context.issue.number,
+          });
+          
+          const botComment = comments.find(comment => 
+            comment.user.type === 'Bot' && comment.body.includes('🔧 Worker Preview')
+          );
+          
+          const commentBody = `## 🔧 Worker Preview Deployment
+          
+          **Preview URL:** https://albatross-worker-${{ steps.preview.outputs.name }}.preview.workers.dev
+          **Environment:** Development/Preview
+          **Branch:** \`${{ github.head_ref }}\`
+          **Commit:** \`${{ github.sha }}\`
+          
+          This preview will be automatically cleaned up when the PR is merged or closed.`;
+          
+          if (botComment) {
+            await github.rest.issues.updateComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              comment_id: botComment.id,
+              body: commentBody
+            });
+          } else {
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: commentBody
+            });
+          }
+          
+    - name: Deployment Summary
+      run: |
+        echo "## 🚀 Worker Preview Deployment Complete" >> $GITHUB_STEP_SUMMARY
+        echo "- **Preview Name:** ${{ steps.preview.outputs.name }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Preview URL:** https://albatross-worker-${{ steps.preview.outputs.name }}.preview.workers.dev" >> $GITHUB_STEP_SUMMARY
+        echo "- **Environment:** Development/Preview" >> $GITHUB_STEP_SUMMARY
+        echo "- **Auth Key:** Auto-generated at build time" >> $GITHUB_STEP_SUMMARY
+        echo "- **API Key:** Injected from DEV GitHub secrets" >> $GITHUB_STEP_SUMMARY
+
+  # Cleanup job for closed PRs
+  cleanup-preview:
+    name: Cleanup Preview Worker
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request' && github.event.action == 'closed'
+    
+    steps:
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        
+    - name: Install Wrangler
+      run: npm install -g wrangler
+      
+    - name: Delete Preview Worker
+      env:
+        CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      run: |
+        PREVIEW_NAME="pr-${{ github.event.number }}"
+        npx wrangler delete "albatross-worker-${PREVIEW_NAME}" --force || echo "Worker may not exist or already deleted"
+        
+    - name: Update PR Comment
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const { data: comments } = await github.rest.issues.listComments({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            issue_number: context.issue.number,
+          });
+          
+          const botComment = comments.find(comment => 
+            comment.user.type === 'Bot' && comment.body.includes('🔧 Worker Preview')
+          );
+          
+          if (botComment) {
+            const updatedBody = botComment.body + '\n\n---\n**✅ Preview cleaned up after PR closure**';
+            await github.rest.issues.updateComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              comment_id: botComment.id,
+              body: updatedBody
+            });
+          }

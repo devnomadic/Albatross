@@ -35,3 +35,43 @@
 /bin/
 /obj/
 .DS_Store
+
+# Deployment artifacts
+/dist/
+/local-dist/
+/output/
+*.zip
+*.tar.gz
+
+# Environment files
+.env
+.env.local
+.env.production
+.env.staging
+
+# Node.js (for worker deployment)
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Wrangler
+.wrangler/
+wrangler.toml.backup
+
+# Local development
+dotnet-install.sh
+vulnerability-report.txt
+
+# Generated files (build-time)
+Generated/
+cloudflare-worker.js
+build.env
+build-manifest.json
+
+# IDE/Editor files
+.vscode/settings.json
+.idea/
+*.swp
+*.swo
+*~
