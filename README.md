@@ -69,8 +69,8 @@ The project uses automated GitHub Actions workflows for deployment:
 **Development/Preview Deployments:**
 - **Trigger**: Feature branches (`feature/*`, `fix/*`) and Pull Requests
 - **SPA**: Deployed to Cloudflare Pages preview environment
-- **Worker**: Deployed as preview version under main `abuseipdb` worker with unique subdomain
-- **URL**: Preview URLs like `https://feature-branch.abuseipdb.workers.dev`
+- **Worker**: Deployed to shared `abuseipdb-preview` worker (updated for each preview)
+- **URL**: Consistent preview URL: `https://abuseipdb-preview.workers.dev`
 
 **Production Deployments:**
 - **Trigger**: Pushes to `main` branch
@@ -131,7 +131,7 @@ The project uses unified GitHub Actions workflows that build and deploy both the
 
 **Worker Environments:**
 - **Production**: `abuseipdb` worker (deployed from main branch)
-- **Preview**: Preview versions under `abuseipdb` worker with unique subdomains (deployed from feature branches and PRs)
+- **Preview**: `abuseipdb-preview` worker (shared for all development and PR previews)
 
 **SPA Environments:**
 - **Production**: Main Cloudflare Pages project (deployed from main branch)

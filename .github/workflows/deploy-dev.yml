@@ -114,33 +114,26 @@ jobs:
         CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       run: |
-        # Upload as a new version with preview alias (Wrangler 4 style)
-        # This creates a preview deployment under the main abuseipdb worker
-        PREVIEW_ALIAS="${{ steps.preview.outputs.name }}"
+        # Deploy to a preview worker using standard Wrangler deployment
+        # This creates a preview version that can be accessed via unique URL
+        PREVIEW_NAME="abuseipdb-preview"
         
-        DEPLOYMENT_OUTPUT=$(npx wrangler versions upload \
+        DEPLOYMENT_OUTPUT=$(npx wrangler deploy \
           --compatibility-date 2024-06-08 \
-          --preview-alias "$PREVIEW_ALIAS" \
-          --message "Preview deployment for $PREVIEW_ALIAS" \
-          --tag "preview" 2>&1)
+          --name "$PREVIEW_NAME" 2>&1)
         
-        # Extract version ID from upload output
-        VERSION_ID=$(echo "$DEPLOYMENT_OUTPUT" | grep -oE 'Version ID: [a-zA-Z0-9-]+' | sed 's/Version ID: //')
+        # Extract the worker URL from deployment output
+        WORKER_URL=$(echo "$DEPLOYMENT_OUTPUT" | grep -oE 'https://[a-zA-Z0-9.-]+\.workers\.dev' | head -1)
         
-        if [ -n "$VERSION_ID" ]; then
-          echo "Uploaded version: $VERSION_ID with preview alias: $PREVIEW_ALIAS"
-          
-          # The preview URL should be available via the alias
-          WORKER_URL="https://$PREVIEW_ALIAS.abuseipdb.workers.dev"
-        else
-          echo "Failed to extract version ID"
-          # Fallback to main worker URL
-          WORKER_URL="https://abuseipdb.workers.dev"
+        if [ -z "$WORKER_URL" ]; then
+          # Use the expected URL format
+          WORKER_URL="https://$PREVIEW_NAME.workers.dev"
         fi
         
         echo "url=${WORKER_URL}" >> $GITHUB_OUTPUT
         echo "Worker URL: ${WORKER_URL}"
-        echo "Upload output: $DEPLOYMENT_OUTPUT"
+        echo "Preview Name: ${PREVIEW_NAME}"
+        echo "Deployment output: $DEPLOYMENT_OUTPUT"
         
     - name: Deploy SPA to Cloudflare Pages
       id: spa-deploy
@@ -248,13 +241,9 @@ jobs:
         CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       run: |
-        # List recent versions and clean up old preview versions
-        # Keep the last 5 versions to avoid cluttering
-        npx wrangler versions list --limit 10 || echo "Could not list versions"
-        
-        # Note: Automatic cleanup of old versions can be added here
-        # For now, Cloudflare automatically manages version lifecycle
-        echo "Worker preview versions are managed automatically by Cloudflare"
+        # Note: Using a shared preview worker means no cleanup needed per PR
+        # The preview worker will be updated with each new deployment
+        echo "Worker preview cleanup: Preview worker managed automatically"
         
     - name: Cleanup Pages Preview
       env:
