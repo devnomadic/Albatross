@@ -70,9 +70,10 @@ jobs:
       env:
         ABUSEIPDB_API_KEY: ${{ secrets.ABUSEIPDB_API_KEY }}
         SkipCodeGeneration: false
+        ALBATROSS_ENVIRONMENT: production
       run: |
-        # Generate authentication key
-        ./Generate-AuthKey.ps1 -OutputPath "Generated" -Verbose
+        # Generate authentication key with environment context
+        ./Generate-AuthKey.ps1 -OutputPath "Generated" -Environment "production" -Verbose
         
         # Restore .NET dependencies
         dotnet restore

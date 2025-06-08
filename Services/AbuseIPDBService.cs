@@ -110,8 +110,9 @@ namespace Albatross.Services
         {
             _httpClient = httpClient;
 
-            // Use build-time generated authentication key for enhanced security
-            _cloudflareWorkerUrl = "https://abuseipdb.devnomadic.workers.dev/".ToLower();
+            // Determine worker URL based on environment
+            _cloudflareWorkerUrl = GetWorkerUrl();
+            Debug.WriteLine($"AbuseIPDB Worker URL: {_cloudflareWorkerUrl}");
 
             // Try to use generated key first, fallback to hardcoded for development
             try
@@ -133,6 +134,26 @@ namespace Albatross.Services
                 WriteIndented = true,
                 DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
             };
+        }
+
+        /// <summary>
+        /// Determines the appropriate worker URL based on the build configuration
+        /// </summary>
+        private static string GetWorkerUrl()
+        {
+            // Try to use build-time generated worker URL first
+            try
+            {
+                var workerUrl = BuildConstants.WorkerUrl;
+                Debug.WriteLine($"Using build-time worker URL: {workerUrl} (Environment: {BuildConstants.Environment})");
+                return workerUrl.ToLower();
+            }
+            catch (Exception)
+            {
+                // Fallback if BuildConstants are not available - default to production
+                Debug.WriteLine("BuildConstants not available, using production worker as fallback");
+                return "https://abuseipdb.workers.dev/";
+            }
         }
 
         /// <summary>

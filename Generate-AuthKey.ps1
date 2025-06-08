@@ -5,6 +5,7 @@
 param(
     [string]$OutputPath = ".",
     [string]$KeyLength = "32",
+    [string]$Environment = "production",
     [switch]$Verbose
 )
 
@@ -25,6 +26,17 @@ function Write-BuildLog {
 
 try {
     Write-BuildLog "Starting authentication key generation process"
+    Write-BuildLog "Environment: $Environment"
+    
+    # Determine worker URL based on environment
+    $workerUrl = switch ($Environment.ToLower()) {
+        "preview" { "https://abuseipdb-preview.workers.dev/" }
+        "development" { "https://abuseipdb-preview.workers.dev/" }
+        "dev" { "https://abuseipdb-preview.workers.dev/" }
+        default { "https://abuseipdb.workers.dev/" }
+    }
+    
+    Write-BuildLog "Worker URL: $workerUrl"
     
     # Generate a cryptographically secure random key
     $keyBytes = New-Object byte[] $KeyLength
@@ -76,6 +88,16 @@ namespace Albatross.Generated
         /// Unique build identifier
         /// </summary>
         public const string BuildId = "$buildGuid";
+        
+        /// <summary>
+        /// Build environment
+        /// </summary>
+        public const string Environment = "$Environment";
+        
+        /// <summary>
+        /// Worker URL for this environment
+        /// </summary>
+        public const string WorkerUrl = "$workerUrl";
         
         /// <summary>
         /// Decoded authentication key (computed at runtime)
