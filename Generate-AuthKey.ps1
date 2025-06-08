@@ -15,9 +15,11 @@ function Write-BuildLog {
     param([string]$Message, [string]$Level = "INFO")
     $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
     $logMessage = "[$timestamp] [$Level] $Message"
-    Write-Host $logMessage
+    
     if ($Verbose) {
         Write-Host $logMessage -ForegroundColor $(if ($Level -eq "ERROR") { "Red" } elseif ($Level -eq "WARN") { "Yellow" } else { "Green" })
+    } else {
+        Write-Host $logMessage
     }
 }
 
@@ -37,10 +39,10 @@ try {
     Write-BuildLog "Generated authentication key: $keyPreview"
     
     # Create output directory if it doesn't exist
-    $outputDir = Split-Path -Parent $OutputPath
-    if (![string]::IsNullOrEmpty($outputDir) -and !(Test-Path $outputDir)) {
-        New-Item -ItemType Directory -Path $outputDir -Force | Out-Null
-        Write-BuildLog "Created output directory: $outputDir"
+    # OutputPath is expected to be the target directory
+    if (!(Test-Path $OutputPath)) {
+        New-Item -ItemType Directory -Path $OutputPath -Force | Out-Null
+        Write-BuildLog "Created output directory: $OutputPath"
     }
     
     # Generate build timestamp
