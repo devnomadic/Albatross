@@ -56,13 +56,10 @@ const ALLOWED_ORIGINS = [
   "https://albatross-5kt.pages.dev",
   // Wildcard patterns for albatross-5kt subdomain deployments
   "*.albatross-5kt.pages.dev",
-  ".albatross-5kt.pages.dev",
-  // Wildcard patterns for other preview deployments
   "*.albatross.pages.dev",
-  ".albatross.pages.dev",
   // Preview worker domain
-  "https://abuseipdb-preview.devnomadic.workers.dev",
-  // Add more allowed origins as needed
+  "https://abuseipdb-preview.devnomadic.workers.dev"
+  // Note: localhost removed for security - only production origins allowed
 ];
 
 addEventListener('fetch', event => {
@@ -77,6 +74,57 @@ async function handleRequest(request) {
 
   // Get the request origin
   const origin = request.headers.get('Origin') || '';
+  
+  // Debug CORS
+  console.log('Request CORS info:', {
+    origin,
+    isAllowed: isAllowedOrigin(origin),
+    userAgent: request.headers.get('User-Agent'),
+    referer: request.headers.get('Referer')
+  });
+  
+  // Enforce browser-only access with proper Origin header validation
+  // This ensures the worker can only be called from legitimate browser requests
+  const userAgent = request.headers.get('User-Agent') || '';
+  const referer = request.headers.get('Referer') || '';
+  
+  // Check if this is a legitimate browser request
+  const isBrowserRequest = origin && (
+    userAgent.includes('Mozilla') || 
+    userAgent.includes('Chrome') || 
+    userAgent.includes('Safari') || 
+    userAgent.includes('Firefox') || 
+    userAgent.includes('Edge')
+  );
+  
+  // Additional validation: browser requests should have Origin header from allowed origins
+  const hasValidOrigin = origin && isAllowedOrigin(origin);
+  
+  // Block requests that don't appear to be from a legitimate browser/SPA
+  if (!isBrowserRequest || !hasValidOrigin) {
+    console.log('Blocked non-browser request:', {
+      origin,
+      userAgent: userAgent.substring(0, 50),
+      referer: referer.substring(0, 50),
+      isBrowserRequest,
+      hasValidOrigin
+    });
+    
+    return new Response(
+      JSON.stringify({ 
+        error: "Access denied: Browser requests from allowed origins only",
+        buildInfo: BUILD_INFO,
+        details: "This API can only be accessed from the official web application"
+      }),
+      {
+        status: 403,
+        headers: {
+          'Content-Type': 'application/json',
+          ...corsHeaders(origin)
+        }
+      }
+    );
+  }
   
   // Get the Worker-Token (HMAC token)
   const workerToken = request.headers.get('Worker-Token') || '';
@@ -288,19 +336,27 @@ function arrayBufferToBase64(buffer) {
  * Check if origin is allowed
  */
 function isAllowedOrigin(origin) {
-  // Allow localhost for development
-  if (origin.includes('localhost') || origin.includes('127.0.0.1')) {
-    return true;
-  }
+  if (!origin) return false;
+  
+  // No localhost allowed in production - only specific allowed origins
   
   // Check against allowed origins
   return ALLOWED_ORIGINS.some(allowedOrigin => {
-    // Handle wildcard domains (starting with .)
-    if (allowedOrigin.startsWith('.')) {
-      return origin.endsWith(allowedOrigin);
+    // Remove protocol for comparison if present
+    const cleanOrigin = origin.replace(/^https?:\/\//, '');
+    const cleanAllowed = allowedOrigin.replace(/^https?:\/\//, '');
+    
+    // Handle wildcard domains (starting with * or .)
+    if (cleanAllowed.startsWith('*.')) {
+      const domain = cleanAllowed.substring(2); // Remove "*."
+      return cleanOrigin.endsWith('.' + domain) || cleanOrigin === domain;
     }
-    // Handle exact matches or subdomains
-    return origin === allowedOrigin || origin.endsWith(allowedOrigin.replace('https://', ''));
+    if (cleanAllowed.startsWith('.')) {
+      return cleanOrigin.endsWith(cleanAllowed);
+    }
+    
+    // Exact match (with or without protocol)
+    return cleanOrigin === cleanAllowed || origin === allowedOrigin;
   });
 }
 
@@ -310,15 +366,26 @@ function isAllowedOrigin(origin) {
 function corsHeaders(origin) {
   const headers = {
     'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, Worker-Token, Authorization',
+    'Access-Control-Allow-Headers': 'Content-Type, Worker-Token, Authorization, X-Requested-With, Accept, Origin, User-Agent',
     'Access-Control-Max-Age': '86400',
+    'Access-Control-Expose-Headers': 'Content-Length, Content-Type',
   };
   
-  // Only set specific origin if it's allowed
-  if (isAllowedOrigin(origin)) {
-    headers['Access-Control-Allow-Origin'] = origin;
+  // Only allow specific origins for browser requests
+  if (origin) {
+    if (isAllowedOrigin(origin)) {
+      // Allowed origin - use specific origin and allow credentials
+      headers['Access-Control-Allow-Origin'] = origin;
+      headers['Access-Control-Allow-Credentials'] = 'true';
+    } else {
+      // Unknown origin - don't allow
+      headers['Access-Control-Allow-Origin'] = 'null';
+      headers['Access-Control-Allow-Credentials'] = 'false';
+    }
   } else {
-    headers['Access-Control-Allow-Origin'] = '*';
+    // No origin header - this shouldn't happen for browser requests
+    // We'll block these in the main handler
+    headers['Access-Control-Allow-Origin'] = 'null';
   }
   
   return headers;
@@ -330,9 +397,20 @@ function corsHeaders(origin) {
 function handleCORS(request) {
   const origin = request.headers.get('Origin') || '';
   
+  // Debug logging for CORS preflight
+  console.log('CORS preflight request:', {
+    origin,
+    method: request.method,
+    isAllowed: isAllowedOrigin(origin),
+    requestHeaders: request.headers.get('Access-Control-Request-Headers'),
+    requestMethod: request.headers.get('Access-Control-Request-Method')
+  });
+  
+  const headers = corsHeaders(origin);
+  
   return new Response(null, {
     status: 204,
-    headers: corsHeaders(origin)
+    headers
   });
 }
 
