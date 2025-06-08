@@ -1,0 +1,191 @@
+# Deploy Albatross to Production (SPA + Worker)
+name: Deploy Production
+
+on:
+  push:
+    branches: [ main, master ]
+    paths-ignore:
+      - '*.md'
+      - 'LICENSE'
+      - '.gitignore'
+  workflow_dispatch:
+    inputs:
+      deploy_spa:
+        description: 'Deploy SPA'
+        required: false
+        default: true
+        type: boolean
+      deploy_worker:
+        description: 'Deploy Worker'
+        required: false
+        default: true
+        type: boolean
+      force_deploy:
+        description: 'Force deployment even if no changes'
+        required: false
+        default: false
+        type: boolean
+
+env:
+  DOTNET_VERSION: '8.0.x'
+  NODE_VERSION: '18'
+
+jobs:
+  build-and-deploy:
+    name: Build and Deploy Albatross to Production
+    runs-on: ubuntu-latest
+    
+    outputs:
+      spa-url: ${{ steps.spa-deploy.outputs.url }}
+      worker-url: ${{ steps.worker-deploy.outputs.url }}
+      version: ${{ steps.version.outputs.version }}
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: ${{ env.DOTNET_VERSION }}
+        
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+        cache: 'npm'
+        
+    - name: Install npm dependencies
+      run: npm ci
+      
+    - name: Generate Version
+      id: version
+      run: |
+        VERSION="${{ github.sha }}"
+        echo "version=${VERSION}" >> $GITHUB_OUTPUT
+        echo "Production version: ${VERSION}"
+        
+    - name: Generate Auth Key and Build
+      shell: pwsh
+      env:
+        ABUSEIPDB_API_KEY: ${{ secrets.ABUSEIPDB_API_KEY }}
+        SkipCodeGeneration: false
+      run: |
+        # Generate authentication key
+        ./Generate-AuthKey.ps1 -OutputPath "Generated" -Verbose
+        
+        # Restore .NET dependencies
+        dotnet restore
+        
+        # Build application (this generates both SPA and Worker files)
+        dotnet build --configuration Release --no-restore
+        
+        # Process worker template with generated constants
+        ./Process-Worker.ps1 -TemplateFile "cloudflare-worker.template.js" -OutputFile "cloudflare-worker.js" -ConstantsFile "Generated/build-constants.js"
+        
+        # Inject production API key
+        if ($env:ABUSEIPDB_API_KEY) {
+          (Get-Content cloudflare-worker.js) -replace 'const ABUSEIPDB_API_KEY = "[^"]*"', "const ABUSEIPDB_API_KEY = `"$env:ABUSEIPDB_API_KEY`"" | Set-Content cloudflare-worker.js
+          Write-Host "✅ Injected AbuseIPDB API key from GitHub secret (PRODUCTION)"
+        } else {
+          Write-Warning "⚠️ ABUSEIPDB_API_KEY secret not found - using template default"
+        }
+        
+    - name: Publish SPA
+      run: |
+        dotnet publish --configuration Release --no-build --output ./dist
+        
+    - name: Deploy Worker to Production
+      id: worker-deploy
+      if: github.event.inputs.deploy_worker != 'false'
+      env:
+        CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      run: |
+        # Deploy to production environment
+        npx wrangler deploy --compatibility-date 2024-01-01 --name "abuseipdb" --env production
+        
+        # Set the production URL
+        WORKER_URL="https://abuseipdb.workers.dev"
+        echo "url=${WORKER_URL}" >> $GITHUB_OUTPUT
+        echo "Production Worker URL: ${WORKER_URL}"
+        
+    - name: Deploy SPA to Production
+      id: spa-deploy
+      if: github.event.inputs.deploy_spa != 'false'
+      env:
+        CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      run: |
+        # Deploy to Cloudflare Pages production
+        DEPLOYMENT_OUTPUT=$(npx wrangler pages deploy ./dist/wwwroot --project-name ${{ secrets.CLOUDFLARE_PAGES_PROJECT }} --branch main)
+        
+        # Extract the URL from the deployment output
+        SPA_URL=$(echo "$DEPLOYMENT_OUTPUT" | grep -oE 'https://[a-zA-Z0-9.-]+\.pages\.dev' | head -1)
+        
+        if [ -z "$SPA_URL" ]; then
+          # Fallback to standard production URL
+          SPA_URL="https://${{ secrets.CLOUDFLARE_PAGES_PROJECT }}.pages.dev"
+        fi
+        
+        echo "url=${SPA_URL}" >> $GITHUB_OUTPUT
+        echo "Production SPA URL: ${SPA_URL}"
+        
+    - name: Create Release Artifacts
+      run: |
+        # Create a release package
+        mkdir -p release
+        cp -r ./dist/wwwroot release/spa
+        cp cloudflare-worker.js release/
+        cp -r Generated release/
+        
+        # Create version info
+        echo "Version: ${{ steps.version.outputs.version }}" > release/VERSION.txt
+        echo "Built: $(date -u)" >> release/VERSION.txt
+        echo "SPA URL: ${{ steps.spa-deploy.outputs.url }}" >> release/VERSION.txt
+        echo "Worker URL: ${{ steps.worker-deploy.outputs.url }}" >> release/VERSION.txt
+        
+    - name: Upload release artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: albatross-production-${{ steps.version.outputs.version }}
+        path: release/
+        retention-days: 30
+
+  create-github-release:
+    name: Create GitHub Release
+    needs: build-and-deploy
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      
+    - name: Download release artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: albatross-production-${{ needs.build-and-deploy.outputs.version }}
+        path: release/
+        
+    - name: Create Release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: v${{ needs.build-and-deploy.outputs.version }}
+        release_name: Albatross v${{ needs.build-and-deploy.outputs.version }}
+        body: |
+          ## 🚀 Albatross Production Deployment
+          
+          **🌐 SPA URL:** ${{ needs.build-and-deploy.outputs.spa-url }}
+          **🔧 Worker URL:** ${{ needs.build-and-deploy.outputs.worker-url }}
+          
+          **Deployed from:** `${{ github.sha }}`
+          **Deployed at:** $(date -u)
+          
+          ### Changes
+          ${{ github.event.head_commit.message }}
+          
+        draft: false
+        prerelease: false

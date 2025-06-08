@@ -99,13 +99,20 @@ Albatross/
 
 ## Configuration
 
+### GitHub Actions Deployment
+
+The project uses unified GitHub Actions workflows that build and deploy both the SPA and Worker together:
+
+- **Development/Preview**: `.github/workflows/deploy-dev.yml` - Deploys to preview environments on feature branches and PRs
+- **Production**: `.github/workflows/deploy-production.yml` - Deploys to production on main branch
+
 ### GitHub Secrets
-For automated deployment, configure these secrets in your repository settings:
+Configure these secrets in your repository settings (Settings → Secrets and variables → Actions):
 
 **Required for Cloudflare Deployment:**
-- `CLOUDFLARE_API_TOKEN` - Your Cloudflare API token
+- `CLOUDFLARE_API_TOKEN` - Custom Cloudflare API token with Workers and Pages permissions
 - `CLOUDFLARE_ACCOUNT_ID` - Your Cloudflare account ID  
-- `CLOUDFLARE_PAGES_PROJECT` - Your Cloudflare Pages project name
+- `CLOUDFLARE_PAGES_PROJECT` - Your Cloudflare Pages project name (e.g., `abuseipdb-spa`)
 
 **Required for Worker Deployment:**
 - `ABUSEIPDB_API_KEY` - Your production API key from [AbuseIPDB](https://www.abuseipdb.com/)
