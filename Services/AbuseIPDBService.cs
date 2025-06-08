@@ -28,50 +28,50 @@ namespace Albatross.Services
     {
         [JsonPropertyName("ipAddress")]
         public string? IpAddress { get; set; }
-        
+
         [JsonPropertyName("isPublic")]
         public bool IsPublic { get; set; }
-        
+
         [JsonPropertyName("ipVersion")]
         public int IpVersion { get; set; }
-        
+
         [JsonPropertyName("isWhitelisted")]
         public bool? IsWhitelisted { get; set; }
-        
+
         [JsonPropertyName("abuseConfidenceScore")]
         public int AbuseConfidenceScore { get; set; }
-        
+
         [JsonPropertyName("countryCode")]
         public string? CountryCode { get; set; }
-        
+
         [JsonPropertyName("countryName")]
         public string? CountryName { get; set; }
-        
+
         [JsonPropertyName("usageType")]
         public string? UsageType { get; set; }
-        
+
         [JsonPropertyName("isp")]
         public string? ISP { get; set; }
-        
+
         [JsonPropertyName("domain")]
         public string? Domain { get; set; }
-        
+
         [JsonPropertyName("hostnames")]
         public List<string>? Hostnames { get; set; }
-        
+
         [JsonPropertyName("totalReports")]
         public int TotalReports { get; set; }
-        
+
         [JsonPropertyName("numDistinctUsers")]
         public int NumDistinctUsers { get; set; }
-        
+
         [JsonPropertyName("lastReportedAt")]
         public string? LastReportedAt { get; set; }
-        
+
         [JsonPropertyName("reports")]
         public List<AbuseReport>? Reports { get; set; }
     }
-    
+
     /// <summary>
     /// Individual abuse report details
     /// </summary>
@@ -79,19 +79,19 @@ namespace Albatross.Services
     {
         [JsonPropertyName("reportedAt")]
         public string? ReportedAt { get; set; }
-        
+
         [JsonPropertyName("comment")]
         public string? Comment { get; set; }
-        
+
         [JsonPropertyName("categories")]
         public List<int>? Categories { get; set; }
-        
+
         [JsonPropertyName("reporterId")]
         public int ReporterId { get; set; }
-        
+
         [JsonPropertyName("reporterCountryCode")]
         public string? ReporterCountryCode { get; set; }
-        
+
         [JsonPropertyName("reporterCountryName")]
         public string? ReporterCountryName { get; set; }
     }
@@ -109,10 +109,10 @@ namespace Albatross.Services
         public AbuseIPDBService(HttpClient httpClient)
         {
             _httpClient = httpClient;
-            
+
             // Use build-time generated authentication key for enhanced security
             _cloudflareWorkerUrl = "https://abuseipdb.devnomadic.workers.dev/".ToLower();
-            
+
             // Try to use generated key first, fallback to hardcoded for development
             try
             {
@@ -125,7 +125,7 @@ namespace Albatross.Services
                 _authKey = DecodeBase64("YWxiYXRyb3NzLWFidXNlaXBkYi1jbGllbnQ=") ?? "albatross-abuseipdb-client";
                 Debug.WriteLine("Using fallback auth key for development");
             }
-            
+
             // Configure JSON options with proper property case handling
             _jsonOptions = new JsonSerializerOptions
             {
@@ -142,7 +142,7 @@ namespace Albatross.Services
         {
             if (string.IsNullOrEmpty(encodedValue))
                 return encodedValue;
-                
+
             try
             {
                 var bytes = Convert.FromBase64String(encodedValue);
@@ -171,11 +171,11 @@ namespace Albatross.Services
             {
                 // Use the full request URL (including arguments) as the message and auth key as the HMAC key
                 var message = requestUrl;
-                
+
                 // Convert message and key to byte arrays
                 var messageBytes = Encoding.UTF8.GetBytes(message);
                 var keyBytes = Encoding.UTF8.GetBytes(_authKey);
-                
+
                 // Create and compute the HMAC
                 using (var hmac = new HMACSHA256(keyBytes))
                 {
@@ -205,43 +205,43 @@ namespace Albatross.Services
                 var verboseParam = verbose.ToString().ToLower();
                 var requestUrl = $"{_cloudflareWorkerUrl}?ipAddress={ipAddress}&maxAgeInDays={maxAgeInDays}&verbose={verboseParam}".ToLower();
                 Console.WriteLine($"Requesting: {requestUrl}");
-                
+
                 // Create request message to add custom headers
                 var request = new HttpRequestMessage(HttpMethod.Get, requestUrl);
-                
+
                 // Add authentication using HMAC if auth key and worker URL are available
                 if (!string.IsNullOrEmpty(_authKey) && !string.IsNullOrEmpty(_cloudflareWorkerUrl))
                 {
                     // Generate HMAC token using the full request URL
                     var hmacToken = GenerateHmacToken(requestUrl);
-                    
+
                     // Add the HMAC token for authentication
                     request.Headers.Add("Worker-Token", hmacToken);
-                    
+
                     Console.WriteLine("Added Worker-Token authentication header with HMAC");
                 }
-                
+
                 var response = await _httpClient.SendAsync(request);
-                
+
                 response.EnsureSuccessStatusCode();
-                
+
                 // Get the raw JSON string first for debugging
                 var jsonString = await response.Content.ReadAsStringAsync();
                 Console.WriteLine($"Response received: {jsonString}");
-                
+
                 if (string.IsNullOrWhiteSpace(jsonString))
                 {
                     throw new Exception("Empty response received from AbuseIPDB service");
                 }
-                
+
                 // Try to deserialize with System.Text.Json
                 var result = JsonSerializer.Deserialize<AbuseIPDBApiResponse>(jsonString, _jsonOptions);
-                
+
                 if (result == null)
                 {
                     throw new Exception("Failed to deserialize AbuseIPDB response");
                 }
-                
+
                 return result;
             }
             catch (HttpRequestException ex)

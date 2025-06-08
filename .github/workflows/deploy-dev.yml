@@ -114,13 +114,21 @@ jobs:
         CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       run: |
-        # Deploy to preview environment with dynamic name (Wrangler 4 style)
-        npx wrangler deploy --compatibility-date 2024-06-08 --name "abuseipdb-${{ steps.preview.outputs.name }}"
+        # Deploy to staging environment for development/preview (Wrangler 4 style)
+        # This uses the staging environment defined in wrangler.toml
+        DEPLOYMENT_OUTPUT=$(npx wrangler deploy --compatibility-date 2024-06-08 --env staging 2>&1)
         
-        # Set the preview URL
-        WORKER_URL="https://abuseipdb-${{ steps.preview.outputs.name }}.workers.dev"
+        # Extract the worker URL from deployment output
+        WORKER_URL=$(echo "$DEPLOYMENT_OUTPUT" | grep -oE 'https://[a-zA-Z0-9.-]+\.workers\.dev' | head -1)
+        
+        if [ -z "$WORKER_URL" ]; then
+          # Use the staging worker name from wrangler.toml
+          WORKER_URL="https://abuseipdb-staging.workers.dev"
+        fi
+        
         echo "url=${WORKER_URL}" >> $GITHUB_OUTPUT
         echo "Worker URL: ${WORKER_URL}"
+        echo "Deployment output: $DEPLOYMENT_OUTPUT"
         
     - name: Deploy SPA to Cloudflare Pages
       id: spa-deploy
@@ -228,8 +236,9 @@ jobs:
         CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       run: |
-        # Delete the preview worker (Wrangler 4 compatible)
-        npx wrangler delete "abuseipdb-pr-${{ github.event.number }}" --force || echo "Worker not found or already deleted"
+        # Note: Since we're using the staging environment, no cleanup needed
+        # The staging worker will be updated with each new deployment
+        echo "Worker preview cleanup: Staging environment managed automatically"
         
     - name: Cleanup Pages Preview
       env:

@@ -63,16 +63,38 @@ The project uses MSBuild targets for automated key generation and code injection
 4. Run the application: `dotnet run`
 
 ### Deployment
-1. **Build**: Run `dotnet build` to generate authentication keys
+
+The project uses automated GitHub Actions workflows for deployment:
+
+**Development/Preview Deployments:**
+- **Trigger**: Feature branches (`feature/*`, `fix/*`) and Pull Requests
+- **SPA**: Deployed to Cloudflare Pages preview environment
+- **Worker**: Deployed to `abuseipdb-staging` worker environment
+- **URL**: Preview URLs are automatically generated and posted in PR comments
+
+**Production Deployments:**
+- **Trigger**: Pushes to `main` branch
+- **SPA**: Deployed to main Cloudflare Pages project
+- **Worker**: Deployed to `abuseipdb` production worker
+- **URL**: Uses your configured production domains
+
+**Manual Deployment Options:**
+1. **Build Locally**: Run `dotnet build` to generate authentication keys
 2. **Deploy Worker**: Upload `cloudflare-worker.js` to your Cloudflare Workers account
 3. **Update Endpoint**: Configure the worker URL in `AbuseIPDBService.cs`
-4. **Deploy App**: Use your preferred hosting platform (GitHub Pages, Azure Static Web Apps, etc.)
+4. **Deploy App**: Use your preferred hosting platform
 
 ### GitHub Actions
-The project includes automated deployment workflows in `.github/workflows/` that:
-- Automatically generate authentication keys during CI/CD
-- Build and deploy the Blazor WebAssembly app
-- Handle the Cloudflare Worker deployment
+The project includes two main deployment workflows in `.github/workflows/`:
+- **`deploy-dev.yml`**: Handles development and preview deployments
+- **`deploy-production.yml`**: Handles production deployments
+- **`ci.yml`**: Runs tests and code formatting checks
+
+These workflows automatically:
+- Generate authentication keys during CI/CD
+- Build and deploy the Blazor WebAssembly app to Cloudflare Pages
+- Process and deploy the Cloudflare Worker with environment-specific API keys
+- Create preview environments for feature branches and PRs
 
 ## Project Structure
 
@@ -104,8 +126,16 @@ Albatross/
 
 The project uses unified GitHub Actions workflows that build and deploy both the SPA and Worker together:
 
-- **Development/Preview**: `.github/workflows/deploy-dev.yml` - Deploys to preview environments on feature branches and PRs
-- **Production**: `.github/workflows/deploy-production.yml` - Deploys to production on main branch
+- **Development/Preview**: `.github/workflows/deploy-dev.yml` - Deploys to staging environments on feature branches and PRs
+- **Production**: `.github/workflows/deploy-production.yml` - Deploys to production environment on main branch
+
+**Worker Environments:**
+- **Production**: `abuseipdb` worker (deployed from main branch)
+- **Staging**: `abuseipdb-staging` worker (deployed from feature branches and PRs)
+
+**SPA Environments:**
+- **Production**: Main Cloudflare Pages project (deployed from main branch)
+- **Preview**: Branch-specific preview URLs (deployed from feature branches and PRs)
 
 ### GitHub Secrets
 Configure these secrets in your repository settings (Settings → Secrets and variables → Actions):

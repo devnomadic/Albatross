@@ -25,11 +25,8 @@ jobs:
       with:
         dotnet-version: ${{ env.DOTNET_VERSION }}
         
-    - name: Install dotnet format
-      run: dotnet tool install -g dotnet-format
-      
     - name: Check code formatting
-      run: dotnet format --verify-no-changes --verbosity diagnostic
+      run: dotnet format Albatross.sln --verify-no-changes
       
     - name: Lint JavaScript/Worker file
       uses: actions/setup-node@v4
