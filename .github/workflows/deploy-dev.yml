@@ -114,23 +114,25 @@ jobs:
         CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       run: |
-        # Deploy to preview environment of the same worker
+        # Deploy to separate preview worker
+        WORKER_NAME="abuseipdb-${{ steps.preview.outputs.name }}"
+        
         DEPLOYMENT_OUTPUT=$(npx wrangler deploy \
+          --name "${WORKER_NAME}" \
           --compatibility-date 2024-06-08 \
-          --env preview 2>&1)
+          cloudflare-worker.js 2>&1)
         
         # Extract the worker URL from deployment output
         WORKER_URL=$(echo "$DEPLOYMENT_OUTPUT" | grep -oE 'https://[a-zA-Z0-9.-]+\.workers\.dev' | head -1)
         
         if [ -z "$WORKER_URL" ]; then
-          # Use the main worker URL with preview parameter
-          WORKER_URL="https://abuseipdb.workers.dev?env=preview"
+          # Construct the URL from the worker name
+          WORKER_URL="https://${WORKER_NAME}.workers.dev"
         fi
         
         echo "url=${WORKER_URL}" >> $GITHUB_OUTPUT
         echo "Worker URL: ${WORKER_URL}"
-        echo "Environment: preview"
-        echo "Note: Same worker, different environment. Access with ?env=preview or via environment variables"
+        echo "Worker Name: ${WORKER_NAME}"
         echo "Deployment output: $DEPLOYMENT_OUTPUT"
         
     - name: Deploy SPA to Cloudflare Pages
@@ -239,9 +241,22 @@ jobs:
         CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       run: |
-        # Note: Using a shared preview worker means no cleanup needed per PR
-        # The preview worker will be updated with each new deployment
-        echo "Worker preview cleanup: Preview worker managed automatically"
+        # Generate the same preview name that was used for deployment
+        if [ "${{ github.event_name }}" == "pull_request" ]; then
+          PREVIEW_NAME="pr-${{ github.event.number }}"
+        else
+          BRANCH_NAME="${{ github.ref_name }}"
+          PREVIEW_NAME=$(echo "${BRANCH_NAME}" | sed 's/[^a-zA-Z0-9-]/-/g' | tr '[:upper:]' '[:lower:]' | cut -c1-32)
+        fi
+        
+        WORKER_NAME="abuseipdb-${PREVIEW_NAME}"
+        
+        # Delete the preview worker
+        if npx wrangler delete "${WORKER_NAME}" --force; then
+          echo "✅ Successfully deleted preview worker: ${WORKER_NAME}"
+        else
+          echo "⚠️ Failed to delete preview worker or worker doesn't exist: ${WORKER_NAME}"
+        fi
         
     - name: Cleanup Pages Preview
       env:

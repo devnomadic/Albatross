@@ -69,14 +69,16 @@ The project uses automated GitHub Actions workflows for deployment:
 **Development/Preview Deployments:**
 - **Trigger**: Feature branches (`feature/*`, `fix/*`) and Pull Requests
 - **SPA**: Deployed to Cloudflare Pages preview environment
-- **Worker**: Deployed to same `abuseipdb` worker with `preview` environment
-- **URL**: Same URL `https://abuseipdb.workers.dev` but with environment differentiation
+- **Worker**: Deployed to separate preview workers (`abuseipdb-{preview-name}`)
+- **URLs**: 
+  - Worker: `https://abuseipdb-{preview-name}.workers.dev`
+  - SPA: `https://{preview-name}.{project}.pages.dev`
 
 **Production Deployments:**
 - **Trigger**: Pushes to `main` branch
 - **SPA**: Deployed to main Cloudflare Pages project
-- **Worker**: Deployed to `abuseipdb` worker with `production` environment
-- **URL**: Same URL `https://abuseipdb.workers.dev` but with production environment
+- **Worker**: Deployed to `abuseipdb` worker (production)
+- **URL**: `https://abuseipdb.workers.dev`
 
 **Manual Deployment Options:**
 1. **Build Locally**: Run `dotnet build` to generate authentication keys
@@ -93,8 +95,9 @@ The project includes two main deployment workflows in `.github/workflows/`:
 These workflows automatically:
 - Generate authentication keys during CI/CD
 - Build and deploy the Blazor WebAssembly app to Cloudflare Pages
-- Process and deploy the Cloudflare Worker with environment-specific API keys
+- Process and deploy the Cloudflare Worker to separate preview or production workers
 - Create preview environments for feature branches and PRs
+- Clean up preview workers when PRs are closed
 
 ## Project Structure
 

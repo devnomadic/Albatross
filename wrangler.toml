@@ -3,30 +3,14 @@ main = "cloudflare-worker.js"
 compatibility_date = "2024-06-08"
 compatibility_flags = ["nodejs_compat"]
 
-# Production environment
+# Production environment (default)
 [env.production]
 name = "abuseipdb"
 routes = []
-# If you have a custom domain, you can add:
-# routes = [
-#   { pattern = "api.yourdomain.com/*", zone_name = "yourdomain.com" }
-# ]
 
-# Preview environment - same worker, accessed via query param or header
-[env.preview]
-name = "abuseipdb"
-routes = []
-# If you have a custom domain, you can add:
-# routes = [
-#   { pattern = "preview.api.yourdomain.com/*", zone_name = "yourdomain.com" }
-# ]
-
-# Environment variables can be set per environment
-[env.production.vars]
-ENVIRONMENT = "production"
-
-[env.preview.vars]
-ENVIRONMENT = "preview"
+# Environment variables (these will be set via GitHub Actions secrets)
+# [vars]
+# ENVIRONMENT = "production"
 
 # Environment variables (these will be set via GitHub Actions secrets)
 # [vars]
