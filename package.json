@@ -1,7 +1,7 @@
 {
-  "name": "albatross-worker",
+  "name": "abuseipdb-worker",
   "version": "1.0.0",
-  "description": "Cloudflare Worker for Albatross AbuseIPDB API Proxy",
+  "description": "Cloudflare Worker for AbuseIPDB API Proxy",
   "main": "cloudflare-worker.js",
   "scripts": {
     "deploy": "wrangler deploy",

@@ -160,7 +160,7 @@ jobs:
           **Build Version:** \`${{ needs.build.outputs.build-version }}\`
           
           ### 🔗 Related Links
-          - **Worker Preview:** https://albatross-worker-pr-${{ github.event.number }}.preview.workers.dev
+          - **Worker Preview:** https://abuseipdb-pr-${{ github.event.number }}.preview.workers.dev
           - **Full App:** ${deploymentUrl}
           
           This preview will be automatically updated with new commits to the PR.`;

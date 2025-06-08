@@ -85,10 +85,10 @@ jobs:
         CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       run: |
         # Deploy to preview with custom name
-        npx wrangler deploy --compatibility-date 2024-01-01 --name "albatross-worker-${{ steps.preview.outputs.name }}" --env preview
+        npx wrangler deploy --compatibility-date 2024-01-01 --name "abuseipdb-${{ steps.preview.outputs.name }}" --env preview
         
         # Get the preview URL
-        PREVIEW_URL="https://albatross-worker-${{ steps.preview.outputs.name }}.preview.workers.dev"
+        PREVIEW_URL="https://abuseipdb-${{ steps.preview.outputs.name }}.preview.workers.dev"
         echo "PREVIEW_URL=${PREVIEW_URL}" >> $GITHUB_ENV
         
     - name: Update PR Comment
@@ -108,7 +108,7 @@ jobs:
           
           const commentBody = `## 🔧 Worker Preview Deployment
           
-          **Preview URL:** https://albatross-worker-${{ steps.preview.outputs.name }}.preview.workers.dev
+          **Preview URL:** https://abuseipdb-${{ steps.preview.outputs.name }}.preview.workers.dev
           **Environment:** Development/Preview
           **Branch:** \`${{ github.head_ref }}\`
           **Commit:** \`${{ github.sha }}\`
@@ -135,7 +135,7 @@ jobs:
       run: |
         echo "## 🚀 Worker Preview Deployment Complete" >> $GITHUB_STEP_SUMMARY
         echo "- **Preview Name:** ${{ steps.preview.outputs.name }}" >> $GITHUB_STEP_SUMMARY
-        echo "- **Preview URL:** https://albatross-worker-${{ steps.preview.outputs.name }}.preview.workers.dev" >> $GITHUB_STEP_SUMMARY
+        echo "- **Preview URL:** https://abuseipdb-${{ steps.preview.outputs.name }}.preview.workers.dev" >> $GITHUB_STEP_SUMMARY
         echo "- **Environment:** Development/Preview" >> $GITHUB_STEP_SUMMARY
         echo "- **Auth Key:** Auto-generated at build time" >> $GITHUB_STEP_SUMMARY
         echo "- **API Key:** Injected from DEV GitHub secrets" >> $GITHUB_STEP_SUMMARY
@@ -161,7 +161,7 @@ jobs:
         CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       run: |
         PREVIEW_NAME="pr-${{ github.event.number }}"
-        npx wrangler delete "albatross-worker-${PREVIEW_NAME}" --force || echo "Worker may not exist or already deleted"
+        npx wrangler delete "abuseipdb-${PREVIEW_NAME}" --force || echo "Worker may not exist or already deleted"
         
     - name: Update PR Comment
       uses: actions/github-script@v7
