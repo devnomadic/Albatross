@@ -52,7 +52,12 @@ const ALLOWED_ORIGINS = [
   "https://albatross.devnomadic.com",
   // Production Cloudflare Pages
   "https://albatross.pages.dev",
-  // Albatross preview deployments on Cloudflare Pages
+  // Albatross preview deployments on Cloudflare Pages (specific pattern)
+  "https://albatross-5kt.pages.dev",
+  // Wildcard patterns for albatross-5kt subdomain deployments
+  "*.albatross-5kt.pages.dev",
+  ".albatross-5kt.pages.dev",
+  // Wildcard patterns for other preview deployments
   "*.albatross.pages.dev",
   ".albatross.pages.dev",
   // Preview worker domain
