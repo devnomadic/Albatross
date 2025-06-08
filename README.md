@@ -51,6 +51,7 @@ The project uses MSBuild targets for automated key generation and code injection
 
 ### Prerequisites
 - .NET 8.0 SDK
+- Node.js 20.0.0 or higher (required for Cloudflare Wrangler 4)
 - PowerShell (cross-platform)
 - AbuseIPDB API key
 - Cloudflare Workers account (for deployment)
