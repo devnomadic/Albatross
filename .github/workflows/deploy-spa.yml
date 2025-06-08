@@ -136,7 +136,7 @@ jobs:
       with:
         apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        projectName: ${{ secrets.CLOUDFLARE_PROJECT_NAME }}
+        projectName: ${{ secrets.CLOUDFLARE_PAGES_PROJECT }}
         directory: ./dist
         gitHubToken: ${{ secrets.GITHUB_TOKEN }}
         
@@ -149,5 +149,5 @@ jobs:
             issue_number: context.issue.number,
             owner: context.repo.owner,
             repo: context.repo.repo,
-            body: '🚀 Preview deployment available at: https://${{ secrets.CLOUDFLARE_PROJECT_NAME }}.pages.dev'
+            body: '🚀 Preview deployment available at: https://${{ secrets.CLOUDFLARE_PAGES_PROJECT }}.pages.dev'
           });

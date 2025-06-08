@@ -102,13 +102,14 @@ Albatross/
 ### GitHub Secrets
 For automated deployment, configure these secrets in your repository settings:
 
-**Required for Cloudflare Pages Deployment:**
+**Required for Cloudflare Deployment:**
 - `CLOUDFLARE_API_TOKEN` - Your Cloudflare API token
 - `CLOUDFLARE_ACCOUNT_ID` - Your Cloudflare account ID  
-- `CLOUDFLARE_PROJECT_NAME` - Your Cloudflare Pages project name
+- `CLOUDFLARE_PAGES_PROJECT` - Your Cloudflare Pages project name
 
 **Required for Worker Deployment:**
-- `ABUSEIPDB_API_KEY` - Your API key from [AbuseIPDB](https://www.abuseipdb.com/)
+- `ABUSEIPDB_API_KEY` - Your production API key from [AbuseIPDB](https://www.abuseipdb.com/)
+- `ABUSEIPDB_API_KEY_DEV` - Your development API key from [AbuseIPDB](https://www.abuseipdb.com/)
 
 ### Local Development
 For local development, update the fallback API key in `cloudflare-worker.template.js` or set up environment variables.
