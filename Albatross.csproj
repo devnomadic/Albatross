@@ -11,16 +11,21 @@
   </PropertyGroup>  <!-- Pre-build target to generate authentication keys -->
   <Target Name="GenerateAuthKey" BeforeTargets="BeforeCompile" Condition="'$(SkipCodeGeneration)' != 'true' AND '$(DesignTimeBuild)' != 'true'">
     <Message Text="Generating build-time authentication key..." Importance="high" />
-    
-    <!-- Create Generated directory if it doesn't exist -->
+      <!-- Create Generated directory if it doesn't exist -->
     <MakeDir Directories="$(MSBuildProjectDirectory)/Generated" Condition="!Exists('$(MSBuildProjectDirectory)/Generated')" />
     
-    <!-- Run PowerShell script to generate auth key -->
-    <Exec Command="pwsh -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)/Generate-AuthKey.ps1&quot; -OutputPath &quot;$(MSBuildProjectDirectory)/Generated&quot; -Verbose" 
+    <!-- Determine environment parameter from environment variable or default to production -->
+    <PropertyGroup>
+      <AlbatrossEnvironment Condition="'$(AlbatrossEnvironment)' == ''">$(ALBATROSS_ENVIRONMENT)</AlbatrossEnvironment>
+      <AlbatrossEnvironment Condition="'$(AlbatrossEnvironment)' == ''">production</AlbatrossEnvironment>
+    </PropertyGroup>
+    
+    <!-- Run PowerShell script to generate auth key with environment parameter -->
+    <Exec Command="pwsh -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)/Generate-AuthKey.ps1&quot; -OutputPath &quot;$(MSBuildProjectDirectory)/Generated&quot; -Environment &quot;$(AlbatrossEnvironment)&quot; -Verbose" 
           ContinueOnError="false" 
           WorkingDirectory="$(MSBuildProjectDirectory)" />
     
-    <Message Text="Authentication key generation completed" Importance="high" />
+    <Message Text="Authentication key generation completed for environment: $(AlbatrossEnvironment)" Importance="high" />
   </Target>
   <!-- Post-auth-key target to process worker -->
   <Target Name="ProcessWorker" AfterTargets="GenerateAuthKey" BeforeTargets="BeforeCompile" Condition="'$(SkipCodeGeneration)' != 'true' AND '$(DesignTimeBuild)' != 'true'">

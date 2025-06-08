@@ -3,6 +3,10 @@ main = "cloudflare-worker.js"
 compatibility_date = "2024-06-08"
 compatibility_flags = ["nodejs_compat"]
 
+# Observability configuration (wrangler v3.88.0+)
+[observability.logs]
+enabled = true
+
 # Production environment (default)
 [env.production]
 name = "abuseipdb"
