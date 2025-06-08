@@ -114,25 +114,23 @@ jobs:
         CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       run: |
-        # Deploy to a preview worker using standard Wrangler deployment
-        # This creates a preview version that can be accessed via unique URL
-        PREVIEW_NAME="abuseipdb-preview"
-        
+        # Deploy to preview environment of the same worker
         DEPLOYMENT_OUTPUT=$(npx wrangler deploy \
           --compatibility-date 2024-06-08 \
-          --name "$PREVIEW_NAME" 2>&1)
+          --env preview 2>&1)
         
         # Extract the worker URL from deployment output
         WORKER_URL=$(echo "$DEPLOYMENT_OUTPUT" | grep -oE 'https://[a-zA-Z0-9.-]+\.workers\.dev' | head -1)
         
         if [ -z "$WORKER_URL" ]; then
-          # Use the expected URL format
-          WORKER_URL="https://$PREVIEW_NAME.workers.dev"
+          # Use the main worker URL with preview parameter
+          WORKER_URL="https://abuseipdb.workers.dev?env=preview"
         fi
         
         echo "url=${WORKER_URL}" >> $GITHUB_OUTPUT
         echo "Worker URL: ${WORKER_URL}"
-        echo "Preview Name: ${PREVIEW_NAME}"
+        echo "Environment: preview"
+        echo "Note: Same worker, different environment. Access with ?env=preview or via environment variables"
         echo "Deployment output: $DEPLOYMENT_OUTPUT"
         
     - name: Deploy SPA to Cloudflare Pages

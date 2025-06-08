@@ -69,14 +69,14 @@ The project uses automated GitHub Actions workflows for deployment:
 **Development/Preview Deployments:**
 - **Trigger**: Feature branches (`feature/*`, `fix/*`) and Pull Requests
 - **SPA**: Deployed to Cloudflare Pages preview environment
-- **Worker**: Deployed to shared `abuseipdb-preview` worker (updated for each preview)
-- **URL**: Consistent preview URL: `https://abuseipdb-preview.workers.dev`
+- **Worker**: Deployed to same `abuseipdb` worker with `preview` environment
+- **URL**: Same URL `https://abuseipdb.workers.dev` but with environment differentiation
 
 **Production Deployments:**
 - **Trigger**: Pushes to `main` branch
 - **SPA**: Deployed to main Cloudflare Pages project
-- **Worker**: Deployed to `abuseipdb` production worker
-- **URL**: Uses your configured production domains
+- **Worker**: Deployed to `abuseipdb` worker with `production` environment
+- **URL**: Same URL `https://abuseipdb.workers.dev` but with production environment
 
 **Manual Deployment Options:**
 1. **Build Locally**: Run `dotnet build` to generate authentication keys
@@ -130,8 +130,9 @@ The project uses unified GitHub Actions workflows that build and deploy both the
 - **Production**: `.github/workflows/deploy-production.yml` - Deploys to production environment on main branch
 
 **Worker Environments:**
-- **Production**: `abuseipdb` worker (deployed from main branch)
-- **Preview**: `abuseipdb-preview` worker (shared for all development and PR previews)
+- **Production**: `abuseipdb` worker with `production` environment
+- **Preview**: `abuseipdb` worker with `preview` environment
+- **Same URL**: `https://abuseipdb.workers.dev` for both (differentiated by environment variables)
 
 **SPA Environments:**
 - **Production**: Main Cloudflare Pages project (deployed from main branch)
