@@ -38,13 +38,20 @@ try {
     
     Write-BuildLog "Worker URL: $workerUrl"
     
-    # Generate a cryptographically secure random key
+    # Generate a cryptographically secure random key as a UTF-8 compatible string
     $keyBytes = New-Object byte[] $KeyLength
     $rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
     $rng.GetBytes($keyBytes)
     
-    # Convert to base64 for storage
-    $authKey = [System.Convert]::ToBase64String($keyBytes)
+    # Convert to a Base64 string that can be safely converted back to UTF-8
+    $randomBase64 = [System.Convert]::ToBase64String($keyBytes)
+    
+    # Create a UTF-8 compatible key string (use first 32 chars of Base64 for consistency)
+    $authKeyString = $randomBase64.Substring(0, [Math]::Min(32, $randomBase64.Length)).Replace("/", "_").Replace("+", "-")
+    
+    # Convert the UTF-8 string to base64 for storage
+    $authKeyBytes = [System.Text.Encoding]::UTF8.GetBytes($authKeyString)
+    $authKey = [System.Convert]::ToBase64String($authKeyBytes)
     
     # Create a more readable version for logging (first 8 chars + ...)
     $keyPreview = $authKey.Substring(0, 8) + "..."

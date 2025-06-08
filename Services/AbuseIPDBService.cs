@@ -197,12 +197,19 @@ namespace Albatross.Services
                 var messageBytes = Encoding.UTF8.GetBytes(message);
                 var keyBytes = Encoding.UTF8.GetBytes(_authKey);
 
+                // Debug logging
+                Debug.WriteLine($"HMAC Generation - Message: {message}");
+                Debug.WriteLine($"HMAC Generation - Auth Key Length: {_authKey.Length}");
+                Debug.WriteLine($"HMAC Generation - Auth Key Preview: {_authKey.Substring(0, Math.Min(8, _authKey.Length))}...");
+
                 // Create and compute the HMAC
                 using (var hmac = new HMACSHA256(keyBytes))
                 {
                     var hashBytes = hmac.ComputeHash(messageBytes);
                     // Convert hash to Base64 string
-                    return Convert.ToBase64String(hashBytes);
+                    var token = Convert.ToBase64String(hashBytes);
+                    Debug.WriteLine($"HMAC Generation - Token Preview: {token.Substring(0, Math.Min(20, token.Length))}...");
+                    return token;
                 }
             }
             catch (Exception ex)
