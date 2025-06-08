@@ -114,8 +114,8 @@ jobs:
         CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       run: |
-        # Deploy to separate preview worker
-        WORKER_NAME="abuseipdb-${{ steps.preview.outputs.name }}"
+        # Deploy to static preview worker
+        WORKER_NAME="abuseipdb-preview"
         
         DEPLOYMENT_OUTPUT=$(npx wrangler deploy \
           --name "${WORKER_NAME}" \
@@ -241,22 +241,13 @@ jobs:
         CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       run: |
-        # Generate the same preview name that was used for deployment
-        if [ "${{ github.event_name }}" == "pull_request" ]; then
-          PREVIEW_NAME="pr-${{ github.event.number }}"
-        else
-          BRANCH_NAME="${{ github.ref_name }}"
-          PREVIEW_NAME=$(echo "${BRANCH_NAME}" | sed 's/[^a-zA-Z0-9-]/-/g' | tr '[:upper:]' '[:lower:]' | cut -c1-32)
-        fi
+        # Static preview worker name
+        WORKER_NAME="abuseipdb-preview"
         
-        WORKER_NAME="abuseipdb-${PREVIEW_NAME}"
-        
-        # Delete the preview worker
-        if npx wrangler delete "${WORKER_NAME}" --force; then
-          echo "✅ Successfully deleted preview worker: ${WORKER_NAME}"
-        else
-          echo "⚠️ Failed to delete preview worker or worker doesn't exist: ${WORKER_NAME}"
-        fi
+        # Note: We don't delete the static preview worker as it's shared
+        # The worker will be updated with the next preview deployment
+        echo "ℹ️ Static preview worker maintained: ${WORKER_NAME}"
+        echo "The preview worker will be updated with the next deployment"
         
     - name: Cleanup Pages Preview
       env:

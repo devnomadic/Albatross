@@ -69,9 +69,9 @@ The project uses automated GitHub Actions workflows for deployment:
 **Development/Preview Deployments:**
 - **Trigger**: Feature branches (`feature/*`, `fix/*`) and Pull Requests
 - **SPA**: Deployed to Cloudflare Pages preview environment
-- **Worker**: Deployed to separate preview workers (`abuseipdb-{preview-name}`)
+- **Worker**: Deployed to static preview worker (`abuseipdb-preview`)
 - **URLs**: 
-  - Worker: `https://abuseipdb-{preview-name}.workers.dev`
+  - Worker: `https://abuseipdb-preview.workers.dev` (static for all previews)
   - SPA: `https://{preview-name}.{project}.pages.dev`
 
 **Production Deployments:**
@@ -95,9 +95,9 @@ The project includes two main deployment workflows in `.github/workflows/`:
 These workflows automatically:
 - Generate authentication keys during CI/CD
 - Build and deploy the Blazor WebAssembly app to Cloudflare Pages
-- Process and deploy the Cloudflare Worker to separate preview or production workers
+- Process and deploy the Cloudflare Worker to static preview or production workers
 - Create preview environments for feature branches and PRs
-- Clean up preview workers when PRs are closed
+- Maintain a shared `abuseipdb-preview` worker for all development deployments
 
 ## Project Structure
 

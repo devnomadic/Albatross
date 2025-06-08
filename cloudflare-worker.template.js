@@ -50,6 +50,13 @@ try {
 // Create a mapping of known allowed origins
 const ALLOWED_ORIGINS = [
   "https://albatross.devnomadic.com",
+  // Production Cloudflare Pages
+  "https://albatross.pages.dev",
+  // Albatross preview deployments on Cloudflare Pages
+  "*.albatross.pages.dev",
+  ".albatross.pages.dev",
+  // Preview worker domain
+  "https://abuseipdb-preview.workers.dev",
   // Add more allowed origins as needed
 ];
 
@@ -282,9 +289,14 @@ function isAllowedOrigin(origin) {
   }
   
   // Check against allowed origins
-  return ALLOWED_ORIGINS.some(allowedOrigin => 
-    origin === allowedOrigin || origin.endsWith(allowedOrigin.replace('https://', ''))
-  );
+  return ALLOWED_ORIGINS.some(allowedOrigin => {
+    // Handle wildcard domains (starting with .)
+    if (allowedOrigin.startsWith('.')) {
+      return origin.endsWith(allowedOrigin);
+    }
+    // Handle exact matches or subdomains
+    return origin === allowedOrigin || origin.endsWith(allowedOrigin.replace('https://', ''));
+  });
 }
 
 /**
