@@ -812,10 +812,28 @@ html body div.card div.card-header .btn {
         width: 35% !important;
         max-width: 50% !important;
     }
-    
-    /* Main Albatross ASCII art - maximum size for very small phones */
+      /* Main Albatross ASCII art - maximum size for very small phones */
     img[alt="Albatross"] {
         width: 90% !important;
         max-width: 98% !important;
     }
+}
+
+/* Service match styling */
+.service-match {
+    margin-bottom: 1rem;
+    padding: 0.75rem;
+    border: 1px solid #dee2e6;
+    border-radius: 0.375rem;
+    background-color: #f8f9fa;
+}
+
+.service-match strong {
+    font-size: 1.1rem;
+    color: #212529;
+}
+
+.service-match small {
+    font-family: 'Courier New', monospace;
+    font-size: 0.875rem;
 }

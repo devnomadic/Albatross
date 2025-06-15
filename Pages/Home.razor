@@ -146,7 +146,11 @@
         <div>
             @foreach (var service in azureMatchedServices)
             {
-                <div>@service</div>
+                <div class="service-match">
+                    <strong>@service.ServiceInfo</strong>
+                    <br />
+                    <small class="text-muted">CIDR Range: @service.CidrRange</small>
+                </div>
             }
         </div>
     </div>
@@ -159,7 +163,11 @@
         <div>
             @foreach (var service in awsMatchedServices)
             {
-                <div>@service</div>
+                <div class="service-match">
+                    <strong>@service.ServiceInfo</strong>
+                    <br />
+                    <small class="text-muted">CIDR Range: @service.CidrRange</small>
+                </div>
             }
         </div>
     </div>
@@ -172,7 +180,11 @@
         <div>
             @foreach (var service in gcpMatchedServices)
             {
-                <div>@service</div>
+                <div class="service-match">
+                    <strong>@service.ServiceInfo</strong>
+                    <br />
+                    <small class="text-muted">CIDR Range: @service.CidrRange</small>
+                </div>
             }
         </div>
     </div>
@@ -183,10 +195,12 @@
     <div class="spinner-border text-primary" role="status">
         <span class="visually-hidden">Loading...</span>
     </div>
-    <p>@(isCheckingAbuse ? "Checking IP reputation..." : "Searching IP ranges...")</p>
 }
 
-<p role="status">@statusMessage</p>
+@if (!string.IsNullOrEmpty(statusMessage))
+{
+    <p role="status">@statusMessage</p>
+}
 
 @if (abuseIpResult != null)
 {
@@ -281,9 +295,7 @@
     private async Task ValidateAndSearchAsync()
     {
         await ValidateAndSearch();
-    }
-
-    private async Task CheckAbuseIPDBAsync()
+    }    private async Task CheckAbuseIPDBAsync()
     {
         if (!IsValidIPAddress(ipAddress))
         {
@@ -292,7 +304,7 @@
         }
 
         isCheckingAbuse = true;
-        statusMessage = string.Empty;
+        statusMessage = "Checking IP reputation...";
         abuseIpResult = null;
         formattedJson = string.Empty;
         StateHasChanged();
@@ -346,10 +358,8 @@
         {
             statusMessage = "Invalid IP address. Please enter a valid IPv4 or IPv6 address.";
             return;
-        }
-
-        isSearching = true;
-        statusMessage = string.Empty;
+        }        isSearching = true;
+        statusMessage = "Searching IP ranges...";
         StateHasChanged();
 
         try
