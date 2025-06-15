@@ -39,7 +39,7 @@ namespace Albatross.Services
         public bool Success { get; set; }
 
         [JsonPropertyName("data")]
-        public List<AsnData>? Data { get; set; }
+        public AsnData? Data { get; set; }
 
         [JsonPropertyName("error")]
         public string? Error { get; set; }
