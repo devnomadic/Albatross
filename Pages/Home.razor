@@ -3,6 +3,7 @@
 @inject HttpClient Http
 @inject Albatross.Services.AbuseIPDBService AbuseIPDBService
 @using System.Text.Json
+@using System.Linq
 @inject IJSRuntime JSRuntime
 
 <PageTitle>Albatross</PageTitle>
@@ -210,11 +211,10 @@
 </center>
 
 @code {
-    private string ipAddress = string.Empty;
-    private string statusMessage = string.Empty;
-    private List<string>? azureMatchedServices;
-    private List<string>? awsMatchedServices;
-    private List<string>? gcpMatchedServices;
+    private string ipAddress = string.Empty;    private string statusMessage = string.Empty;
+    private List<CloudMatch>? azureMatchedServices;
+    private List<CloudMatch>? awsMatchedServices;
+    private List<CloudMatch>? gcpMatchedServices;
     private bool isSearching = false;
     private bool showDescription = false;
     private bool isCheckingAbuse = false;
@@ -417,11 +417,9 @@
             isSearching = false;
             StateHasChanged();
         }
-    }
-
-    private List<string> SearchAzureRanges(IPAddress enteredIp, string jsonContent)
+    }    private List<CloudMatch> SearchAzureRanges(IPAddress enteredIp, string jsonContent)
     {
-        var matchedServices = new List<string>();
+        var matchedServices = new List<CloudMatch>();
         
         try
         {
@@ -437,8 +435,17 @@
                         {
                             if (IsIpInRange(enteredIp, prefix) && !string.IsNullOrEmpty(value.name))
                             {
-                                matchedServices.Add(value.name);
-                                break; // Only add each service once
+                                var match = new CloudMatch
+                                {
+                                    ServiceInfo = value.name,
+                                    CidrRange = prefix
+                                };
+                                // Only add if we don't already have this exact match
+                                if (!matchedServices.Any(m => m.ServiceInfo == match.ServiceInfo && m.CidrRange == match.CidrRange))
+                                {
+                                    matchedServices.Add(match);
+                                }
+                                break; // Only add each service once per address prefix
                             }
                         }
                     }
@@ -451,11 +458,9 @@
         }
         
         return matchedServices;
-    }
-
-    private List<string> SearchAwsRanges(IPAddress enteredIp, string jsonContent)
+    }    private List<CloudMatch> SearchAwsRanges(IPAddress enteredIp, string jsonContent)
     {
-        var matchedServices = new List<string>();
+        var matchedServices = new List<CloudMatch>();
         
         try
         {
@@ -470,9 +475,15 @@
                         if (IsIpInRange(enteredIp, prefix.ip_prefix))
                         {
                             string serviceInfo = $"{prefix.service} ({prefix.region})";
-                            if (!matchedServices.Contains(serviceInfo))
+                            var match = new CloudMatch
                             {
-                                matchedServices.Add(serviceInfo);
+                                ServiceInfo = serviceInfo,
+                                CidrRange = prefix.ip_prefix
+                            };
+                            // Only add if we don't already have this exact match
+                            if (!matchedServices.Any(m => m.ServiceInfo == match.ServiceInfo && m.CidrRange == match.CidrRange))
+                            {
+                                matchedServices.Add(match);
                             }
                         }
                     }
@@ -485,11 +496,9 @@
         }
         
         return matchedServices;
-    }
-
-    private List<string> SearchGcpRanges(IPAddress enteredIp, string jsonContent)
+    }    private List<CloudMatch> SearchGcpRanges(IPAddress enteredIp, string jsonContent)
     {
-        var matchedServices = new List<string>();
+        var matchedServices = new List<CloudMatch>();
         
         try
         {
@@ -505,9 +514,15 @@
                         if (IsIpInRange(enteredIp, ipRange))
                         {
                             string serviceInfo = $"{prefix.service} ({prefix.scope ?? "Global"})";
-                            if (!matchedServices.Contains(serviceInfo))
+                            var match = new CloudMatch
                             {
-                                matchedServices.Add(serviceInfo);
+                                ServiceInfo = serviceInfo,
+                                CidrRange = ipRange
+                            };
+                            // Only add if we don't already have this exact match
+                            if (!matchedServices.Any(m => m.ServiceInfo == match.ServiceInfo && m.CidrRange == match.CidrRange))
+                            {
+                                matchedServices.Add(match);
                             }
                         }
                     }
@@ -578,6 +593,17 @@
         if (score < 25) return "text-success";
         if (score < 75) return "text-warning";
         return "text-danger";
+    }
+
+    private class CloudMatch
+    {
+        public string ServiceInfo { get; set; } = string.Empty;
+        public string CidrRange { get; set; } = string.Empty;
+        
+        public override string ToString()
+        {
+            return $"{ServiceInfo} (CIDR: {CidrRange})";
+        }
     }
 
     private class AzureIpRanges
