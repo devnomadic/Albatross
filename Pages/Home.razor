@@ -336,9 +336,7 @@
         {
             isCheckingAbuse = false;
         }
-    }
-
-    private async Task ValidateAndSearch()
+    }    private async Task ValidateAndSearch()
     {
         azureMatchedServices = null;
         awsMatchedServices = null;
@@ -358,86 +356,51 @@
         {
             // Parse the entered IP address
             IPAddress enteredIp = IPAddress.Parse(ipAddress);
-            bool foundMatch = false;
 
-            // Search Azure IP ranges
-            string azureJsonContent = await Http.GetStringAsync("ip-manifests/Azure.json");
-            var azureData = JsonSerializer.Deserialize<AzureIpRanges>(azureJsonContent);
-
-            if (azureData?.values != null)
+            // Load all manifest files in parallel for optimal performance
+            var downloadTasks = new[]
             {
-                // Find matching Azure services
-                azureMatchedServices = new List<string>();
-                foreach (var value in azureData.values)
-                {
-                    if (value.properties != null && value.properties.addressPrefixes != null)
-                    {
-                        foreach (var prefix in value.properties.addressPrefixes)
-                        {
-                            if (IsIpInRange(enteredIp, prefix) && !string.IsNullOrEmpty(value.name))
-                            {
-                                azureMatchedServices.Add(value.name);
-                                foundMatch = true;
-                                break;
-                            }
-                        }
-                    }
-                }
-            }
+                Http.GetStringAsync("ip-manifests/Azure.json"),
+                Http.GetStringAsync("ip-manifests/AWS.json"),
+                Http.GetStringAsync("ip-manifests/GCP.json")
+            };
 
-            // Search AWS IP ranges
-            string awsJsonContent = await Http.GetStringAsync("ip-manifests/AWS.json");
-            var awsData = JsonSerializer.Deserialize<AwsIpRanges>(awsJsonContent);
+            statusMessage = "Loading cloud IP manifests...";
+            StateHasChanged();
 
-            if (awsData?.prefixes != null)
+            // Wait for all downloads to complete
+            var manifestContents = await Task.WhenAll(downloadTasks);
+
+            statusMessage = "Searching IP ranges...";
+            StateHasChanged();
+
+            // Process all manifests in parallel using separate threads
+            var searchTasks = new[]
             {
-                // Find matching AWS services
-                awsMatchedServices = new List<string>();
-                foreach (var prefix in awsData.prefixes)
-                {
-                    if (!string.IsNullOrEmpty(prefix.ip_prefix) && !string.IsNullOrEmpty(prefix.service))
-                    {
-                        if (IsIpInRange(enteredIp, prefix.ip_prefix))
-                        {
-                            string serviceInfo = $"{prefix.service} ({prefix.region})";
-                            if (!awsMatchedServices.Contains(serviceInfo))
-                            {
-                                awsMatchedServices.Add(serviceInfo);
-                                foundMatch = true;
-                            }
-                        }
-                    }
-                }
-            }
+                Task.Run(() => SearchAzureRanges(enteredIp, manifestContents[0])),
+                Task.Run(() => SearchAwsRanges(enteredIp, manifestContents[1])),
+                Task.Run(() => SearchGcpRanges(enteredIp, manifestContents[2]))
+            };
 
-            // Search GCP IP ranges
-            string gcpJsonContent = await Http.GetStringAsync("ip-manifests/GCP.json");
-            var gcpData = JsonSerializer.Deserialize<GcpIpRanges>(gcpJsonContent);
+            // Wait for all searches to complete
+            var searchResults = await Task.WhenAll(searchTasks);
 
-            if (gcpData?.prefixes != null)
-            {
-                // Find matching GCP services
-                gcpMatchedServices = new List<string>();                foreach (var prefix in gcpData.prefixes)
-                {
-                    string? ipRange = prefix.ipv4Prefix ?? prefix.ipv6Prefix;
-                    if (!string.IsNullOrEmpty(ipRange) && !string.IsNullOrEmpty(prefix.service))
-                    {
-                        if (IsIpInRange(enteredIp, ipRange))
-                        {
-                            string serviceInfo = $"{prefix.service} ({prefix.scope ?? "Global"})";
-                            if (!gcpMatchedServices.Contains(serviceInfo))
-                            {
-                                gcpMatchedServices.Add(serviceInfo);
-                                foundMatch = true;
-                            }
-                        }
-                    }
-                }
-            }
+            // Assign results
+            azureMatchedServices = searchResults[0];
+            awsMatchedServices = searchResults[1];
+            gcpMatchedServices = searchResults[2];
+
+            // Determine if any matches were found
+            bool foundMatch = (azureMatchedServices?.Count > 0) || 
+                             (awsMatchedServices?.Count > 0) || 
+                             (gcpMatchedServices?.Count > 0);
 
             if (foundMatch)
             {
-                statusMessage = "Found matching cloud services!";
+                var totalMatches = (azureMatchedServices?.Count ?? 0) + 
+                                 (awsMatchedServices?.Count ?? 0) + 
+                                 (gcpMatchedServices?.Count ?? 0);
+                statusMessage = $"Found {totalMatches} matching cloud service(s)!";
             }
             else
             {
@@ -447,11 +410,116 @@
         catch (Exception ex)
         {
             statusMessage = $"Error during search: {ex.Message}";
+            await JSRuntime.InvokeVoidAsync("console.error", "Cloud IP search error: " + ex.Message);
         }
         finally
         {
             isSearching = false;
+            StateHasChanged();
         }
+    }
+
+    private List<string> SearchAzureRanges(IPAddress enteredIp, string jsonContent)
+    {
+        var matchedServices = new List<string>();
+        
+        try
+        {
+            var azureData = JsonSerializer.Deserialize<AzureIpRanges>(jsonContent);
+            
+            if (azureData?.values != null)
+            {
+                foreach (var value in azureData.values)
+                {
+                    if (value.properties?.addressPrefixes != null)
+                    {
+                        foreach (var prefix in value.properties.addressPrefixes)
+                        {
+                            if (IsIpInRange(enteredIp, prefix) && !string.IsNullOrEmpty(value.name))
+                            {
+                                matchedServices.Add(value.name);
+                                break; // Only add each service once
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error searching Azure ranges: {ex.Message}");
+        }
+        
+        return matchedServices;
+    }
+
+    private List<string> SearchAwsRanges(IPAddress enteredIp, string jsonContent)
+    {
+        var matchedServices = new List<string>();
+        
+        try
+        {
+            var awsData = JsonSerializer.Deserialize<AwsIpRanges>(jsonContent);
+            
+            if (awsData?.prefixes != null)
+            {
+                foreach (var prefix in awsData.prefixes)
+                {
+                    if (!string.IsNullOrEmpty(prefix.ip_prefix) && !string.IsNullOrEmpty(prefix.service))
+                    {
+                        if (IsIpInRange(enteredIp, prefix.ip_prefix))
+                        {
+                            string serviceInfo = $"{prefix.service} ({prefix.region})";
+                            if (!matchedServices.Contains(serviceInfo))
+                            {
+                                matchedServices.Add(serviceInfo);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error searching AWS ranges: {ex.Message}");
+        }
+        
+        return matchedServices;
+    }
+
+    private List<string> SearchGcpRanges(IPAddress enteredIp, string jsonContent)
+    {
+        var matchedServices = new List<string>();
+        
+        try
+        {
+            var gcpData = JsonSerializer.Deserialize<GcpIpRanges>(jsonContent);
+            
+            if (gcpData?.prefixes != null)
+            {
+                foreach (var prefix in gcpData.prefixes)
+                {
+                    string? ipRange = prefix.ipv4Prefix ?? prefix.ipv6Prefix;
+                    if (!string.IsNullOrEmpty(ipRange) && !string.IsNullOrEmpty(prefix.service))
+                    {
+                        if (IsIpInRange(enteredIp, ipRange))
+                        {
+                            string serviceInfo = $"{prefix.service} ({prefix.scope ?? "Global"})";
+                            if (!matchedServices.Contains(serviceInfo))
+                            {
+                                matchedServices.Add(serviceInfo);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error searching GCP ranges: {ex.Message}");
+        }
+        
+        return matchedServices;
     }
 
     private bool IsValidIPAddress(string ip)

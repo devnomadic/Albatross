@@ -13,12 +13,87 @@ using Albatross.Generated;
 namespace Albatross.Services
 {
     /// <summary>
-    /// Complete API response model for AbuseIPDB
+    /// Complete API response model for AbuseIPDB with integrated ASN information
     /// </summary>
     public class AbuseIPDBApiResponse
     {
         [JsonPropertyName("data")]
         public AbuseIPDBData? Data { get; set; }
+
+        [JsonPropertyName("asnInfo")]
+        public AsnInfo? AsnInfo { get; set; }
+
+        [JsonPropertyName("abuseIPDBError")]
+        public string? AbuseIPDBError { get; set; }
+
+        [JsonPropertyName("workerInfo")]
+        public WorkerInfo? WorkerInfo { get; set; }
+    }
+
+    /// <summary>
+    /// ASN information from Cloudflare Radar API
+    /// </summary>
+    public class AsnInfo
+    {
+        [JsonPropertyName("success")]
+        public bool Success { get; set; }
+
+        [JsonPropertyName("data")]
+        public List<AsnData>? Data { get; set; }
+
+        [JsonPropertyName("error")]
+        public string? Error { get; set; }
+    }
+
+    /// <summary>
+    /// ASN data details
+    /// </summary>
+    public class AsnData
+    {
+        [JsonPropertyName("asn")]
+        public int Asn { get; set; }
+
+        [JsonPropertyName("name")]
+        public string? Name { get; set; }
+
+        [JsonPropertyName("country")]
+        public string? Country { get; set; }
+
+        [JsonPropertyName("org")]
+        public string? Organization { get; set; }
+    }
+
+    /// <summary>
+    /// Worker metadata information
+    /// </summary>
+    public class WorkerInfo
+    {
+        [JsonPropertyName("buildInfo")]
+        public BuildInfo? BuildInfo { get; set; }
+
+        [JsonPropertyName("timestamp")]
+        public string? Timestamp { get; set; }
+
+        [JsonPropertyName("requestId")]
+        public string? RequestId { get; set; }
+
+        [JsonPropertyName("sources")]
+        public Dictionary<string, string>? Sources { get; set; }
+    }
+
+    /// <summary>
+    /// Build information from worker
+    /// </summary>
+    public class BuildInfo
+    {
+        [JsonPropertyName("buildId")]
+        public string? BuildId { get; set; }
+
+        [JsonPropertyName("buildTimestamp")]
+        public string? BuildTimestamp { get; set; }
+
+        [JsonPropertyName("keySource")]
+        public string? KeySource { get; set; }
     }
 
     /// <summary>

@@ -71,14 +71,14 @@ The project uses automated GitHub Actions workflows for deployment:
 - **SPA**: Deployed to Cloudflare Pages preview environment
 - **Worker**: Deployed to static preview worker (`abuseipdb-preview`)
 - **URLs**: 
-  - Worker: `https://abuseipdb-preview.workers.dev` (static for all previews)
+  - Worker: `https://abuseipdb-preview.devnomadic.workers.dev` (static for all previews)
   - SPA: `https://{preview-name}.{project}.pages.dev`
 
 **Production Deployments:**
 - **Trigger**: Pushes to `main` branch
 - **SPA**: Deployed to main Cloudflare Pages project
 - **Worker**: Deployed to `abuseipdb` worker (production)
-- **URL**: `https://abuseipdb.workers.dev`
+- **URL**: `https://abuseipdb.devnomadic.workers.dev`
 
 **Manual Deployment Options:**
 1. **Build Locally**: Run `dotnet build` to generate authentication keys
@@ -135,7 +135,7 @@ The project uses unified GitHub Actions workflows that build and deploy both the
 **Worker Environments:**
 - **Production**: `abuseipdb` worker with `production` environment
 - **Preview**: `abuseipdb` worker with `preview` environment
-- **Same URL**: `https://abuseipdb.workers.dev` for both (differentiated by environment variables)
+- **Same URL**: `https://abuseipdb.devnomadic.workers.dev` for both (differentiated by environment variables)
 
 **SPA Environments:**
 - **Production**: Main Cloudflare Pages project (deployed from main branch)
@@ -167,7 +167,18 @@ Update the `BaseUrl` in `AbuseIPDBService.cs` with your deployed Cloudflare Work
 - **Key Rotation**: Authentication keys are regenerated with each build, providing automatic key rotation
 - **Request Validation**: All requests are validated using HMAC-SHA256 authentication
 - **Origin Control**: CORS headers restrict access to configured allowed origins
+- **Browser-Only Access**: Worker validates User-Agent headers to ensure requests come from legitimate browsers
+- **Production Origins Only**: Localhost and development origins are blocked in production deployments
 - **API Key Protection**: The AbuseIPDB API key is never exposed to client-side code
+- **Double Authentication**: Both HMAC authentication and origin validation must pass for requests to succeed
+
+## Current Status
+
+✅ **Authentication System**: Fully implemented and working
+✅ **CORS Security**: Browser-only validation enabled  
+✅ **Production Deployment**: Live at `https://abuseipdb.devnomadic.workers.dev`
+✅ **Build System**: Automated key generation and injection working
+✅ **GitHub Actions**: Automated CI/CD pipeline functional
 
 ## License
 

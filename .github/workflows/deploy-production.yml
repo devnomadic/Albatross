@@ -69,6 +69,7 @@ jobs:
       shell: pwsh
       env:
         ABUSEIPDB_API_KEY: ${{ secrets.ABUSEIPDB_API_KEY }}
+        CLOUDFLARE_RADAR_API_TOKEN: ${{ secrets.CLOUDFLARE_RADAR_API_TOKEN }}
         SkipCodeGeneration: false
         ALBATROSS_ENVIRONMENT: production
       run: |
@@ -84,12 +85,19 @@ jobs:
         # Process worker template with generated constants
         ./Process-Worker.ps1 -TemplateFile "cloudflare-worker.template.js" -OutputFile "cloudflare-worker.js" -ConstantsFile "Generated/build-constants.js"
         
-        # Inject production API key
+        # Inject production API keys
         if ($env:ABUSEIPDB_API_KEY) {
           (Get-Content cloudflare-worker.js) -replace 'const ABUSEIPDB_API_KEY = "[^"]*"', "const ABUSEIPDB_API_KEY = `"$env:ABUSEIPDB_API_KEY`"" | Set-Content cloudflare-worker.js
           Write-Host "✅ Injected AbuseIPDB API key from GitHub secret (PRODUCTION)"
         } else {
           Write-Warning "⚠️ ABUSEIPDB_API_KEY secret not found - using template default"
+        }
+        
+        if ($env:CLOUDFLARE_RADAR_API_TOKEN) {
+          (Get-Content cloudflare-worker.js) -replace 'const CLOUDFLARE_API_TOKEN = "[^"]*"', "const CLOUDFLARE_API_TOKEN = `"$env:CLOUDFLARE_RADAR_API_TOKEN`"" | Set-Content cloudflare-worker.js
+          Write-Host "✅ Injected Cloudflare Radar API token from GitHub secret (PRODUCTION)"
+        } else {
+          Write-Warning "⚠️ CLOUDFLARE_RADAR_API_TOKEN secret not found - using template default"
         }
         
     - name: Publish SPA

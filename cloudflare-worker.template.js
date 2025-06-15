@@ -1,22 +1,43 @@
 /**
- * Cloudflare Worker for AbuseIPDB API Proxy
+ * Cloudflare Worker for Integrated IP Analysis
  * 
- * This worker acts as a proxy for the AbuseIPDB API, which:
- * 1. Protects your API key from client exposure
- * 2. Handles CORS for browser requests
- * 3. Returns the complete AbuseIPDB API response
- * 4. Uses HMAC-based authentication for security with build-time generated keys
+ * This worker provides comprehensive IP analysis by combining multiple data sources:
+ * 1. AbuseIPDB API - IP abuse reputation checking
+ * 2. Cloudflare Radar API - ASN and network information lookup
+ * 
+ * Features:
+ * - Protects API keys from client exposure
+ * - Handles CORS for browser requests
+ * - Fetches both APIs in parallel for optimal performance
+ * - Returns combined data in a single JSON response
+ * - Uses HMAC-based authentication for security with build-time generated keys
+ * - Provides fallback data when one API fails
  * 
  * Deploy this to your Cloudflare Workers account and update the 
  * AbuseIPDBService.cs file with your worker URL.
+ * 
+ * Response Format:
+ * {
+ *   "data": { ... AbuseIPDB data ... },
+ *   "asnInfo": {
+ *     "success": true/false,
+ *     "data": [ ... Cloudflare Radar ASN data ... ],
+ *     "error": null/string
+ *   },
+ *   "workerInfo": { ... metadata ... }
+ * }
  */
 
 // Import build-time generated constants (will be injected during build)
 // __BUILD_CONSTANTS_INJECTION_POINT__
 
-// Configuration - API key will be injected during GitHub Actions build
+// Configuration - API keys will be injected during GitHub Actions build
 const ABUSEIPDB_API_KEY = "YOUR_ABUSEIPDB_API_KEY_WILL_BE_INJECTED_HERE";
 const ABUSEIPDB_API_URL = "https://api.abuseipdb.com/api/v2/check";
+
+// Cloudflare Radar API configuration
+const CLOUDFLARE_RADAR_API_URL = "https://api.cloudflare.com/client/v4/radar/entities/asns/ip";
+const CLOUDFLARE_API_TOKEN = "YOUR_CLOUDFLARE_API_TOKEN_WILL_BE_INJECTED_HERE";
 
 // Authentication key - this will be replaced with generated key during build
 // If build constants are available, use them; otherwise fallback to default
@@ -71,6 +92,12 @@ async function handleRequest(request) {
   if (request.method === "OPTIONS") {
     return handleCORS(request);
   }
+
+  // All requests go through the combined handler
+  return handleCombinedRequest(request);
+}
+
+async function handleCombinedRequest(request) {
 
   // Get the request origin
   const origin = request.headers.get('Origin') || '';
@@ -199,66 +226,144 @@ async function handleRequest(request) {
   }
 
   try {
-    // Make request to AbuseIPDB API
-    const abuseIPDBResponse = await fetch(ABUSEIPDB_API_URL, {
-      method: 'GET',
-      headers: {
-        'Key': ABUSEIPDB_API_KEY,
-        'Accept': 'application/json',
-      },
-      // Build query parameters
-      // Note: Using the original case for the AbuseIPDB API (they expect camelCase)
-      cf: {
-        // Cloudflare-specific options
-        cacheTtl: 300, // Cache for 5 minutes
-        cacheEverything: true
-      }
-    });
-
-    // Check if the AbuseIPDB API request was successful
-    if (!abuseIPDBResponse.ok) {
-      console.error('AbuseIPDB API error:', abuseIPDBResponse.status, abuseIPDBResponse.statusText);
-      return new Response(
-        JSON.stringify({ 
-          error: `AbuseIPDB API error: ${abuseIPDBResponse.status} ${abuseIPDBResponse.statusText}`,
-          buildInfo: BUILD_INFO
-        }),
-        {
-          status: abuseIPDBResponse.status,
-          headers: {
-            'Content-Type': 'application/json',
-            ...corsHeaders(origin)
-          }
+    // Fetch both APIs in parallel for better performance
+    const [abuseIPDBResponse, radarResponse] = await Promise.allSettled([
+      // AbuseIPDB API request
+      fetch(`${ABUSEIPDB_API_URL}?ipAddress=${encodeURIComponent(ipAddress)}&maxAgeInDays=${maxAgeInDays}&verbose=${verbose}`, {
+        method: 'GET',
+        headers: {
+          'Key': ABUSEIPDB_API_KEY,
+          'Accept': 'application/json',
+          'User-Agent': 'Albatross-Worker/1.0'
+        },
+        cf: {
+          cacheTtl: 300, // Cache for 5 minutes
+          cacheEverything: true
         }
-      );
+      }),
+      
+      // Cloudflare Radar API request
+      fetch(`${CLOUDFLARE_RADAR_API_URL}?ip=${encodeURIComponent(ipAddress)}`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${CLOUDFLARE_API_TOKEN}`,
+          'Content-Type': 'application/json',
+          'User-Agent': 'Albatross-Worker/1.0'
+        },
+        cf: {
+          cacheTtl: 3600, // Cache for 1 hour (ASN info doesn't change frequently)
+          cacheEverything: true
+        }
+      })
+    ]);
+
+    // Process AbuseIPDB response
+    let abuseIPDBData = null;
+    let abuseIPDBError = null;
+    
+    if (abuseIPDBResponse.status === 'fulfilled' && abuseIPDBResponse.value.ok) {
+      try {
+        abuseIPDBData = await abuseIPDBResponse.value.json();
+        console.log('AbuseIPDB API response successful');
+      } catch (error) {
+        console.error('Error parsing AbuseIPDB response:', error);
+        abuseIPDBError = 'Failed to parse AbuseIPDB response';
+      }
+    } else {
+      const status = abuseIPDBResponse.status === 'fulfilled' ? abuseIPDBResponse.value.status : 'rejected';
+      const statusText = abuseIPDBResponse.status === 'fulfilled' ? abuseIPDBResponse.value.statusText : abuseIPDBResponse.reason?.message || 'Network error';
+      console.error('AbuseIPDB API error:', status, statusText);
+      abuseIPDBError = `AbuseIPDB API error: ${status} ${statusText}`;
     }
 
-    // Get the response data
-    const responseData = await abuseIPDBResponse.json();
+    // Process Cloudflare Radar response
+    let radarData = null;
+    let radarError = null;
     
-    // Add build information to the response
-    responseData.workerInfo = {
-      buildInfo: BUILD_INFO,
-      timestamp: new Date().toISOString(),
-      requestId: generateRequestId()
+    if (radarResponse.status === 'fulfilled' && radarResponse.value.ok) {
+      try {
+        radarData = await radarResponse.value.json();
+        console.log('Cloudflare Radar API response successful:', {
+          success: radarData.success,
+          resultCount: radarData.result?.length || 0
+        });
+      } catch (error) {
+        console.error('Error parsing Radar response:', error);
+        radarError = 'Failed to parse Cloudflare Radar response';
+      }
+    } else {
+      const status = radarResponse.status === 'fulfilled' ? radarResponse.value.status : 'rejected';
+      const statusText = radarResponse.status === 'fulfilled' ? radarResponse.value.statusText : radarResponse.reason?.message || 'Network error';
+      console.error('Cloudflare Radar API error:', status, statusText);
+      radarError = `Cloudflare Radar API error: ${status} ${statusText}`;
+    }
+
+    // Combine the responses into a single response object
+    const combinedResponse = {
+      // AbuseIPDB data (maintain original structure for compatibility)
+      data: abuseIPDBData?.data || null,
+      
+      // Add Cloudflare Radar ASN information
+      asnInfo: {
+        success: radarData?.success || false,
+        data: radarData?.result || null,
+        error: radarError
+      },
+      
+      // Metadata and errors
+      abuseIPDBError: abuseIPDBError,
+      workerInfo: {
+        buildInfo: BUILD_INFO,
+        timestamp: new Date().toISOString(),
+        requestId: generateRequestId(),
+        sources: {
+          abuseipdb: abuseIPDBError ? 'error' : 'success',
+          radar: radarError ? 'error' : 'success'
+        }
+      }
     };
 
-    // Return the response with CORS headers
-    return new Response(JSON.stringify(responseData), {
-      status: 200,
-      headers: {
-        'Content-Type': 'application/json',
-        ...corsHeaders(origin)
-      }
-    });
+    // Determine overall response status
+    const hasAbuseIPDBData = abuseIPDBData && !abuseIPDBError;
+    const hasRadarData = radarData && radarData.success && !radarError;
+    
+    // Return successful response if at least one API succeeded
+    if (hasAbuseIPDBData || hasRadarData) {
+      console.log('Combined API response successful:', {
+        abuseipdb: hasAbuseIPDBData ? 'success' : 'failed',
+        radar: hasRadarData ? 'success' : 'failed'
+      });
+      
+      return new Response(JSON.stringify(combinedResponse), {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/json',
+          ...corsHeaders(origin)
+        }
+      });
+    } else {
+      // Both APIs failed
+      console.error('Both APIs failed');
+      return new Response(JSON.stringify(combinedResponse), {
+        status: 502,
+        headers: {
+          'Content-Type': 'application/json',
+          ...corsHeaders(origin)
+        }
+      });
+    }
 
   } catch (error) {
-    console.error('Worker error:', error);
+    console.error('Combined worker error:', error);
     return new Response(
       JSON.stringify({ 
         error: 'Internal server error',
         buildInfo: BUILD_INFO,
-        details: error.message
+        details: error.message,
+        asnInfo: {
+          success: false,
+          error: 'Internal server error'
+        }
       }),
       {
         status: 500,
