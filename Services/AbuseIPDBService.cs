@@ -51,16 +51,94 @@ namespace Albatross.Services
     public class AsnData
     {
         [JsonPropertyName("asn")]
-        public int Asn { get; set; }
+        public AsnDetails? Asn { get; set; }
+    }
 
+    /// <summary>
+    /// Detailed ASN information
+    /// </summary>
+    public class AsnDetails
+    {
         [JsonPropertyName("name")]
         public string? Name { get; set; }
+
+        [JsonPropertyName("nameLong")]
+        public string? NameLong { get; set; }
+
+        [JsonPropertyName("aka")]
+        public string? Aka { get; set; }
+
+        [JsonPropertyName("asn")]
+        public int AsnNumber { get; set; }
+
+        [JsonPropertyName("website")]
+        public string? Website { get; set; }
 
         [JsonPropertyName("country")]
         public string? Country { get; set; }
 
-        [JsonPropertyName("org")]
-        public string? Organization { get; set; }
+        [JsonPropertyName("countryName")]
+        public string? CountryName { get; set; }
+
+        [JsonPropertyName("orgName")]
+        public string? OrgName { get; set; }
+
+        [JsonPropertyName("source")]
+        public string? Source { get; set; }
+
+        [JsonPropertyName("related")]
+        public List<RelatedAsn>? Related { get; set; }
+
+        [JsonPropertyName("confidenceLevel")]
+        public int ConfidenceLevel { get; set; }
+
+        [JsonPropertyName("estimatedUsers")]
+        public EstimatedUsers? EstimatedUsers { get; set; }
+    }
+
+    /// <summary>
+    /// Related ASN information
+    /// </summary>
+    public class RelatedAsn
+    {
+        [JsonPropertyName("name")]
+        public string? Name { get; set; }
+
+        [JsonPropertyName("aka")]
+        public string? Aka { get; set; }
+
+        [JsonPropertyName("asn")]
+        public int Asn { get; set; }
+
+        [JsonPropertyName("estimatedUsers")]
+        public int? EstimatedUsers { get; set; }
+    }
+
+    /// <summary>
+    /// Estimated users information
+    /// </summary>
+    public class EstimatedUsers
+    {
+        [JsonPropertyName("estimatedUsers")]
+        public int? TotalEstimatedUsers { get; set; }
+
+        [JsonPropertyName("locations")]
+        public List<LocationUsers>? Locations { get; set; }
+    }
+
+    /// <summary>
+    /// Users by location
+    /// </summary>
+    public class LocationUsers
+    {
+        [JsonPropertyName("estimatedUsers")]
+        public int? EstimatedUsers { get; set; }
+
+        [JsonPropertyName("locationName")]
+        public string? LocationName { get; set; }
+
+        [JsonPropertyName("locationAlpha2")]
+        public string? LocationAlpha2 { get; set; }
     }
 
     /// <summary>
