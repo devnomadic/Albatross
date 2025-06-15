@@ -17,6 +17,6 @@ chmod +x dotnet-install.sh
 
 echo "🏗️ Building and publishing application..."
 ./dotnet/dotnet --version
-./dotnet/dotnet publish -c Release -o output
+./dotnet/dotnet publish Albatross.csproj -c Release -o output
 
 echo "🎉 Build completed successfully!"

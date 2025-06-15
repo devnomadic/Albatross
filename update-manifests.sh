@@ -34,6 +34,18 @@ else
     echo "❌ Failed to download GCP manifest"
 fi
 
+# Fetch Oracle IP ranges
+echo "📡 Downloading Oracle IP ranges..."
+curl -sSL "https://docs.oracle.com/en-us/iaas/tools/public_ip_ranges.json" -o ./wwwroot/ip-manifests/Oracle.json
+if [ $? -eq 0 ]; then
+    echo "✅ Oracle manifest updated successfully"
+    # Show some basic info about the file
+    echo "   Size: $(wc -c < ./wwwroot/ip-manifests/Oracle.json) bytes"
+    echo "   Last Updated: $(grep -o '"last_updated_timestamp":"[^"]*"' ./wwwroot/ip-manifests/Oracle.json | cut -d'"' -f4)"
+else
+    echo "❌ Failed to download Oracle manifest"
+fi
+
 # Fetch Azure IP ranges
 echo "📡 Downloading Azure IP ranges..."
 # Use the Azure REST API to get the latest Service Tags

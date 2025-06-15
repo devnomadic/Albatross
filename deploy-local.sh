@@ -105,7 +105,7 @@ while true; do
             dotnet build --configuration Release
             
             print_status "Publishing application..."
-            dotnet publish --configuration Release --output ./local-dist
+            dotnet publish Albatross.csproj --configuration Release --output ./local-dist
             
             print_status "SPA built successfully!"
             echo -e "${GREEN}📁 Output directory: ./local-dist/wwwroot/${NC}"

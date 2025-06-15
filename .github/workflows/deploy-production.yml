@@ -102,7 +102,7 @@ jobs:
         
     - name: Publish SPA
       run: |
-        dotnet publish --configuration Release --no-build --output ./dist
+        dotnet publish Albatross.csproj --configuration Release --no-build --output ./dist
         
     - name: Deploy Worker to Production
       id: worker-deploy

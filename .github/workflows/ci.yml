@@ -183,7 +183,7 @@ jobs:
     - name: Build and publish
       run: |
         dotnet build --configuration Release --no-restore
-        dotnet publish --configuration Release --output ./preview --no-build
+        dotnet publish Albatross.csproj --configuration Release --output ./preview --no-build
       
     - name: Upload preview build
       uses: actions/upload-artifact@v4

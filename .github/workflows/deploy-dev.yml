@@ -109,7 +109,7 @@ jobs:
         
     - name: Publish SPA
       run: |
-        dotnet publish --configuration Release --no-build --output ./dist
+        dotnet publish Albatross.csproj --configuration Release --no-build --output ./dist
         
         # Update base href for preview deployment
         if [ "${{ github.event_name }}" == "pull_request" ]; then

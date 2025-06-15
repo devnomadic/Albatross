@@ -5,6 +5,7 @@ A Blazor WebAssembly application that provides IP address abuse checking functio
 ## Features
 
 - **IP Abuse Checking**: Query the AbuseIPDB API to check if an IP address has been reported for malicious activity
+- **Cloud IP Range Detection**: Identify if an IP address belongs to major cloud providers (AWS, Azure, GCP, Oracle Cloud)
 - **Secure Authentication**: Build-time generated HMAC authentication keys for enhanced security
 - **CORS Protection**: Cloudflare Worker proxy handles CORS and protects API keys from client exposure
 - **Modern UI**: Clean, responsive Blazor WebAssembly interface

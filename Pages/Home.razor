@@ -128,10 +128,10 @@
             <div class="card-header d-flex justify-content-between align-items-center" style="padding: 0.25rem 1rem !important; min-height: 32px !important; height: 32px !important; max-height: 32px !important; box-sizing: border-box !important; overflow: hidden !important;">
                 <h5 style="margin: 0 !important; padding: 0 !important; font-size: 0.9rem !important; line-height: 1.1 !important; font-weight: 500 !important;">About Cloud IP Search</h5>
                 <button class="btn btn-sm btn-close" @onclick="ToggleDescription" style="font-size: 0.75rem !important; padding: 0.125rem 0.25rem !important; margin: 0 !important; height: 24px !important; width: 24px !important; display: flex !important; align-items: center !important; justify-content: center !important; flex-shrink: 0 !important;"></button>
-            </div>
+            </div>            
             <div class="card-body">
                 <p>Cloud IP Search helps you identify which cloud service providers own specific IP addresses.</p>
-                <p>Enter any IPv4 or IPv6 address to see if it belongs to Microsoft Azure, AWS, or Google Cloud Platform services.</p>
+                <p>Enter any IPv4 or IPv6 address to see if it belongs to Microsoft Azure, AWS, Google Cloud Platform, or Oracle Cloud Infrastructure services.</p>
                 <p>The tool searches through official IP range manifests to match your query with known cloud infrastructure.</p>
                 <p>You can also check IP reputation via AbuseIPDB to identify potentially malicious IP addresses.</p>
             </div>
@@ -190,6 +190,23 @@
     </div>
 }
 
+@if (oracleMatchedServices != null && oracleMatchedServices.Any())
+{
+    <div class="results">
+        <h3>Matching Oracle Cloud Services:</h3>
+        <div>
+            @foreach (var service in oracleMatchedServices)
+            {
+                <div class="service-match">
+                    <strong>@service.ServiceInfo</strong>
+                    <br />
+                    <small class="text-muted">CIDR Range: @service.CidrRange</small>
+                </div>
+            }
+        </div>
+    </div>
+}
+
 @if (isSearching || isCheckingAbuse)
 {
     <div class="spinner-border text-primary" role="status">
@@ -224,11 +241,11 @@
 
 </center>
 
-@code {
-    private string ipAddress = string.Empty;    private string statusMessage = string.Empty;
+@code {    private string ipAddress = string.Empty;    private string statusMessage = string.Empty;
     private List<CloudMatch>? azureMatchedServices;
     private List<CloudMatch>? awsMatchedServices;
     private List<CloudMatch>? gcpMatchedServices;
+    private List<CloudMatch>? oracleMatchedServices;
     private bool isSearching = false;
     private bool showDescription = false;
     private bool isCheckingAbuse = false;
@@ -347,12 +364,12 @@
         finally
         {
             isCheckingAbuse = false;
-        }
-    }    private async Task ValidateAndSearch()
+        }    }    private async Task ValidateAndSearch()
     {
         azureMatchedServices = null;
         awsMatchedServices = null;
         gcpMatchedServices = null;
+        oracleMatchedServices = null;
 
         if (!IsValidIPAddress(ipAddress))
         {
@@ -372,7 +389,8 @@
             {
                 Http.GetStringAsync("ip-manifests/Azure.json"),
                 Http.GetStringAsync("ip-manifests/AWS.json"),
-                Http.GetStringAsync("ip-manifests/GCP.json")
+                Http.GetStringAsync("ip-manifests/GCP.json"),
+                Http.GetStringAsync("ip-manifests/Oracle.json")
             };
 
             statusMessage = "Loading cloud IP manifests...";
@@ -389,7 +407,8 @@
             {
                 Task.Run(() => SearchAzureRanges(enteredIp, manifestContents[0])),
                 Task.Run(() => SearchAwsRanges(enteredIp, manifestContents[1])),
-                Task.Run(() => SearchGcpRanges(enteredIp, manifestContents[2]))
+                Task.Run(() => SearchGcpRanges(enteredIp, manifestContents[2])),
+                Task.Run(() => SearchOracleRanges(enteredIp, manifestContents[3]))
             };
 
             // Wait for all searches to complete
@@ -399,17 +418,20 @@
             azureMatchedServices = searchResults[0];
             awsMatchedServices = searchResults[1];
             gcpMatchedServices = searchResults[2];
+            oracleMatchedServices = searchResults[3];
 
             // Determine if any matches were found
             bool foundMatch = (azureMatchedServices?.Count > 0) || 
                              (awsMatchedServices?.Count > 0) || 
-                             (gcpMatchedServices?.Count > 0);
+                             (gcpMatchedServices?.Count > 0) ||
+                             (oracleMatchedServices?.Count > 0);
 
             if (foundMatch)
             {
                 var totalMatches = (azureMatchedServices?.Count ?? 0) + 
                                  (awsMatchedServices?.Count ?? 0) + 
-                                 (gcpMatchedServices?.Count ?? 0);
+                                 (gcpMatchedServices?.Count ?? 0) +
+                                 (oracleMatchedServices?.Count ?? 0);
                 statusMessage = $"Found {totalMatches} matching cloud service(s)!";
             }
             else
@@ -543,6 +565,51 @@
         {
             Console.WriteLine($"Error searching GCP ranges: {ex.Message}");
         }
+          return matchedServices;
+    }
+
+    private List<CloudMatch> SearchOracleRanges(IPAddress enteredIp, string jsonContent)
+    {
+        var matchedServices = new List<CloudMatch>();
+        
+        try
+        {
+            var oracleData = JsonSerializer.Deserialize<OracleIpRanges>(jsonContent);
+            
+            if (oracleData?.regions != null)
+            {
+                foreach (var region in oracleData.regions)
+                {
+                    if (region.cidrs != null)
+                    {
+                        foreach (var cidrInfo in region.cidrs)
+                        {
+                            if (!string.IsNullOrEmpty(cidrInfo.cidr) && cidrInfo.tags != null && cidrInfo.tags.Any())
+                            {
+                                if (IsIpInRange(enteredIp, cidrInfo.cidr))
+                                {
+                                    string serviceInfo = $"{string.Join(", ", cidrInfo.tags)} ({region.region})";
+                                    var match = new CloudMatch
+                                    {
+                                        ServiceInfo = serviceInfo,
+                                        CidrRange = cidrInfo.cidr
+                                    };
+                                    // Only add if we don't already have this exact match
+                                    if (!matchedServices.Any(m => m.ServiceInfo == match.ServiceInfo && m.CidrRange == match.CidrRange))
+                                    {
+                                        matchedServices.Add(match);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error searching Oracle ranges: {ex.Message}");
+        }
         
         return matchedServices;
     }
@@ -659,13 +726,29 @@
         public string? syncToken { get; set; }
         public string? creationTime { get; set; }
         public List<GcpPrefix>? prefixes { get; set; }
-    }
-
-    private class GcpPrefix
+    }    private class GcpPrefix
     {
         public string? ipv4Prefix { get; set; }
         public string? ipv6Prefix { get; set; }
         public string? service { get; set; }
         public string? scope { get; set; }
+    }
+
+    private class OracleIpRanges
+    {
+        public string? last_updated_timestamp { get; set; }
+        public List<OracleRegion>? regions { get; set; }
+    }
+
+    private class OracleRegion
+    {
+        public string? region { get; set; }
+        public List<OracleCidr>? cidrs { get; set; }
+    }
+
+    private class OracleCidr
+    {
+        public string? cidr { get; set; }
+        public List<string>? tags { get; set; }
     }
 }
