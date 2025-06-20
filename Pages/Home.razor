@@ -139,78 +139,96 @@
     </div>
 }
 
-@if (azureMatchedServices != null && azureMatchedServices.Any())
-{
-    <div class="results">
-        <h3>Matching Azure Services:</h3>
-        <div>
-            @foreach (var service in azureMatchedServices)
-            {
-                <div class="service-match">
-                    <strong>@service.ServiceInfo</strong>
-                    <br />
-                    <small class="text-muted">CIDR Range: @service.CidrRange</small>
-                </div>
-            }
+<!-- Fixed container for search results to prevent layout shifting -->
+<div class="search-results-container @(HasSearchResults() ? "has-results" : "") @(isSearching ? "searching" : "")">
+    @if (isSearching && !isCheckingAbuse)
+    {
+        <div class="spinner-container">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Searching...</span>
+            </div>
+            <small class="text-muted">Searching cloud IP ranges...</small>
         </div>
-    </div>
-}
-
-@if (awsMatchedServices != null && awsMatchedServices.Any())
-{
-    <div class="results">
-        <h3>Matching AWS Services:</h3>
-        <div>
-            @foreach (var service in awsMatchedServices)
-            {
-                <div class="service-match">
-                    <strong>@service.ServiceInfo</strong>
-                    <br />
-                    <small class="text-muted">CIDR Range: @service.CidrRange</small>
+    }
+    else if (!isSearching)
+    {
+        @if (azureMatchedServices != null && azureMatchedServices.Any())
+        {
+            <div class="results">
+                <h3>Matching Azure Services:</h3>
+                <div>
+                    @foreach (var service in azureMatchedServices)
+                    {
+                        <div class="service-match">
+                            <strong>@service.ServiceInfo</strong>
+                            <br />
+                            <small class="text-muted">CIDR Range: @service.CidrRange</small>
+                        </div>
+                    }
                 </div>
-            }
-        </div>
-    </div>
-}
+            </div>
+        }
 
-@if (gcpMatchedServices != null && gcpMatchedServices.Any())
-{
-    <div class="results">
-        <h3>Matching GCP Services:</h3>
-        <div>
-            @foreach (var service in gcpMatchedServices)
-            {
-                <div class="service-match">
-                    <strong>@service.ServiceInfo</strong>
-                    <br />
-                    <small class="text-muted">CIDR Range: @service.CidrRange</small>
+        @if (awsMatchedServices != null && awsMatchedServices.Any())
+        {
+            <div class="results">
+                <h3>Matching AWS Services:</h3>
+                <div>
+                    @foreach (var service in awsMatchedServices)
+                    {
+                        <div class="service-match">
+                            <strong>@service.ServiceInfo</strong>
+                            <br />
+                            <small class="text-muted">CIDR Range: @service.CidrRange</small>
+                        </div>
+                    }
                 </div>
-            }
-        </div>
-    </div>
-}
+            </div>
+        }
 
-@if (oracleMatchedServices != null && oracleMatchedServices.Any())
-{
-    <div class="results">
-        <h3>Matching Oracle Cloud Services:</h3>
-        <div>
-            @foreach (var service in oracleMatchedServices)
-            {
-                <div class="service-match">
-                    <strong>@service.ServiceInfo</strong>
-                    <br />
-                    <small class="text-muted">CIDR Range: @service.CidrRange</small>
+        @if (gcpMatchedServices != null && gcpMatchedServices.Any())
+        {
+            <div class="results">
+                <h3>Matching GCP Services:</h3>
+                <div>
+                    @foreach (var service in gcpMatchedServices)
+                    {
+                        <div class="service-match">
+                            <strong>@service.ServiceInfo</strong>
+                            <br />
+                            <small class="text-muted">CIDR Range: @service.CidrRange</small>
+                        </div>
+                    }
                 </div>
-            }
-        </div>
-    </div>
-}
+            </div>
+        }
 
-@if (isSearching || isCheckingAbuse)
+        @if (oracleMatchedServices != null && oracleMatchedServices.Any())
+        {
+            <div class="results">
+                <h3>Matching Oracle Cloud Services:</h3>
+                <div>
+                    @foreach (var service in oracleMatchedServices)
+                    {
+                        <div class="service-match">
+                            <strong>@service.ServiceInfo</strong>
+                            <br />
+                            <small class="text-muted">CIDR Range: @service.CidrRange</small>
+                        </div>
+                    }
+                </div>
+            </div>
+        }
+    }
+</div>
+
+@if (isCheckingAbuse)
 {
-    <div class="spinner-border text-primary" role="status">
-        <span class="visually-hidden">Loading...</span>
+    <div class="spinner-container">
+        <div class="spinner-border text-warning" role="status">
+            <span class="visually-hidden">Checking reputation...</span>
+        </div>
+        <small class="text-muted">Checking IP reputation...</small>
     </div>
 }
 
@@ -670,6 +688,14 @@
         if (score < 25) return "text-success";
         if (score < 75) return "text-warning";
         return "text-danger";
+    }
+
+    private bool HasSearchResults()
+    {
+        return (azureMatchedServices != null && azureMatchedServices.Any()) ||
+               (awsMatchedServices != null && awsMatchedServices.Any()) ||
+               (gcpMatchedServices != null && gcpMatchedServices.Any()) ||
+               (oracleMatchedServices != null && oracleMatchedServices.Any());
     }
 
     private class CloudMatch
