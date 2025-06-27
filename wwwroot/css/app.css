@@ -821,7 +821,7 @@ html body div.card div.card-header .btn {
 
 /* Search Results Container - Fixed to prevent layout shifting */
 .search-results-container {
-    min-height: 200px; /* Reserve space for results */
+    min-height: 0; /* Remove fixed min-height that creates gaps */
     margin-top: 20px;
     transition: all 0.3s ease-in-out;
     max-width: 800px; /* Constrain overall width */
@@ -837,7 +837,7 @@ html body div.card div.card-header .btn {
     display: flex;
     align-items: center;
     justify-content: center;
-    min-height: 100px;
+    min-height: 100px; /* Only apply min-height when actively searching */
 }
 
 .results {

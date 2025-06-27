@@ -148,7 +148,7 @@
 }
 
 <!-- Fixed container for search results to prevent layout shifting -->
-<div class="search-results-container @(HasSearchResults() ? "has-results" : "") @(isSearching ? "searching" : "")">
+<div class="search-results-container @(HasSearchResults() || abuseIpResult != null ? "has-results" : "") @(isSearching || isCheckingAbuse ? "searching" : "")">
     @if (isSearching && !isCheckingAbuse)
     {
         <div class="spinner-container">
@@ -228,37 +228,38 @@
             </div>
         }
     }
-</div>
 
-@if (isCheckingAbuse)
-{
-    <div class="spinner-container">
-        <div class="spinner-border text-warning" role="status">
-            <span class="visually-hidden">Checking reputation...</span>
+    @if (isCheckingAbuse)
+    {
+        <div class="spinner-container">
+            <div class="spinner-border text-warning" role="status">
+                <span class="visually-hidden">Checking reputation...</span>
+            </div>
+            <small class="text-muted">Checking IP reputation...</small>
         </div>
-        <small class="text-muted">Checking IP reputation...</small>
-    </div>
-}
+    }
 
-@if (abuseIpResult != null)
-{
-    <div class="results mt-4 card-container">
-        <h3>IP Reputation Results for @(abuseIpResult.Data?.IpAddress ?? ipAddress)</h3>        
-        <div class="card">            
-            <div class="card-header d-flex justify-content-between align-items-center" style="padding: 0.25rem 1rem !important; min-height: 32px !important; height: 32px !important; max-height: 32px !important; box-sizing: border-box !important; overflow: hidden !important;">
-                <h5 style="margin: 0 !important; padding: 0 !important; font-size: 0.9rem !important; line-height: 1.1 !important; font-weight: 500 !important;">AbuseIPDB JSON Response</h5>
-                <button class="btn btn-sm btn-outline-secondary" @onclick="ToggleJsonDisplay" style="font-size: 0.75rem !important; padding: 0.125rem 0.25rem !important; margin: 0 !important; height: 24px !important; display: flex !important; align-items: center !important; justify-content: center !important; flex-shrink: 0 !important;">
-                    @(showJson ? "Hide JSON" : "Show JSON")
-                </button>
-            </div>@if (showJson)
-            {
-                <div class="card-body json-container">
-                    <pre class="bg-dark text-light p-3 rounded json-output" id="jsonOutput">@formattedJson</pre>
+    @if (abuseIpResult != null)
+    {
+        <div class="results card-container">
+            <h3>IP Reputation Results for @(abuseIpResult.Data?.IpAddress ?? ipAddress)</h3>        
+            <div class="card">            
+                <div class="card-header d-flex justify-content-between align-items-center" style="padding: 0.25rem 1rem !important; min-height: 32px !important; height: 32px !important; max-height: 32px !important; box-sizing: border-box !important; overflow: hidden !important;">
+                    <h5 style="margin: 0 !important; padding: 0 !important; font-size: 0.9rem !important; line-height: 1.1 !important; font-weight: 500 !important;">AbuseIPDB JSON Response</h5>
+                    <button class="btn btn-sm btn-outline-secondary" @onclick="ToggleJsonDisplay" style="font-size: 0.75rem !important; padding: 0.125rem 0.25rem !important; margin: 0 !important; height: 24px !important; display: flex !important; align-items: center !important; justify-content: center !important; flex-shrink: 0 !important;">
+                        @(showJson ? "Hide JSON" : "Show JSON")
+                    </button>
                 </div>
-            }
+                @if (showJson)
+                {
+                    <div class="card-body json-container">
+                        <pre class="bg-dark text-light p-3 rounded json-output" id="jsonOutput">@formattedJson</pre>
+                    </div>
+                }
+            </div>
         </div>
-    </div>
-}
+    }
+</div>
 
 </center>
 
