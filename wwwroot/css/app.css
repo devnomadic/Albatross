@@ -824,9 +824,11 @@ html body div.card div.card-header .btn {
     min-height: 0; /* Remove fixed min-height that creates gaps */
     margin-top: 20px;
     transition: all 0.3s ease-in-out;
-    max-width: 800px; /* Constrain overall width */
+    max-width: none; /* Remove width constraint for JSON display */
     margin-left: auto;
     margin-right: auto;
+    display: block; /* Ensure proper block layout */
+    clear: both;
 }
 
 .search-results-container.has-results {
@@ -838,6 +840,9 @@ html body div.card div.card-header .btn {
     align-items: center;
     justify-content: center;
     min-height: 100px; /* Only apply min-height when actively searching */
+    max-width: 800px; /* Constrain width only during search */
+    margin-left: auto;
+    margin-right: auto;
 }
 
 .results {
@@ -931,4 +936,65 @@ html body div.card div.card-header .btn {
 
 .spinner-border {
     margin-bottom: 10px;
+}
+
+/* JSON results should have wider display capability */
+.json-container {
+    max-width: 100vw;
+    overflow-x: hidden;
+    box-sizing: border-box;
+}
+
+/* Special handling for IP reputation results to allow wider JSON display */
+.search-results-container .results.card-container {
+    max-width: none !important; /* Override all card-container width constraints */
+    width: 100%;
+    margin: 0;
+}
+
+/* Ensure the card itself can expand for JSON */
+.search-results-container .results.card-container .card {
+    max-width: none !important;
+    width: 100%;
+}
+
+/* JSON output should use more screen width */
+.json-output {
+    max-width: calc(100vw - 60px) !important; /* Account for container padding */
+    width: 100% !important;
+    overflow-x: auto !important;
+    font-size: 0.85rem;
+    line-height: 1.4;
+}
+
+/* Ensure block-level layout for results sections */
+.search-results-container {
+    display: block !important; /* Prevent any flex/float issues */
+    clear: both;
+}
+
+.search-results-container .results {
+    display: block !important;
+    clear: both;
+    width: 100%;
+    margin-bottom: 20px;
+}
+
+/* Override responsive card-container constraints specifically for JSON results */
+@media (min-width: 1200px) {
+    .search-results-container .results.card-container {
+        max-width: none !important;
+    }
+}
+
+@media (min-width: 1400px) {
+    .search-results-container .results.card-container {
+        max-width: none !important;
+    }
+}
+
+@media (min-width: 1600px) {
+    .search-results-container .results.card-container {
+        max-width: none !important;
+    }
 }
