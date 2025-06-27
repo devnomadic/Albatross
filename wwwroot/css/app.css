@@ -224,6 +224,9 @@ code {
     margin: 0 auto !important; /* Force center alignment */
     display: block !important; /* Ensure block display for centering */
     width: 95vw !important; /* Set explicit width for centering */
+    position: relative;
+    left: 50%;
+    transform: translateX(-50%); /* CSS centering technique */
 }
 
 /* Ensure pre elements don't break layout */
@@ -947,6 +950,9 @@ html body div.card div.card-header .btn {
     width: 95vw !important;
     margin: 0 auto !important; /* Force center alignment */
     display: block !important; /* Ensure block display */
+    position: relative;
+    left: 50%;
+    transform: translateX(-50%); /* CSS centering technique to override center tag */
 }
 
 /* Ensure the card itself can expand for JSON */
@@ -968,11 +974,16 @@ html body div.card div.card-header .btn {
 /* JSON output should use more screen width */
 .json-output {
     max-width: none !important; /* Remove width constraint */
-    width: 100% !important;
+    width: 95vw !important;
     overflow-x: auto !important;
     font-size: 0.85rem;
     line-height: 1.4;
     white-space: pre !important; /* Prevent wrapping to maintain JSON formatting */
+    margin: 0 auto !important; /* Center the JSON */
+    position: relative;
+    left: 50%;
+    transform: translateX(-50%); /* Force centering */
+    box-sizing: border-box;
 }
 
 /* Ensure block-level layout for results sections */
