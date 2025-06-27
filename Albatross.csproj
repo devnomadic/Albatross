@@ -30,16 +30,15 @@
           WorkingDirectory="$(MSBuildProjectDirectory)" />
     
     <Message Text="Authentication key generation completed for environment: $(AlbatrossEnvironment)" Importance="high" />
-  </Target>
-  <!-- Post-auth-key target to process worker -->
+  </Target>  <!-- Post-auth-key target to process worker -->
   <Target Name="ProcessWorker" AfterTargets="GenerateAuthKey" BeforeTargets="BeforeCompile" Condition="'$(SkipCodeGeneration)' != 'true' AND '$(DesignTimeBuild)' != 'true'">
     <Message Text="Processing Cloudflare Worker with generated constants..." Importance="high" />
     
     <!-- Process the worker template with generated constants -->
-    <Exec Command="pwsh -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)/Process-Worker.ps1&quot; -TemplateFile &quot;$(MSBuildProjectDirectory)/cloudflare-worker.template.js&quot; -OutputFile &quot;$(MSBuildProjectDirectory)/cloudflare-worker.js&quot; -ConstantsFile &quot;$(MSBuildProjectDirectory)/Generated/build-constants.js&quot; -Verbose" 
+    <Exec Command="pwsh -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)/Process-Worker.ps1&quot; -TemplateFile &quot;$(MSBuildProjectDirectory)/cloudflare-worker.template.js&quot; -OutputFile &quot;$(MSBuildProjectDirectory)/cloudflare-worker.js&quot; -ConstantsFile &quot;$(MSBuildProjectDirectory)/Generated/build-constants.js&quot; -Environment &quot;$(AlbatrossEnvironment)&quot; -Verbose" 
           ContinueOnError="false" 
           WorkingDirectory="$(MSBuildProjectDirectory)" />
-      <Message Text="Worker processing completed" Importance="high" />
+      <Message Text="Worker processing completed for environment: $(AlbatrossEnvironment)" Importance="high" />
   </Target>
   <!-- Include generated C# files in compilation -->
   <Target Name="IncludeGeneratedFiles" BeforeTargets="BeforeCompile" AfterTargets="ProcessWorker" Condition="'$(SkipCodeGeneration)' != 'true' AND '$(DesignTimeBuild)' != 'true'">

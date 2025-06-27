@@ -80,7 +80,7 @@ const ALLOWED_ORIGINS = [
   "*.albatross.pages.dev",
   // Preview worker domain
   "https://abuseipdb-preview.devnomadic.workers.dev"
-  // Note: localhost removed for security - only production origins allowed
+  // Note: localhost origins injected dynamically for preview builds only
 ];
 
 addEventListener('fetch', event => {

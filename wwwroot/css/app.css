@@ -218,9 +218,10 @@ code {
 
 /* JSON display container constraints */
 .json-container {
-    max-width: 100vw;
-    overflow-x: hidden;
+    max-width: 95vw !important; /* Use almost full viewport width */
+    overflow-x: auto;
     box-sizing: border-box;
+    margin: 0 auto; /* Center the container */
 }
 
 /* Ensure pre elements don't break layout */
@@ -947,9 +948,9 @@ html body div.card div.card-header .btn {
 
 /* Special handling for IP reputation results to allow wider JSON display */
 .search-results-container .results.card-container {
-    max-width: none !important; /* Override all card-container width constraints */
-    width: 100%;
-    margin: 0;
+    max-width: 95vw !important; /* Override all card-container width constraints for JSON */
+    width: 95vw !important;
+    margin: 0 auto;
 }
 
 /* Ensure the card itself can expand for JSON */
@@ -958,13 +959,21 @@ html body div.card div.card-header .btn {
     width: 100%;
 }
 
+/* Ensure card body expands for JSON content */
+.search-results-container .results.card-container .card .card-body {
+    max-width: none !important;
+    width: 100%;
+    padding: 0; /* Remove padding to maximize JSON space */
+}
+
 /* JSON output should use more screen width */
 .json-output {
-    max-width: calc(100vw - 60px) !important; /* Account for container padding */
+    max-width: none !important; /* Remove width constraint */
     width: 100% !important;
     overflow-x: auto !important;
     font-size: 0.85rem;
     line-height: 1.4;
+    white-space: pre !important; /* Prevent wrapping to maintain JSON formatting */
 }
 
 /* Ensure block-level layout for results sections */

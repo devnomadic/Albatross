@@ -6,6 +6,7 @@ param(
     [string]$TemplateFile = "cloudflare-worker.template.js",
     [string]$OutputFile = "cloudflare-worker.js",
     [string]$ConstantsFile = "Generated/build-constants.js",
+    [string]$Environment = "production",
     [switch]$Verbose
 )
 
@@ -23,6 +24,7 @@ function Write-BuildLog {
 
 try {
     Write-BuildLog "Starting worker processing..."
+    Write-BuildLog "Environment: $Environment"
     
     # Check if template file exists
     if (!(Test-Path $TemplateFile)) {
@@ -45,6 +47,28 @@ try {
     
     # Inject the constants into the template
     $processedContent = $templateContent -replace "__BUILD_CONSTANTS_INJECTION_POINT__", $constantsContent
+    
+    # Inject localhost origins for preview/development builds only
+    $isPreviewBuild = $Environment.ToLower() -in @("preview", "development", "dev")
+    if ($isPreviewBuild) {
+        Write-BuildLog "Preview build detected - injecting localhost origins"
+        
+        # Find the ALLOWED_ORIGINS array and inject localhost entries
+        $localhostOrigins = @"
+  // Local development origins (preview builds only)
+  "https://localhost:5044",
+  "http://localhost:5044",
+"@
+        
+        # Insert localhost origins after the preview worker domain line
+        $processedContent = $processedContent -replace `
+            '(\s*// Preview worker domain\s*\n\s*"https://abuseipdb-preview\.devnomadic\.workers\.dev")', `
+            "`$1,`n$localhostOrigins"
+        
+        Write-BuildLog "Localhost origins added for preview build"
+    } else {
+        Write-BuildLog "Production build - localhost origins excluded"
+    }
     
     # Also update the actual AbuseIPDB API URL parameter construction
     $urlConstruction = @"
