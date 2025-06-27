@@ -79,8 +79,10 @@ const ALLOWED_ORIGINS = [
   "*.albatross-5kt.pages.dev",
   "*.albatross.pages.dev",
   // Preview worker domain
-  "https://abuseipdb-preview.devnomadic.workers.dev"
-  // Note: localhost origins injected dynamically for preview builds only
+  "https://abuseipdb-preview.devnomadic.workers.dev",
+  // Local development
+  "https://localhost:5044",
+  "http://localhost:5044"
 ];
 
 addEventListener('fetch', event => {
