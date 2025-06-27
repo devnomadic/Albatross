@@ -221,7 +221,9 @@ code {
     max-width: 95vw !important; /* Use almost full viewport width */
     overflow-x: auto;
     box-sizing: border-box;
-    margin: 0 auto; /* Center the container */
+    margin: 0 auto !important; /* Force center alignment */
+    display: block !important; /* Ensure block display for centering */
+    width: 95vw !important; /* Set explicit width for centering */
 }
 
 /* Ensure pre elements don't break layout */
@@ -939,31 +941,28 @@ html body div.card div.card-header .btn {
     margin-bottom: 10px;
 }
 
-/* JSON results should have wider display capability */
-.json-container {
-    max-width: 100vw;
-    overflow-x: hidden;
-    box-sizing: border-box;
-}
-
 /* Special handling for IP reputation results to allow wider JSON display */
 .search-results-container .results.card-container {
     max-width: 95vw !important; /* Override all card-container width constraints for JSON */
     width: 95vw !important;
-    margin: 0 auto;
+    margin: 0 auto !important; /* Force center alignment */
+    display: block !important; /* Ensure block display */
 }
 
 /* Ensure the card itself can expand for JSON */
 .search-results-container .results.card-container .card {
     max-width: none !important;
     width: 100%;
+    margin: 0 auto !important; /* Center the card */
 }
 
-/* Ensure card body expands for JSON content */
+/* Ensure card body expands for JSON content and centers properly */
 .search-results-container .results.card-container .card .card-body {
     max-width: none !important;
     width: 100%;
     padding: 0; /* Remove padding to maximize JSON space */
+    display: flex !important;
+    justify-content: center !important; /* Center the JSON content */
 }
 
 /* JSON output should use more screen width */
