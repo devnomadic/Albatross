@@ -213,12 +213,13 @@ code {
 
 /* JSON display container - simplified and cleaned up */
 .json-container {
-    max-width: 95vw !important;
-    width: 95vw !important;
+    max-width: 100% !important;
+    width: auto !important;
     overflow-x: auto;
     box-sizing: border-box;
     margin: 0 auto !important; /* Simple centering */
     display: block !important;
+    text-align: center !important; /* Center child elements */
 }
 
 /* Ensure pre elements don't break layout */
@@ -960,14 +961,14 @@ html body div.card div.card-header .btn {
 
 /* JSON output should use more screen width */
 .json-output {
-    max-width: 95vw !important; /* Use consistent width with container */
-    width: 95vw !important;
+    max-width: calc(100vw - 80px) !important; /* Conservative width with margin for scrollbars */
+    width: auto !important; /* Let content determine width */
     overflow-x: auto !important;
     font-size: 0.85rem;
     line-height: 1.4;
-    white-space: pre !important; /* Prevent wrapping to maintain JSON formatting */
-    margin: 0 auto !important; /* Simple centering */
+    white-space: pre !important; /* Prevent wrapping to maintain JSON formatting */    margin: 10px auto !important; /* Simple centering with margin */
     box-sizing: border-box;
+    display: inline-block !important; /* Allows proper centering */
 }
 
 /* Ensure block-level layout for results sections */
@@ -1000,4 +1001,23 @@ html body div.card div.card-header .btn {
     .search-results-container .results.card-container {
         max-width: none !important;
     }
+}
+
+/* Force JSON containers within card bodies to center properly */
+.card-body.json-container {
+    display: block !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    overflow-x: auto !important;
+    text-align: center !important; /* Center the child pre element */
+}
+
+.card-body.json-container .json-output {
+    display: inline-block !important; /* Allows margin auto to work properly */
+    max-width: calc(100vw - 80px) !important; /* Account for potential margins and scrollbars */
+    width: auto !important; /* Let content determine width within max */
+    margin: 10px auto !important; /* Add some margin and center */
+    text-align: left !important; /* Reset text alignment for content */
 }
