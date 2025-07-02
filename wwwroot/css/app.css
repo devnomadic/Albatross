@@ -54,11 +54,6 @@ a, .btn-link {
   box-shadow: 0 0 0 0.1rem white, 0 0 0 0.25rem #258cfb;
 }
 
-.content {
-    flex: 1;
-    padding-top: 1.1rem;
-}
-
 .valid.modified:not([type=checkbox]) {
     outline: 1px solid #26b050;
 }
@@ -216,17 +211,14 @@ code {
     margin-bottom: 20px;
 }
 
-/* JSON display container constraints */
+/* JSON display container - simplified and cleaned up */
 .json-container {
-    max-width: 95vw !important; /* Use almost full viewport width */
+    max-width: 95vw !important;
+    width: 95vw !important;
     overflow-x: auto;
     box-sizing: border-box;
-    margin: 0 auto !important; /* Force center alignment */
-    display: block !important; /* Ensure block display for centering */
-    width: 95vw !important; /* Set explicit width for centering */
-    position: relative;
-    left: 50%;
-    transform: translateX(-50%); /* CSS centering technique */
+    margin: 0 auto !important; /* Simple centering */
+    display: block !important;
 }
 
 /* Ensure pre elements don't break layout */
@@ -948,11 +940,8 @@ html body div.card div.card-header .btn {
 .search-results-container .results.card-container {
     max-width: 95vw !important; /* Override all card-container width constraints for JSON */
     width: 95vw !important;
-    margin: 0 auto !important; /* Force center alignment */
+    margin: 0 auto !important; /* Simple centering without transforms */
     display: block !important; /* Ensure block display */
-    position: relative;
-    left: 50%;
-    transform: translateX(-50%); /* CSS centering technique to override center tag */
 }
 
 /* Ensure the card itself can expand for JSON */
@@ -962,27 +951,22 @@ html body div.card div.card-header .btn {
     margin: 0 auto !important; /* Center the card */
 }
 
-/* Ensure card body expands for JSON content and centers properly */
+/* Ensure card body expands for JSON content */
 .search-results-container .results.card-container .card .card-body {
     max-width: none !important;
     width: 100%;
     padding: 0; /* Remove padding to maximize JSON space */
-    display: flex !important;
-    justify-content: center !important; /* Center the JSON content */
 }
 
 /* JSON output should use more screen width */
 .json-output {
-    max-width: none !important; /* Remove width constraint */
+    max-width: 95vw !important; /* Use consistent width with container */
     width: 95vw !important;
     overflow-x: auto !important;
     font-size: 0.85rem;
     line-height: 1.4;
     white-space: pre !important; /* Prevent wrapping to maintain JSON formatting */
-    margin: 0 auto !important; /* Center the JSON */
-    position: relative;
-    left: 50%;
-    transform: translateX(-50%); /* Force centering */
+    margin: 0 auto !important; /* Simple centering */
     box-sizing: border-box;
 }
 

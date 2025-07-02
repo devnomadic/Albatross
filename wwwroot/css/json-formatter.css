@@ -4,33 +4,30 @@
     font-size: 14px;
     line-height: 1.5;
     max-height: 60vh;
-    max-width: 100%;
-    width: 100%;
+    max-width: 95vw !important; /* Consistent with main CSS */
+    width: 95vw !important; /* Consistent with main CSS */
     overflow-x: auto;
     overflow-y: auto;
-    white-space: pre-wrap;
-    word-wrap: break-word;
-    word-break: break-all;
+    white-space: pre !important; /* Prevent wrapping to maintain JSON formatting */
     border-radius: 4px;
     text-align: left;
     box-sizing: border-box;
-    /* Ensure it doesn't expand beyond container */
-    overflow-wrap: break-word;
-    hyphens: auto;
+    margin: 0 auto !important; /* Simple centering consistent with main CSS */
 }
 
 .card-container {
-    max-width: 90%;
-    width: 100%;
-    margin: 0 auto;
+    max-width: 95vw !important; /* Consistent with main CSS for JSON results */
+    width: 95vw !important; /* Consistent with main CSS for JSON results */
+    margin: 0 auto !important; /* Simple centering consistent with main CSS */
     box-sizing: border-box;
-    overflow: hidden;
+    overflow: visible; /* Allow content to expand */
 }
 
 /* Responsive container for different screen sizes */
 @media (max-width: 1200px) {
     .card-container {
-        max-width: 95%;
+        max-width: 95vw !important; /* Maintain consistency */
+        width: 95vw !important;
     }
 }
 
@@ -38,10 +35,13 @@
     .json-output {
         font-size: 12px;
         max-height: 50vh;
+        max-width: 95vw !important; /* Maintain consistency */
+        width: 95vw !important;
     }
     
     .card-container {
-        max-width: 98%;
+        max-width: 95vw !important; /* Maintain consistency */
+        width: 95vw !important;
     }
 }
 
