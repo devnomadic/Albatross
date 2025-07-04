@@ -1,30 +1,35 @@
 # Albatross
 
-A Blazor WebAssembly application that provides IP address abuse checking functionality using the AbuseIPDB API through a secure Cloudflare Worker proxy.
+A modern Blazor WebAssembly application that provides comprehensive IP address analysis and abuse checking functionality. Albatross combines cloud IP range detection with AbuseIPDB reputation checking through a secure Cloudflare Worker proxy.
 
 ## Features
 
 - **IP Abuse Checking**: Query the AbuseIPDB API to check if an IP address has been reported for malicious activity
 - **Cloud IP Range Detection**: Identify if an IP address belongs to major cloud providers (AWS, Azure, GCP, Oracle Cloud)
-- **Secure Authentication**: Build-time generated HMAC authentication keys for enhanced security
+- **Flexible Input Format**: Support for IP addresses with custom report age (e.g., `8.8.8.8;60` for 60 days of history)
+- **Combined Data Sources**: Integrated AbuseIPDB and Cloudflare Radar API data for comprehensive IP analysis
+- **Secure Authentication**: Build-time generated HMAC authentication with timestamp validation for enhanced security
 - **CORS Protection**: Cloudflare Worker proxy handles CORS and protects API keys from client exposure
-- **Modern UI**: Clean, responsive Blazor WebAssembly interface
+- **Modern UI**: Clean, responsive Blazor WebAssembly interface with real-time JSON formatting
 - **Cross-Platform**: Runs on Windows, macOS, and Linux
 
 ## Security Architecture
 
-This application implements a secure authentication system with the following components:
+This application implements a multi-layered security system with the following components:
 
 ### Build-Time Key Generation
 - **Cryptographically Secure Keys**: Each build generates a unique 256-bit authentication key using `RNGCryptoServiceProvider`
 - **HMAC Authentication**: Uses HMAC-SHA256 for request authentication between the Blazor app and Cloudflare Worker
+- **Timestamp Validation**: 2-minute window validation to prevent replay attacks
 - **No Hardcoded Secrets**: Authentication keys are generated at build time and never stored in source code
 
 ### Authentication Flow
 1. **Build Process**: Generates unique authentication key and injects it into both C# and JavaScript code
-2. **Client Request**: Blazor app creates HMAC token using the generated key and request URL
-3. **Worker Validation**: Cloudflare Worker validates the HMAC token using the same generated key
-4. **API Proxy**: Upon successful authentication, worker proxies the request to AbuseIPDB API
+2. **Client Request**: Blazor app creates HMAC token using the generated key, full request URL, and UTC timestamp
+3. **Timestamp Check**: Worker validates that the request timestamp is within 2 minutes of current UTC time
+4. **HMAC Validation**: Cloudflare Worker validates the HMAC token using the same generated key and full URL
+5. **Origin Validation**: Additional CORS and origin checking for browser-based requests
+6. **API Proxy**: Upon successful authentication, worker proxies the request to external APIs
 
 ## Build System
 
@@ -105,20 +110,29 @@ These workflows automatically:
 ```
 Albatross/
 ├── Services/
-│   └── AbuseIPDBService.cs          # Main service with HMAC authentication
+│   └── AbuseIPDBService.cs          # Main service with HMAC authentication and flexible IP parsing
 ├── Pages/
-│   ├── Home.razor                   # IP checking interface
-│   ├── Counter.razor                # Sample page
-│   └── Weather.razor                # Sample page
+│   └── Home.razor                   # IP checking interface with combined functionality
+├── Layout/
+│   ├── MainLayout.razor             # Application layout
+│   └── NavMenu.razor                # Navigation menu
 ├── Generated/                       # Auto-generated build artifacts
 │   ├── BuildConstants.cs            # C# authentication constants
 │   ├── build-constants.js           # JavaScript constants
 │   ├── build.env                    # Environment variables
 │   └── build-manifest.json          # Build metadata
+├── .github/workflows/               # CI/CD pipelines
+│   ├── ci.yml                       # Continuous integration
+│   ├── deploy-dev.yml               # Development deployment
+│   ├── deploy-production.yml        # Production deployment
+│   ├── codeql.yml                   # GitHub Advanced Security
+│   ├── dependency-review.yml        # Dependency security scanning
+│   └── security-scan.yml            # Additional security checks
 ├── Generate-AuthKey.ps1             # PowerShell key generation script
 ├── Process-Worker.ps1               # Worker template processing script
 ├── cloudflare-worker.template.js    # Worker template with injection points
-├── cloudflare-worker.js             # Generated worker with authentication
+├── cloudflare-worker.js             # Generated worker with authentication (temporary)
+├── SECURITY.md                      # Security policy and guidelines
 └── Albatross.csproj                # MSBuild configuration with custom targets
 ```
 
@@ -166,18 +180,35 @@ Update the `BaseUrl` in `AbuseIPDBService.cs` with your deployed Cloudflare Work
 ## Security Notes
 
 - **Key Rotation**: Authentication keys are regenerated with each build, providing automatic key rotation
-- **Request Validation**: All requests are validated using HMAC-SHA256 authentication
+- **Request Validation**: All requests are validated using HMAC-SHA256 authentication with full URL signing
+- **Timestamp Validation**: 2-minute window validation prevents replay attacks and ensures request freshness
 - **Origin Control**: CORS headers restrict access to configured allowed origins
 - **Browser-Only Access**: Worker validates User-Agent headers to ensure requests come from legitimate browsers
 - **Production Origins Only**: Localhost and development origins are blocked in production deployments
-- **API Key Protection**: The AbuseIPDB API key is never exposed to client-side code
-- **Double Authentication**: Both HMAC authentication and origin validation must pass for requests to succeed
+- **API Key Protection**: External API keys (AbuseIPDB, Cloudflare Radar) are never exposed to client-side code
+- **Multi-Layer Authentication**: HMAC authentication, timestamp validation, and origin validation must all pass
+- **Input Validation**: All IP addresses are validated for proper format and public routability
+- **GitHub Advanced Security**: CodeQL analysis, dependency scanning, and security workflows enabled
+
+## Advanced Features
+
+### Flexible Input Format
+Users can specify custom report age limits using a semicolon delimiter:
+- `8.8.8.8` - Uses default 30 days
+- `8.8.8.8;60` - Uses 60 days of report history
+- `2001:4860:4860::8888;90` - IPv6 with 90 days
+
+### Combined API Integration
+- **AbuseIPDB**: IP reputation and abuse reports
+- **Cloudflare Radar**: ASN information and network details
+- **Parallel Processing**: Both APIs are queried simultaneously for optimal performance
+- **Graceful Degradation**: Partial results if one API fails
 
 ## Current Status
 
 ✅ **Authentication System**: Fully implemented and working
 ✅ **CORS Security**: Browser-only validation enabled  
-✅ **Production Deployment**: Live at `https://abuseipdb.devnomadic.workers.dev`
+✅ **Production Deployment**: Live at `https://albatross.devnomadic.com`
 ✅ **Build System**: Automated key generation and injection working
 ✅ **GitHub Actions**: Automated CI/CD pipeline functional
 

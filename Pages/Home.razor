@@ -133,15 +133,29 @@
 {    <div class="description-panel">
         <div class="card">            
             <div class="card-header d-flex justify-content-between align-items-center" style="padding: 0.25rem 1rem !important; min-height: 32px !important; height: 32px !important; max-height: 32px !important; box-sizing: border-box !important; overflow: hidden !important;">
-                <h5 style="margin: 0 !important; padding: 0 !important; font-size: 0.9rem !important; line-height: 1.1 !important; font-weight: 500 !important;">About Cloud IP Search</h5>
-                <button class="btn btn-sm btn-close" @onclick="ToggleDescription" style="font-size: 0.75rem !important; padding: 0.125rem 0.25rem !important; margin: 0 !important; height: 24px !important; width: 24px !important; display: flex !important; align-items: center !important; justify-content: center !important; flex-shrink: 0 !important;"></button>
-            </div>              
+                <h5 style="margin: 0 !important; padding: 0 !important; font-size: 0.9rem !important; line-height: 1.1 !important; font-weight: 500 !important;">About Albatross IP Analysis</h5>
+                <button class="btn btn-sm btn-close" @onclick="ToggleDescription" style="font-size: 0.75rem !important; padding: 0.125rem 0.25rem !important; margin: 0 !important; height: 24px !important; width: 24px !important; display: flex !important; align-items: center !important; justify-content: center !important; flex-shrink: 0 !important;"></button>            </div>              
             <div class="card-body">
-                <p>Cloud IP Search helps you identify which cloud service providers own specific IP addresses.</p>
-                <p>Enter any <strong>public routable</strong> IPv4 or IPv6 address to see if it belongs to Microsoft Azure, AWS, Google Cloud Platform, or Oracle Cloud Infrastructure services.</p>
-                <p><small class="text-muted"><strong>Note:</strong> Private networks (10.x.x.x, 192.168.x.x, 172.16-31.x.x), loopback addresses (127.x.x.x), and other reserved ranges are not accepted.</small></p>
-                <p>The tool searches through official IP range manifests to match your query with known cloud infrastructure.</p>
-                <p>You can also check IP reputation via AbuseIPDB to identify potentially malicious IP addresses.</p>
+                <p><strong>Albatross</strong> provides comprehensive IP address analysis combining cloud provider identification with security reputation checking.</p>
+                
+                <h6>🔍 <strong>IP Analysis Features:</strong></h6>
+                <ul>
+                    <li><strong>Cloud Detection:</strong> Identifies if IPs belong to AWS, Azure, GCP, or Oracle Cloud</li>
+                    <li><strong>Abuse Checking:</strong> Queries AbuseIPDB for security reputation and threat intelligence</li>
+                    <li><strong>Network Information:</strong> Provides ASN details and network ownership via Cloudflare Radar</li>
+                </ul>
+
+                <h6>📝 <strong>Input Formats:</strong></h6>
+                <ul>
+                    <li><code>8.8.8.8</code> - Standard IP lookup (30 days of abuse reports)</li>
+                    <li><code>8.8.8.8;60</code> - Custom report age (60 days of history)</li>
+                    <li><code>2001:4860:4860::8888</code> - IPv6 addresses supported</li>
+                </ul>
+
+                <h6>🔒 <strong>Security:</strong></h6>
+                <p>All requests use HMAC-SHA256 authentication with timestamp validation. Only public routable IP addresses are accepted (private networks like 10.x.x.x, 192.168.x.x, and 127.x.x.x are blocked).</p>
+
+                <p><small class="text-muted">Data provided by AbuseIPDB, Cloudflare Radar, and official cloud provider IP manifests.</small></p>
             </div>
         </div>
     </div>
