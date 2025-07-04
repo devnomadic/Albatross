@@ -394,7 +394,8 @@ namespace Albatross.Services
                 var timestamp = GetTimestamp();
                 
                 // Include timestamp as a URI parameter
-                var requestUrl = $"{_cloudflareWorkerUrl}?ipAddress={ipAddress}&maxAgeInDays={maxAgeInDays}&verbose={verboseParam}&timestamp={timestamp}".ToLower();
+                var requestUrl = $"{_cloudflareWorkerUrl}?ipAddress={ipAddress}&maxAgeInDays={maxAgeInDays}&verbose={verboseParam}&timestamp={timestamp}"
+                    .ToLower();
                 Console.WriteLine($"Requesting: {requestUrl}");
 
                 // Create request message to add custom headers
