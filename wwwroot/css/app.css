@@ -183,7 +183,7 @@ code {
 
 /* IP Input styling for IPv6 support */
 .ip-input {
-    width: 400px;
+    width: 500px;
     max-width: 90vw;
     font-family: 'Quantico', monospace;
     font-size: 1rem;
@@ -276,10 +276,9 @@ pre {
         padding-left: 2rem;
         padding-right: 2rem;
     }
-    
-    /* Scale down input and button sizes for wide screens */
+      /* Scale down input and button sizes for wide screens */
     .ip-input {
-        width: 350px;
+        width: 450px;
         font-size: 0.95rem;
     }
     
@@ -320,10 +319,9 @@ pre {
     .content {
         max-width: 1320px;
     }
-    
-    /* Further scale down for very wide screens */
+      /* Further scale down for very wide screens */
     .ip-input {
-        width: 320px;
+        width: 420px;
         font-size: 0.9rem;
     }
     
@@ -362,10 +360,9 @@ pre {
     .content {
         max-width: 1400px;
     }
-    
-    /* Even more conservative for 4K and ultra-wide monitors */
+      /* Even more conservative for 4K and ultra-wide monitors */
     .ip-input {
-        width: 300px;
+        width: 400px;
         font-size: 0.85rem;
     }
     

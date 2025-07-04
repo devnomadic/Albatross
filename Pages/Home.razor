@@ -113,9 +113,6 @@
 <img src="/images/ascii-art.png" alt="Albatross" width=50% border="0" /> <br><br>
 
 <input @bind="ipAddress" placeholder="Enter public IPv4/IPv6 address (optionally: ip;maxDays)" class="ip-input form-control" />
-<small class="form-text text-muted">
-    Examples: 8.8.8.8 or 8.8.8.8;60 (for 60 days of report history)
-</small>
 <button class="btn btn-primary" @onclick="ValidateAndSearchAsync" disabled="@isSearching">Search</button>
 <button class="btn btn-info" @onclick="ToggleDescription" style="margin-left: 10px;">
     <span class="oi oi-info"></span> About
