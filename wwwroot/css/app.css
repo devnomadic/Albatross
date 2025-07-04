@@ -938,10 +938,20 @@ html body div.card div.card-header .btn {
 
 /* Special handling for IP reputation results to allow wider JSON display */
 .search-results-container .results.card-container {
-    max-width: 95vw;
-    width: 95vw;
+    max-width: 95vw !important; /* Bypass search container limits for JSON */
+    width: 95vw !important;
     margin: 0 auto;
     display: block;
+    position: relative; /* Break out of parent constraints */
+}
+
+/* Make JSON results break out of search-results-container width limits */
+.search-results-container .results.card-container {
+    /* Calculate negative margins to center within viewport instead of parent */
+    margin-left: calc(-50vw + 50%) !important;
+    margin-right: calc(-50vw + 50%) !important;
+    left: 0 !important;
+    right: 0 !important;
 }
 
 /* Ensure the card itself can expand for JSON */
@@ -986,19 +996,22 @@ html body div.card div.card-header .btn {
 /* Override responsive card-container constraints specifically for JSON results */
 @media (min-width: 1200px) {
     .search-results-container .results.card-container {
-        max-width: none !important;
+        max-width: 95vw !important; /* Override all width constraints for JSON */
+        width: 95vw !important;
     }
 }
 
 @media (min-width: 1400px) {
     .search-results-container .results.card-container {
-        max-width: none !important;
+        max-width: 95vw !important; /* Override all width constraints for JSON */
+        width: 95vw !important;
     }
 }
 
 @media (min-width: 1600px) {
     .search-results-container .results.card-container {
-        max-width: none !important;
+        max-width: 95vw !important; /* Override all width constraints for JSON */
+        width: 95vw !important;
     }
 }
 
