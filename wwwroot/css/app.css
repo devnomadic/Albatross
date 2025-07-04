@@ -213,13 +213,12 @@ code {
 
 /* JSON display container - simplified and cleaned up */
 .json-container {
-    max-width: 100% !important;
-    width: auto !important;
+    max-width: 95vw;
+    width: 95vw;
     overflow-x: auto;
     box-sizing: border-box;
-    margin: 0 auto !important; /* Simple centering */
-    display: block !important;
-    text-align: center !important; /* Center child elements */
+    margin: 0 auto;
+    display: block;
 }
 
 /* Ensure pre elements don't break layout */
@@ -939,36 +938,36 @@ html body div.card div.card-header .btn {
 
 /* Special handling for IP reputation results to allow wider JSON display */
 .search-results-container .results.card-container {
-    max-width: 95vw !important; /* Override all card-container width constraints for JSON */
-    width: 95vw !important;
-    margin: 0 auto !important; /* Simple centering without transforms */
-    display: block !important; /* Ensure block display */
+    max-width: 95vw;
+    width: 95vw;
+    margin: 0 auto;
+    display: block;
 }
 
 /* Ensure the card itself can expand for JSON */
 .search-results-container .results.card-container .card {
-    max-width: none !important;
+    max-width: none;
     width: 100%;
-    margin: 0 auto !important; /* Center the card */
+    margin: 0 auto;
 }
 
 /* Ensure card body expands for JSON content */
 .search-results-container .results.card-container .card .card-body {
-    max-width: none !important;
+    max-width: none;
     width: 100%;
-    padding: 0; /* Remove padding to maximize JSON space */
+    padding: 0;
 }
 
 /* JSON output should use more screen width */
 .json-output {
-    max-width: calc(100vw - 80px) !important; /* Conservative width with margin for scrollbars */
-    width: auto !important; /* Let content determine width */
-    overflow-x: auto !important;
+    max-width: 95vw;
+    width: 95vw;
+    overflow-x: auto;
     font-size: 0.85rem;
     line-height: 1.4;
-    white-space: pre !important; /* Prevent wrapping to maintain JSON formatting */    margin: 10px auto !important; /* Simple centering with margin */
+    white-space: pre;
+    margin: 0 auto;
     box-sizing: border-box;
-    display: inline-block !important; /* Allows proper centering */
 }
 
 /* Ensure block-level layout for results sections */
@@ -1003,21 +1002,3 @@ html body div.card div.card-header .btn {
     }
 }
 
-/* Force JSON containers within card bodies to center properly */
-.card-body.json-container {
-    display: block !important;
-    width: 100% !important;
-    max-width: 100% !important;
-    padding: 0 !important;
-    margin: 0 !important;
-    overflow-x: auto !important;
-    text-align: center !important; /* Center the child pre element */
-}
-
-.card-body.json-container .json-output {
-    display: inline-block !important; /* Allows margin auto to work properly */
-    max-width: calc(100vw - 80px) !important; /* Account for potential margins and scrollbars */
-    width: auto !important; /* Let content determine width within max */
-    margin: 10px auto !important; /* Add some margin and center */
-    text-align: left !important; /* Reset text alignment for content */
-}

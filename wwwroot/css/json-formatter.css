@@ -4,48 +4,32 @@
     font-size: 14px;
     line-height: 1.5;
     max-height: 60vh;
-    max-width: calc(100vw - 80px) !important; /* More conservative width */
-    width: auto !important; /* Let content determine width */
+    max-width: 100%;
+    width: 100%;
     overflow-x: auto;
     overflow-y: auto;
-    white-space: pre !important; /* Prevent wrapping to maintain JSON formatting */
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    word-break: break-all;
     border-radius: 4px;
     text-align: left;
     box-sizing: border-box;
-    margin: 10px auto !important; /* Simple centering with margin */
-    display: inline-block !important; /* Allows proper centering */
+    overflow-wrap: break-word;
+    hyphens: auto;
 }
 
 .card-container {
-    max-width: 100% !important; /* Allow full width but let content determine actual width */
-    width: auto !important; /* Let content determine width */
-    margin: 0 auto !important; /* Simple centering */
+    max-width: 90%;
+    width: 100%;
+    margin: 0 auto;
     box-sizing: border-box;
-    overflow: visible; /* Allow content to expand */
-    text-align: center !important; /* Center child elements */
-}
-
-/* Override for JSON containers within cards - highest specificity */
-.card .card-body.json-container .json-output {
-    max-width: calc(100vw - 80px) !important;
-    width: auto !important;
-    margin: 10px auto !important;
-    display: inline-block !important;
-    overflow-x: auto !important;
-}
-
-.card .card-body.json-container {
-    text-align: center !important;
-    padding: 0 !important;
-    display: block !important;
-    overflow-x: auto !important;
+    overflow: hidden;
 }
 
 /* Responsive container for different screen sizes */
 @media (max-width: 1200px) {
     .card-container {
-        max-width: 95vw !important; /* Maintain consistency */
-        width: 95vw !important;
+        max-width: 95%;
     }
 }
 
@@ -53,13 +37,10 @@
     .json-output {
         font-size: 12px;
         max-height: 50vh;
-        max-width: 95vw !important; /* Maintain consistency */
-        width: 95vw !important;
     }
     
     .card-container {
-        max-width: 95vw !important; /* Maintain consistency */
-        width: 95vw !important;
+        max-width: 98%;
     }
 }
 

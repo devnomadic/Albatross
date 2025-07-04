@@ -237,10 +237,9 @@
             </div>
             <small class="text-muted">Checking IP reputation...</small>
         </div>
-    }
-
-    @if (abuseIpResult != null)
+    }    @if (abuseIpResult != null)
     {
+        <center>
         <div class="results card-container">
             <h3>IP Reputation Results for @(abuseIpResult.Data?.IpAddress ?? ipAddress)</h3>        
             <div class="card">            
@@ -252,18 +251,18 @@
                 </div>
                 @if (showJson)
                 {
-                    <div class="card-body json-container">
-                        <pre class="bg-dark text-light p-3 rounded json-output" id="jsonOutput">@formattedJson</pre>
+                    <div class="card-body json-container">                        <pre class="bg-dark text-light p-3 rounded json-output" id="jsonOutput">@formattedJson</pre>
                     </div>
                 }
             </div>
         </div>
+        </center>
     }
 </div>
 
 </center>
 
-@code {    private string ipAddress = string.Empty;    private string statusMessage = string.Empty;
+@code {    private string ipAddress = string.Empty;private string statusMessage = string.Empty;
     private List<CloudMatch>? azureMatchedServices;
     private List<CloudMatch>? awsMatchedServices;
     private List<CloudMatch>? gcpMatchedServices;
