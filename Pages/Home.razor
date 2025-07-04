@@ -112,7 +112,10 @@
 <img src="/images/ascii-text-art-albatross.png" alt="ascii-text-art-albatross" width=10% border="0" /> <br><br>
 <img src="/images/ascii-art.png" alt="Albatross" width=50% border="0" /> <br><br>
 
-<input @bind="ipAddress" placeholder="Enter public IPv4 or IPv6 address..." class="ip-input form-control" />
+<input @bind="ipAddress" placeholder="Enter public IPv4/IPv6 address (optionally: ip;maxDays)" class="ip-input form-control" />
+<small class="form-text text-muted">
+    Examples: 8.8.8.8 or 8.8.8.8;60 (for 60 days of report history)
+</small>
 <button class="btn btn-primary" @onclick="ValidateAndSearchAsync" disabled="@isSearching">Search</button>
 <button class="btn btn-info" @onclick="ToggleDescription" style="margin-left: 10px;">
     <span class="oi oi-info"></span> About
@@ -631,10 +634,22 @@
             Console.WriteLine($"Error searching Oracle ranges: {ex.Message}");
         }
         
-        return matchedServices;
-    }    private bool IsValidIPAddress(string ip)
+        return matchedServices;    }    private bool IsValidIPAddress(string input)
     {
-        if (!IPAddress.TryParse(ip, out IPAddress? parsedIP))
+        // Parse the input to extract just the IP address part
+        string actualIpAddress;
+        
+        if (input.Contains(';'))
+        {
+            var parts = input.Split(';', 2);
+            actualIpAddress = parts[0].Trim();
+        }
+        else
+        {
+            actualIpAddress = input.Trim();
+        }
+
+        if (!IPAddress.TryParse(actualIpAddress, out IPAddress? parsedIP))
             return false;
 
         return IsPublicRoutableIP(parsedIP);

@@ -382,12 +382,38 @@ namespace Albatross.Services
         /// <summary>
         /// Checks an IP address against AbuseIPDB through a Cloudflare Worker
         /// </summary>
-        /// <param name="ipAddress">The IP address to check</param>
-        /// <param name="maxAgeInDays">Reports older than this many days won't be included (default 30)</param>
+        /// <param name="ipAddress">The IP address to check, optionally with maxAgeInDays delimited by semicolon (e.g., "8.8.8.8;60")</param>
+        /// <param name="maxAgeInDays">Reports older than this many days won't be included (default 30). This is overridden if specified in ipAddress parameter</param>
         /// <param name="verbose">Whether to include detailed report information</param>
         /// <returns>Complete AbuseIPDB information for the specified IP address</returns>
         public async Task<AbuseIPDBApiResponse> CheckIPAsync(string ipAddress, int maxAgeInDays = 30, bool verbose = true)
         {
+            // Parse the input to extract IP address and optionally maxAgeInDays
+            string actualIpAddress;
+            int actualMaxAgeInDays = maxAgeInDays;
+
+            if (ipAddress.Contains(';'))
+            {
+                var parts = ipAddress.Split(';', 2);
+                actualIpAddress = parts[0].Trim();
+                
+                if (parts.Length > 1 && int.TryParse(parts[1].Trim(), out int parsedMaxAge))
+                {
+                    actualMaxAgeInDays = parsedMaxAge;
+                    Console.WriteLine($"Parsed maxAgeInDays from input: {actualMaxAgeInDays}");
+                }
+                else
+                {
+                    Console.WriteLine($"Failed to parse maxAgeInDays from '{parts[1]}', using default: {actualMaxAgeInDays}");
+                }
+            }
+            else
+            {
+                actualIpAddress = ipAddress.Trim();
+            }
+
+            Console.WriteLine($"Processing IP: {actualIpAddress}, MaxAge: {actualMaxAgeInDays} days");
+
             try
             {
                 var verboseParam = verbose.ToString().ToLower();
@@ -395,7 +421,7 @@ namespace Albatross.Services
 
                 // Include timestamp as a URI parameter
                 var requestUrl =
-                    $"{_cloudflareWorkerUrl}?ipAddress={ipAddress}&maxAgeInDays={maxAgeInDays}&verbose={verboseParam}&timestamp={timestamp}"
+                    $"{_cloudflareWorkerUrl}?ipAddress={actualIpAddress}&maxAgeInDays={actualMaxAgeInDays}&verbose={verboseParam}&timestamp={timestamp}"
                         .ToLower();
                 Console.WriteLine($"Requesting: {requestUrl}");
 
