@@ -396,7 +396,7 @@ namespace Albatross.Services
             {
                 var parts = ipAddress.Split(';', 2);
                 actualIpAddress = parts[0].Trim();
-                
+
                 if (parts.Length > 1 && int.TryParse(parts[1].Trim(), out int parsedMaxAge))
                 {
                     actualMaxAgeInDays = parsedMaxAge;
