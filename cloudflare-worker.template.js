@@ -167,6 +167,42 @@ async function handleCombinedRequest(request) {
   const normalizedUrl = request.url.toLowerCase();
   console.log('Normalized URL for HMAC:', normalizedUrl);
   
+  // Extract and validate timestamp before HMAC validation
+  const urlForTimestamp = new URL(normalizedUrl);
+  const timestamp = urlForTimestamp.searchParams.get('timestamp');
+  
+  if (!timestamp) {
+    return new Response(
+      JSON.stringify({ 
+        error: "Unauthorized: Missing timestamp parameter",
+        buildInfo: BUILD_INFO
+      }),
+      {
+        status: 401,
+        headers: {
+          'Content-Type': 'application/json',
+          ...corsHeaders(origin)
+        }
+      }
+    );
+  }
+  
+  if (!isTimestampValid(timestamp)) {
+    return new Response(
+      JSON.stringify({ 
+        error: "Unauthorized: Invalid or expired timestamp",
+        buildInfo: BUILD_INFO
+      }),
+      {
+        status: 401,
+        headers: {
+          'Content-Type': 'application/json',
+          ...corsHeaders(origin)
+        }
+      }
+    );
+  }
+  
   // Validate the HMAC token
   if (!workerToken || !(await validateHmacToken(workerToken, normalizedUrl))) {
     return new Response(
@@ -423,6 +459,56 @@ async function validateHmacToken(receivedToken, requestUrl) {
     
   } catch (error) {
     console.error('HMAC validation error:', error);
+    return false;
+  }
+}
+
+/**
+ * Validates that the timestamp is within a 2-minute window of the current UTC time
+ * @param {string} timestamp - The timestamp in yyyyMMddHHmm format
+ * @returns {boolean} - True if the timestamp is valid and within the window
+ */
+function isTimestampValid(timestamp) {
+  try {
+    if (!timestamp || timestamp.length !== 12) {
+      console.log('Invalid timestamp format:', timestamp);
+      return false;
+    }
+    
+    // Parse the timestamp (yyyyMMddHHmm format)
+    const year = parseInt(timestamp.substring(0, 4));
+    const month = parseInt(timestamp.substring(4, 6)) - 1; // JavaScript months are 0-based
+    const day = parseInt(timestamp.substring(6, 8));
+    const hour = parseInt(timestamp.substring(8, 10));
+    const minute = parseInt(timestamp.substring(10, 12));
+    
+    // Create the timestamp date
+    const timestampDate = new Date(Date.UTC(year, month, day, hour, minute));
+    
+    // Get current UTC time
+    const now = new Date();
+    
+    // Calculate the difference in milliseconds
+    const diffMs = Math.abs(now.getTime() - timestampDate.getTime());
+    
+    // Convert to minutes
+    const diffMinutes = diffMs / (1000 * 60);
+    
+    // Allow up to 2 minutes difference
+    const isValid = diffMinutes <= 2;
+    
+    console.log('Timestamp validation:', {
+      timestamp,
+      parsedDate: timestampDate.toISOString(),
+      currentDate: now.toISOString(),
+      diffMinutes: diffMinutes.toFixed(2),
+      isValid
+    });
+    
+    return isValid;
+    
+  } catch (error) {
+    console.error('Error validating timestamp:', error);
     return false;
   }
 }

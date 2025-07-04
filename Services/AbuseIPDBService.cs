@@ -275,9 +275,7 @@ namespace Albatross.Services
             }
             catch (Exception)
             {
-                // Fallback for development when BuildConstants might not be generated yet
-                _authKey = DecodeBase64("YWxiYXRyb3NzLWFidXNlaXBkYi1jbGllbnQ=") ?? "albatross-abuseipdb-client";
-                Debug.WriteLine("Using fallback auth key for development");
+                throw new InvalidOperationException("BuildConstants.AuthKey is not available. Ensure the project is built with proper configuration.");
             }
 
             // Configure JSON options with proper property case handling
@@ -330,9 +328,9 @@ namespace Albatross.Services
         }
 
         /// <summary>
-        /// Generates an HMAC-SHA256 token using the auth key and full request URL
+        /// Generates an HMAC-SHA256 token using the auth key and full request URL (including timestamp parameter)
         /// </summary>
-        /// <param name="requestUrl">The full request URL including query parameters</param>
+        /// <param name="requestUrl">The full request URL including query parameters and timestamp</param>
         /// <returns>Base64-encoded HMAC hash</returns>
         private string GenerateHmacToken(string requestUrl)
         {
@@ -343,7 +341,7 @@ namespace Albatross.Services
 
             try
             {
-                // Use the full request URL (including arguments) as the message and auth key as the HMAC key
+                // Use the full request URL (which includes timestamp parameter) as the message
                 var message = requestUrl;
 
                 // Convert message and key to byte arrays
@@ -373,6 +371,15 @@ namespace Albatross.Services
         }
 
         /// <summary>
+        /// Gets the current UTC timestamp in YYYYMMDDHHMM format
+        /// </summary>
+        /// <returns>Timestamp string</returns>
+        private string GetTimestamp()
+        {
+            return DateTime.UtcNow.ToString("yyyyMMddHHmm");
+        }
+
+        /// <summary>
         /// Checks an IP address against AbuseIPDB through a Cloudflare Worker
         /// </summary>
         /// <param name="ipAddress">The IP address to check</param>
@@ -384,7 +391,10 @@ namespace Albatross.Services
             try
             {
                 var verboseParam = verbose.ToString().ToLower();
-                var requestUrl = $"{_cloudflareWorkerUrl}?ipAddress={ipAddress}&maxAgeInDays={maxAgeInDays}&verbose={verboseParam}".ToLower();
+                var timestamp = GetTimestamp();
+                
+                // Include timestamp as a URI parameter
+                var requestUrl = $"{_cloudflareWorkerUrl}?ipAddress={ipAddress}&maxAgeInDays={maxAgeInDays}&verbose={verboseParam}&timestamp={timestamp}".ToLower();
                 Console.WriteLine($"Requesting: {requestUrl}");
 
                 // Create request message to add custom headers
@@ -393,13 +403,13 @@ namespace Albatross.Services
                 // Add authentication using HMAC if auth key and worker URL are available
                 if (!string.IsNullOrEmpty(_authKey) && !string.IsNullOrEmpty(_cloudflareWorkerUrl))
                 {
-                    // Generate HMAC token using the full request URL
+                    // Generate HMAC token using the full request URL (which now includes timestamp)
                     var hmacToken = GenerateHmacToken(requestUrl);
 
                     // Add the HMAC token for authentication
                     request.Headers.Add("Worker-Token", hmacToken);
 
-                    Console.WriteLine("Added Worker-Token authentication header with HMAC");
+                    Console.WriteLine($"Added Worker-Token authentication header with HMAC and timestamp parameter: {timestamp}");
                 }
 
                 var response = await _httpClient.SendAsync(request);
