@@ -92,7 +92,6 @@
                 }
             });
         });
-        
         observer.observe(document.body, { childList: true, subtree: true });
     });
 </script>
@@ -162,12 +161,15 @@
 }
 
 <!-- Fixed container for search results to prevent layout shifting -->
-<div class="search-results-container @(HasSearchResults() || abuseIpResult != null ? "has-results" : "") @(isSearching || isCheckingAbuse ? "searching" : "")">
-    @if (isSearching && !isCheckingAbuse)
+<div class="search-results-container @(HasSearchResults() || abuseIpResult != null ? "has-results" : "") @(isSearching || isCheckingAbuse ? "searching" : "")">    @if (isSearching && !isCheckingAbuse)
     {
         <div class="spinner-container">
-            <div class="spinner-border text-primary" role="status">
-                <span class="visually-hidden">Searching...</span>
+            <div class="loading-bars">
+                <div class="bar1"></div>
+                <div class="bar2"></div>
+                <div class="bar3"></div>
+                <div class="bar4"></div>
+                <div class="bar5"></div>
             </div>
             <small class="text-muted">Searching cloud IP ranges...</small>
         </div>
@@ -241,17 +243,19 @@
                 </div>
             </div>
         }
-    }
-
-    @if (isCheckingAbuse)
+    }    @if (isCheckingAbuse)
     {
         <div class="spinner-container">
-            <div class="spinner-border text-warning" role="status">
-                <span class="visually-hidden">Checking reputation...</span>
+            <div class="loading-bars">
+                <div class="bar1"></div>
+                <div class="bar2"></div>
+                <div class="bar3"></div>
+                <div class="bar4"></div>
+                <div class="bar5"></div>
             </div>
             <small class="text-muted">Checking IP reputation...</small>
         </div>
-    }    @if (abuseIpResult != null)
+    }@if (abuseIpResult != null)
     {
         <center>
         <div class="results card-container">
@@ -265,7 +269,8 @@
                 </div>
                 @if (showJson)
                 {
-                    <div class="card-body json-container">                        <pre class="bg-dark text-light p-3 rounded json-output" id="jsonOutput">@formattedJson</pre>
+                    <div class="card-body json-container">                        
+                        <pre class="bg-dark text-light p-3 rounded json-output" id="jsonOutput">@formattedJson</pre>
                     </div>
                 }
             </div>
@@ -353,9 +358,7 @@
         {
             statusMessage = "Invalid IP address. Please enter a valid public routable IPv4 or IPv6 address (private/reserved ranges are not allowed).";
             return;
-        }
-
-        isCheckingAbuse = true;
+        }        isCheckingAbuse = true;
         statusMessage = "Checking IP reputation...";
         abuseIpResult = null;
         formattedJson = string.Empty;
@@ -395,11 +398,10 @@
             await JSRuntime.InvokeVoidAsync("console.error", "Error: " + ex.Message);
             statusMessage = $"Error checking IP reputation: {ex.Message}";
             formattedJson = $"Error: {ex.Message}";
-        }
-        finally
+        }        finally
         {
             isCheckingAbuse = false;
-        }    }    private async Task ValidateAndSearch()
+        }}    private async Task ValidateAndSearch()
     {
         azureMatchedServices = null;
         awsMatchedServices = null;
@@ -411,9 +413,7 @@
             return;
         }        isSearching = true;
         statusMessage = "Searching IP ranges...";
-        StateHasChanged();
-
-        try
+        StateHasChanged();        try
         {
             // Parse the entered IP address
             IPAddress enteredIp = IPAddress.Parse(ipAddress);
@@ -477,8 +477,7 @@
         {
             statusMessage = $"Error during search: {ex.Message}";
             await JSRuntime.InvokeVoidAsync("console.error", "Cloud IP search error: " + ex.Message);
-        }
-        finally
+        }        finally
         {
             isSearching = false;
             StateHasChanged();

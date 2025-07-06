@@ -95,33 +95,145 @@ a, .btn-link {
         content: "An error has occurred."
     }
 
-.loading-progress {
-    position: relative;
-    display: block;
-    width: 8rem;
-    height: 8rem;
-    margin: 20vh auto 1rem auto;
+/* Loading screen styles */
+.loading-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    text-align: center;
 }
 
-    .loading-progress circle {
-        fill: none;
-        stroke: #e0e0e0;
-        stroke-width: 0.6rem;
-        transform-origin: 50% 50%;
-        transform: rotate(-90deg);
-    }
+/* Loading logo with 8-bit retro styling - ONLY for loading page */
+.loading-container .loading-logo {
+    width: 80px;
+    height: 80px;
+    margin-bottom: 2rem;
+    border-radius: 0; /* Sharp corners for pixel art feel */
+    image-rendering: pixelated; /* Makes image crisp/pixelated */
+    image-rendering: -moz-crisp-edges;
+    image-rendering: crisp-edges;
+    animation: 
+        pixel8BitBounce 1s ease-in-out infinite,
+        pixel8BitGlow 2s linear infinite,
+        pixel8BitFlicker 0.5s steps(4) infinite;
+    transition: none; /* Remove smooth transitions for sharp 8-bit feel */
+    filter: contrast(1.2) saturate(1.5);
+}
 
-        .loading-progress circle:last-child {
-            stroke: #1b6ec2;
-            stroke-dasharray: calc(3.141 * var(--blazor-load-percentage, 0%) * 0.8), 500%;
-            transition: stroke-dasharray 0.05s ease-in-out;
-        }
+/* Hover effect for 8-bit style */
+.loading-container .loading-logo:hover {
+    animation-play-state: paused;
+    transform: scale(1.25);
+    filter: contrast(1.4) saturate(2) brightness(1.2);
+}
+
+/* Responsive logo sizing - maintaining pixel perfect scaling */
+@media (max-width: 768px) {
+    .loading-container .loading-logo {
+        width: 64px;
+        height: 64px;
+        margin-bottom: 1.5rem;
+    }
+}
+
+@media (max-width: 480px) {
+    .loading-container .loading-logo {
+        width: 48px;
+        height: 48px;
+        margin-bottom: 1rem;
+    }
+}
+
+/* 8-bit style bounce animation */
+@keyframes pixel8BitBounce {
+    0%, 100% { 
+        transform: translateY(0px) scale(1);
+    }
+    25% { 
+        transform: translateY(-4px) scale(1.05);
+    }
+    50% { 
+        transform: translateY(-8px) scale(1.1);
+    }
+    75% { 
+        transform: translateY(-4px) scale(1.05);
+    }
+}
+
+/* 8-bit glow effect with color cycling */
+@keyframes pixel8BitGlow {
+    0% { 
+        filter: contrast(1.2) saturate(1.5) hue-rotate(0deg);
+    }
+    25% { 
+        filter: contrast(1.2) saturate(1.5) hue-rotate(90deg);
+    }
+    50% { 
+        filter: contrast(1.2) saturate(1.5) hue-rotate(180deg);
+    }
+    75% { 
+        filter: contrast(1.2) saturate(1.5) hue-rotate(270deg);
+    }
+    100% { 
+        filter: contrast(1.2) saturate(1.5) hue-rotate(360deg);
+    }
+}
+
+/* 8-bit flicker effect */
+@keyframes pixel8BitFlicker {
+    0%, 90%, 100% { 
+        opacity: 1;
+    }
+    92%, 98% { 
+        opacity: 0.95;
+    }
+    94%, 96% { 
+        opacity: 0.9;
+    }
+}
+
+/* Loading bars animation */
+.loading-bars {
+    display: flex;
+    justify-content: center;
+    align-items: end;
+    height: 40px;
+    margin: 0 auto 1rem auto;
+    gap: 4px;
+}
+
+.loading-bars div {
+    width: 4px;
+    background: #1b6ec2;
+    border-radius: 2px;
+    animation: wave 1.2s ease-in-out infinite;
+}
+
+.loading-bars .bar1 { animation-delay: 0s; }
+.loading-bars .bar2 { animation-delay: 0.1s; }
+.loading-bars .bar3 { animation-delay: 0.2s; }
+.loading-bars .bar4 { animation-delay: 0.3s; }
+.loading-bars .bar5 { animation-delay: 0.4s; }
+
+@keyframes wave {
+    0%, 40%, 100% {
+        height: 5px;
+        opacity: 0.5;
+    }
+    20% {
+        height: 30px;
+        opacity: 1;
+    }
+}
 
 .loading-progress-text {
-    position: absolute;
     text-align: center;
     font-weight: bold;
-    inset: calc(20vh + 3.25rem) 0 auto 0.2rem;
+    margin-top: 1rem;
+    font-family: 'Quantico', monospace;
+    color: #1b6ec2;
 }
 
     .loading-progress-text:after {
@@ -920,7 +1032,7 @@ html body div.card div.card-header .btn {
     }
 }
 
-/* Loading spinner positioning */
+/* Loading wave bars positioning - replaces spinner */
 .spinner-container {
     display: flex;
     flex-direction: column;
@@ -929,8 +1041,31 @@ html body div.card div.card-header .btn {
     padding: 40px 20px;
 }
 
+.spinner-container .loading-bars {
+    display: flex;
+    justify-content: center;
+    align-items: end;
+    height: 40px;
+    margin: 0 auto 1rem auto;
+    gap: 4px;
+}
+
+.spinner-container .loading-bars div {
+    width: 4px;
+    background: #1b6ec2;
+    border-radius: 2px;
+    animation: wave 1.2s ease-in-out infinite;
+}
+
+.spinner-container .loading-bars .bar1 { animation-delay: 0s; }
+.spinner-container .loading-bars .bar2 { animation-delay: 0.1s; }
+.spinner-container .loading-bars .bar3 { animation-delay: 0.2s; }
+.spinner-container .loading-bars .bar4 { animation-delay: 0.3s; }
+.spinner-container .loading-bars .bar5 { animation-delay: 0.4s; }
+
 .spinner-border {
-    margin-bottom: 10px;
+    /* Hide default spinner border - replaced with wave bars */
+    display: none;
 }
 
 /* Special handling for IP reputation results to allow wider JSON display */
