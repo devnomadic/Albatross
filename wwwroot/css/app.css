@@ -1057,6 +1057,17 @@ html body div.card div.card-header .btn {
     animation: wave 1.2s ease-in-out infinite;
 }
 
+/* Abuse check specific wave bars - match warning button color */
+.spinner-container:has(+ .text-muted:contains("Checking IP reputation")) .loading-bars div,
+.spinner-container .loading-bars div.abuse-bar {
+    background: #ffc107; /* Warning button color */
+}
+
+/* Alternative approach using CSS-only targeting */
+.spinner-container .loading-bars.abuse-bars div {
+    background: #ffc107; /* Warning button color */
+}
+
 .spinner-container .loading-bars .bar1 { animation-delay: 0s; }
 .spinner-container .loading-bars .bar2 { animation-delay: 0.1s; }
 .spinner-container .loading-bars .bar3 { animation-delay: 0.2s; }
