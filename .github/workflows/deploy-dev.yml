@@ -205,13 +205,13 @@ jobs:
           
           // Set fallback URLs since we don't depend on build job
           let workerUrl = 'https://abuseipdb-preview.devnomadic.workers.dev';
-          let spaUrl = 'https://${{ github.head_ref || github.ref_name }}.albatross-5kt.pages.dev';
           
-          // Replace slashes with dashes for Cloudflare Pages URL format
-          spaUrl = spaUrl.replace(/\//g, '-');
+          // Get branch name and replace slashes with dashes for Cloudflare Pages URL format
+          const branchName = '${{ github.head_ref || github.ref_name }}';
+          const cleanBranchName = branchName.replace(/\//g, '-');
+          let spaUrl = 'https://' + cleanBranchName + '.albatross-5kt.pages.dev';
           
           const timestamp = new Date().toISOString();
-          const branchName = '${{ github.head_ref || github.ref_name }}';
           const commitSha = '${{ github.sha }}';
           const eventAction = '${{ github.event.action }}' || 'push';
           
