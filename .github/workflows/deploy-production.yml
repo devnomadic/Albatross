@@ -134,7 +134,8 @@ jobs:
         
         if [ -z "$SPA_URL" ]; then
           # Fallback to standard production URL
-          SPA_URL="https://${{ secrets.CLOUDFLARE_PAGES_PROJECT }}.pages.dev"
+          SPA_URL="https://albatross.devnomad.com"
+          echo "Using fallback URL: ${SPA_URL}"
         fi
         
         echo "url=${SPA_URL}" >> $GITHUB_OUTPUT

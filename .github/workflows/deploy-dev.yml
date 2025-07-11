@@ -164,8 +164,9 @@ jobs:
         SPA_URL=$(echo "$DEPLOYMENT_OUTPUT" | grep -oE 'https://[a-zA-Z0-9.-]+\.pages\.dev' | head -1)
         
         if [ -z "$SPA_URL" ]; then
-          # Fallback URL format
-          SPA_URL="https://${{ steps.preview.outputs.name }}.${{ secrets.CLOUDFLARE_PAGES_PROJECT }}.pages.dev"
+          # Fallback URL format using branch name
+          SPA_URL="https://${{ github.head_ref || github.ref_name }}.albatross-5kt.pages.dev"
+          echo "Using fallback URL: ${SPA_URL}"
         fi
         
         echo "url=${SPA_URL}" >> $GITHUB_OUTPUT
