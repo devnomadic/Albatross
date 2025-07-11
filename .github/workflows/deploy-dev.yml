@@ -8,13 +8,13 @@ on:
       - '*.md'
       - 'LICENSE'
       - '.gitignore'
-  pull_request:
-    branches: [ develop, main ]
-    types: [opened, synchronize, reopened]
-    paths-ignore:
-      - '*.md'
-      - 'LICENSE'
-      - '.gitignore'
+#  pull_request:
+#    branches: [ develop, main ]
+#    types: [opened, synchronize, reopened]
+#    paths-ignore:
+#      - '*.md'
+#      - 'LICENSE'
+#      - '.gitignore'
   workflow_dispatch:
     inputs:
       deploy_spa:
