@@ -28,6 +28,12 @@ on:
         default: true
         type: boolean
 
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+  actions: read
+
 env:
   DOTNET_VERSION: '8.0.x'
   NODE_VERSION: '20'
@@ -226,43 +232,3 @@ jobs:
               body: commentBody
             });
           }
-
-  cleanup-preview:
-    name: Cleanup Preview Deployments
-    runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request' && github.event.action == 'closed'
-    
-    steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
-      
-    - name: Setup Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: ${{ env.NODE_VERSION }}
-        cache: 'npm'
-        
-    - name: Install dependencies
-      run: npm ci
-      
-    - name: Cleanup Worker Preview
-      env:
-        CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-        CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-      run: |
-        # Static preview worker name
-        WORKER_NAME="abuseipdb-preview"
-        
-        # Note: We don't delete the static preview worker as it's shared
-        # The worker will be updated with the next preview deployment
-        echo "ℹ️ Static preview worker maintained: ${WORKER_NAME}"
-        echo "The preview worker will be updated with the next deployment"
-        
-    - name: Cleanup Pages Preview
-      env:
-        CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-        CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-      run: |
-        # Note: Cloudflare Pages previews are automatically cleaned up
-        # but we could add manual cleanup here if needed
-        echo "Pages preview cleanup is handled automatically by Cloudflare"
