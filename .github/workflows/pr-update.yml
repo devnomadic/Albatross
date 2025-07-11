@@ -61,7 +61,7 @@ jobs:
           const { data: pr } = await github.rest.pulls.get({
             owner: context.repo.owner,
             repo: context.repo.repo,
-            pull_request_number: prNumber,
+            pull_number: prNumber,
           });
           
           // Get latest workflow runs for this PR
@@ -149,9 +149,11 @@ jobs:
     
     steps:
     - name: Health Check Preview Deployments
+      env:
+        HEAD_REF: ${{ github.head_ref }}
       run: |
         # Get branch name and create URLs
-        BRANCH_NAME="${{ github.head_ref }}"
+        BRANCH_NAME="$HEAD_REF"
         CLEAN_BRANCH=$(echo "$BRANCH_NAME" | sed 's/\//-/g')
         SPA_URL="https://${CLEAN_BRANCH}.albatross-5kt.pages.dev"
         WORKER_URL="https://abuseipdb-preview.devnomadic.workers.dev"
