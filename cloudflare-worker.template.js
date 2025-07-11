@@ -449,9 +449,8 @@ async function validateHmacToken(receivedToken, requestUrl) {
     // Debug logging
     console.log('HMAC validation:', {
       message: message.substring(0, 100) + '...',
-      expectedToken: expectedToken.substring(0, 20) + '...',
-      receivedToken: receivedToken.substring(0, 20) + '...',
-      authKeySource: BUILD_INFO.keySource
+      validationStatus: 'In progress',
+      keySourceAvailable: typeof BUILD_INFO.keySource !== 'undefined'
     });
     
     // Compare tokens
