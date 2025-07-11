@@ -1,0 +1,42 @@
+name = "abuseipdb"
+main = "cloudflare-worker.js"
+compatibility_date = "2024-06-08"
+compatibility_flags = ["nodejs_compat"]
+
+# Observability configuration (wrangler v3.88.0+)
+[observability.logs]
+enabled = true
+
+# Production environment (default)
+[env.production]
+name = "abuseipdb"
+routes = []
+
+# Environment variables (these will be set via GitHub Actions secrets)
+# [vars]
+# ENVIRONMENT = "production"
+
+# Environment variables (these will be set via GitHub Actions secrets)
+# [vars]
+# ENVIRONMENT = "production"
+
+# KV bindings (if needed in the future)
+# [[kv_namespaces]]
+# binding = "MY_KV_NAMESPACE"
+# id = "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+
+# R2 bindings (if needed in the future)
+# [[r2_buckets]]
+# binding = "MY_BUCKET"
+# bucket_name = "my-bucket"
+
+# Durable Objects (if needed in the future)
+# [[durable_objects.bindings]]
+# name = "MY_DURABLE_OBJECT"
+# class_name = "MyDurableObject"
+
+# Custom domains (configure after deployment)
+# [env.production]
+# routes = [
+#   { pattern = "api.yourdomain.com/*", zone_name = "yourdomain.com" }
+# ]

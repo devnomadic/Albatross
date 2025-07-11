@@ -1,0 +1,935 @@
+﻿@page "/"
+
+@inject HttpClient Http
+@inject Albatross.Services.AbuseIPDBService AbuseIPDBService
+@using System.Text.Json
+@using System.Linq
+@inject IJSRuntime JSRuntime
+
+<PageTitle>Albatross</PageTitle>
+
+<!-- External CSS and JS references -->
+<link rel="stylesheet" href="css/json-formatter.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.7.0/styles/vs2015.min.css">
+<script>
+    // Global flag to track highlight.js availability
+    window.hljsReady = false;
+    
+    // Load highlight.js scripts in proper order
+    (function() {
+        // First load the main highlight.js library
+        var hljs_script = document.createElement('script');
+        hljs_script.src = 'https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.7.0/highlight.min.js';
+        hljs_script.onload = function() {
+            // Then load the JSON language support
+            var json_script = document.createElement('script');
+            json_script.src = 'https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.7.0/languages/json.min.js';
+            json_script.onload = function() {
+                // Finally load our custom JSON highlighting
+                var custom_script = document.createElement('script');
+                custom_script.src = 'js/json-highlight.js';
+                custom_script.onload = function() {
+                    // Mark as ready once everything is loaded
+                    window.hljsReady = true;
+                    console.log('highlight.js and JSON support loaded successfully');
+                };
+                document.head.appendChild(custom_script);
+            };
+            document.head.appendChild(json_script);
+        };
+        document.head.appendChild(hljs_script);    })();
+    
+    // Force compact card headers after page load
+    window.addEventListener('DOMContentLoaded', function() {
+        function forceCompactHeaders() {
+            const cardHeaders = document.querySelectorAll('.card-header');
+            cardHeaders.forEach(header => {
+                header.style.setProperty('padding', '0.25rem 1rem', 'important');
+                header.style.setProperty('height', '32px', 'important');
+                header.style.setProperty('max-height', '32px', 'important');
+                header.style.setProperty('min-height', '32px', 'important');
+                header.style.setProperty('display', 'flex', 'important');
+                header.style.setProperty('align-items', 'center', 'important');
+                header.style.setProperty('justify-content', 'space-between', 'important');
+                header.style.setProperty('box-sizing', 'border-box', 'important');
+                header.style.setProperty('overflow', 'hidden', 'important');
+                
+                const headings = header.querySelectorAll('h4, h5');
+                headings.forEach(heading => {
+                    heading.style.setProperty('font-size', '0.9rem', 'important');
+                    heading.style.setProperty('line-height', '1.1', 'important');
+                    heading.style.setProperty('margin', '0', 'important');
+                    heading.style.setProperty('padding', '0', 'important');
+                });
+            });
+        }
+        
+        // Apply immediately
+        forceCompactHeaders();
+        
+        // Also apply after a short delay to catch any dynamic content
+        setTimeout(forceCompactHeaders, 500);
+        
+        // Set up a mutation observer to catch dynamically added card headers
+        const observer = new MutationObserver(function(mutations) {
+            mutations.forEach(function(mutation) {
+                if (mutation.type === 'childList') {
+                    mutation.addedNodes.forEach(function(node) {
+                        if (node.nodeType === 1) { // Element node
+                            const newHeaders = node.querySelectorAll ? node.querySelectorAll('.card-header') : [];
+                            newHeaders.forEach(header => {
+                                header.style.setProperty('padding', '0.25rem 1rem', 'important');
+                                header.style.setProperty('height', '32px', 'important');
+                                header.style.setProperty('max-height', '32px', 'important');
+                                header.style.setProperty('min-height', '32px', 'important');
+                                header.style.setProperty('display', 'flex', 'important');
+                                header.style.setProperty('align-items', 'center', 'important');
+                                header.style.setProperty('justify-content', 'space-between', 'important');
+                                header.style.setProperty('box-sizing', 'border-box', 'important');
+                            });
+                        }
+                    });
+                }
+            });
+        });
+        observer.observe(document.body, { childList: true, subtree: true });
+    });
+</script>
+
+<center>
+
+<!-- 
+<pre><b>
+   ________                __   ________     _____                      __  
+  / ____/ /___  __  ______/ /  /  _/ __ \   / ___/___  ____ ___________/ /_ 
+ / /   / / __ \/ / / / __  /   / // /_/ /   \__ \/ _ \/ __ `/ ___/ ___/ __ \
+/ /___/ / /_/ / /_/ / /_/ /  _/ // ____/   ___/ /  __/ /_/ / /  / /__/ / / /
+\____/_/\____/\__,_/\__,_/  /___/_/       /____/\___/\__,_/_/   \___/_/ /_/ 
+</b></pre><br>
+-->
+<img src="/images/ascii-text-art.png" alt="CloudIPSearch" width="30%" style="padding-bottom: 5px;" border="0"/> <br>
+<img src="/images/ascii-text-art-albatross.png" alt="ascii-text-art-albatross" width=10% border="0" /> <br><br>
+<img src="/images/ascii-art.png" alt="Albatross" width=50% border="0" /> <br><br>
+
+<input @bind="ipAddress" placeholder="Enter public IPv4/IPv6 address (optionally: ip;maxDays)" class="ip-input form-control" />
+<button class="btn btn-primary" @onclick="ValidateAndSearchAsync" disabled="@isSearching">Search</button>
+<button class="btn btn-info" @onclick="ToggleDescription" style="margin-left: 10px;">
+    <span class="oi oi-info"></span> About
+</button>
+<button class="btn btn-warning" @onclick="CheckAbuseIPDBAsync" disabled="@isCheckingAbuse" style="margin-left: 10px;">
+    <span class="oi oi-shield"></span> Check IP Reputation
+</button>
+<br><br>
+
+@if (!string.IsNullOrEmpty(statusMessage))
+{
+    <p class="text-center" style="max-width: 600px; margin: 10px auto; font-weight: 500;">
+        @statusMessage
+    </p>
+}
+
+@if (showDescription)
+{    <div class="description-panel">
+        <div class="card">            
+            <div class="card-header d-flex justify-content-between align-items-center" style="padding: 0.25rem 1rem !important; min-height: 32px !important; height: 32px !important; max-height: 32px !important; box-sizing: border-box !important; overflow: hidden !important;">
+                <h5 style="margin: 0 !important; padding: 0 !important; font-size: 0.9rem !important; line-height: 1.1 !important; font-weight: 500 !important;">About Albatross IP Analysis</h5>
+                <button class="btn btn-sm btn-close" @onclick="ToggleDescription" style="font-size: 0.75rem !important; padding: 0.125rem 0.25rem !important; margin: 0 !important; height: 24px !important; width: 24px !important; display: flex !important; align-items: center !important; justify-content: center !important; flex-shrink: 0 !important;"></button>            </div>              
+            <div class="card-body">
+                <p><strong>Albatross</strong> provides comprehensive IP address analysis combining cloud provider identification with security reputation checking.</p>
+                
+                <h6>🔍 <strong>IP Analysis Features:</strong></h6>
+                <ul>
+                    <li><strong>Cloud Detection:</strong> Identifies if IPs belong to AWS, Azure, GCP, or Oracle Cloud</li>
+                    <li><strong>Abuse Checking:</strong> Queries AbuseIPDB for security reputation and threat intelligence</li>
+                    <li><strong>Network Information:</strong> Provides ASN details and network ownership via Cloudflare Radar</li>
+                </ul>
+
+                <h6>📝 <strong>Input Formats:</strong></h6>
+                <ul>
+                    <li><code>8.8.8.8</code> - Standard IP lookup (30 days of abuse reports)</li>
+                    <li><code>8.8.8.8;60</code> - Custom report age (60 days of history)</li>
+                    <li><code>2001:4860:4860::8888</code> - IPv6 addresses supported</li>
+                </ul>
+
+                <h6>🔒 <strong>Security:</strong></h6>
+                <p>All requests use HMAC-SHA256 authentication with timestamp validation. Only public routable IP addresses are accepted (private networks like 10.x.x.x, 192.168.x.x, and 127.x.x.x are blocked).</p>
+
+                <p><small class="text-muted">Data provided by AbuseIPDB, Cloudflare Radar, and official cloud provider IP manifests.</small></p>
+            </div>
+        </div>
+    </div>
+}
+
+<!-- Fixed container for search results to prevent layout shifting -->
+<div class="search-results-container @(HasSearchResults() || abuseIpResult != null ? "has-results" : "") @(isSearching || isCheckingAbuse ? "searching" : "")">    @if (isSearching && !isCheckingAbuse)
+    {
+        <div class="spinner-container">
+            <div class="loading-bars">
+                <div class="bar1"></div>
+                <div class="bar2"></div>
+                <div class="bar3"></div>
+                <div class="bar4"></div>
+                <div class="bar5"></div>
+            </div>
+            <small class="text-muted">Searching cloud IP ranges...</small>
+        </div>
+    }
+    else if (!isSearching)
+    {
+        @if (azureMatchedServices != null && azureMatchedServices.Any())
+        {
+            <div class="results">
+                <h3>Matching Azure Services:</h3>
+                <div>
+                    @foreach (var service in azureMatchedServices)
+                    {
+                        <div class="service-match">
+                            <strong>@service.ServiceInfo</strong>
+                            <br />
+                            <small class="text-muted">CIDR Range: @service.CidrRange</small>
+                        </div>
+                    }
+                </div>
+            </div>
+        }
+
+        @if (awsMatchedServices != null && awsMatchedServices.Any())
+        {
+            <div class="results">
+                <h3>Matching AWS Services:</h3>
+                <div>
+                    @foreach (var service in awsMatchedServices)
+                    {
+                        <div class="service-match">
+                            <strong>@service.ServiceInfo</strong>
+                            <br />
+                            <small class="text-muted">CIDR Range: @service.CidrRange</small>
+                        </div>
+                    }
+                </div>
+            </div>
+        }
+
+        @if (gcpMatchedServices != null && gcpMatchedServices.Any())
+        {
+            <div class="results">
+                <h3>Matching GCP Services:</h3>
+                <div>
+                    @foreach (var service in gcpMatchedServices)
+                    {
+                        <div class="service-match">
+                            <strong>@service.ServiceInfo</strong>
+                            <br />
+                            <small class="text-muted">CIDR Range: @service.CidrRange</small>
+                        </div>
+                    }
+                </div>
+            </div>
+        }
+
+        @if (oracleMatchedServices != null && oracleMatchedServices.Any())
+        {
+            <div class="results">
+                <h3>Matching Oracle Cloud Services:</h3>
+                <div>
+                    @foreach (var service in oracleMatchedServices)
+                    {
+                        <div class="service-match">
+                            <strong>@service.ServiceInfo</strong>
+                            <br />
+                            <small class="text-muted">CIDR Range: @service.CidrRange</small>
+                        </div>
+                    }
+                </div>
+            </div>
+        }
+    }    @if (isCheckingAbuse)
+    {
+        <div class="spinner-container">
+            <div class="loading-bars abuse-check">
+                <div class="bar1"></div>
+                <div class="bar2"></div>
+                <div class="bar3"></div>
+                <div class="bar4"></div>
+                <div class="bar5"></div>
+            </div>
+            <small class="text-muted">Checking IP reputation...</small>
+        </div>
+    }@if (abuseIpResult != null)
+    {
+        <center>
+        <div class="results card-container">
+            <h3>IP Reputation Results for @(abuseIpResult.Data?.IpAddress ?? ipAddress)</h3>        
+            <div class="card">            
+                <div class="card-header d-flex justify-content-between align-items-center" style="padding: 0.25rem 1rem !important; min-height: 32px !important; height: 32px !important; max-height: 32px !important; box-sizing: border-box !important; overflow: hidden !important;">
+                    <h5 style="margin: 0 !important; padding: 0 !important; font-size: 0.9rem !important; line-height: 1.1 !important; font-weight: 500 !important;">AbuseIPDB JSON Response</h5>
+                    <button class="btn btn-sm btn-outline-secondary" @onclick="ToggleJsonDisplay" style="font-size: 0.75rem !important; padding: 0.125rem 0.25rem !important; margin: 0 !important; height: 24px !important; display: flex !important; align-items: center !important; justify-content: center !important; flex-shrink: 0 !important;">
+                        @(showJson ? "Hide JSON" : "Show JSON")
+                    </button>
+                </div>
+                @if (showJson)
+                {
+                    <div class="card-body json-container">                        
+                        <pre class="bg-dark text-light p-3 rounded json-output" id="jsonOutput">@formattedJson</pre>
+                    </div>
+                }
+            </div>
+        </div>
+        </center>
+    }
+</div>
+
+</center>
+
+@code {    private string ipAddress = string.Empty;private string statusMessage = string.Empty;
+    private List<CloudMatch>? azureMatchedServices;
+    private List<CloudMatch>? awsMatchedServices;
+    private List<CloudMatch>? gcpMatchedServices;
+    private List<CloudMatch>? oracleMatchedServices;
+    private bool isSearching = false;
+    private bool showDescription = false;
+    private bool isCheckingAbuse = false;
+    private bool showJson = true; // Default to showing JSON
+    private string formattedJson = string.Empty;
+    private Albatross.Services.AbuseIPDBApiResponse? abuseIpResult;
+    
+    // Called when component is initialized
+    protected override void OnInitialized()
+    {
+        base.OnInitialized();
+    }
+    
+    // Called after the component has rendered
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!string.IsNullOrEmpty(formattedJson) && showJson)
+        {
+            await ApplyJsonHighlighting();
+        }
+    }
+      // Method to apply syntax highlighting to JSON
+    private async Task ApplyJsonHighlighting()
+    {
+        try
+        {
+            // Check if highlight.js is ready before trying to use it
+            bool isReady = await JSRuntime.InvokeAsync<bool>("eval", "window.hljsReady === true");
+            if (isReady)
+            {
+                await JSRuntime.InvokeVoidAsync("highlightJson");
+            }
+            else
+            {
+                // Retry after a short delay if not ready
+                await Task.Delay(100);
+                await ApplyJsonHighlighting();
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error highlighting JSON: {ex.Message}");
+        }
+    }
+
+    private void ToggleDescription()
+    {
+        showDescription = !showDescription;
+    }
+    
+    private async void ToggleJsonDisplay()
+    {
+        showJson = !showJson;
+        
+        // When toggling to show the JSON, apply highlighting after render
+        if (showJson && !string.IsNullOrEmpty(formattedJson))
+        {
+            StateHasChanged();
+            await Task.Delay(50); // Small delay to ensure rendering completes
+            await ApplyJsonHighlighting();
+        }
+    }
+
+    private async Task ValidateAndSearchAsync()
+    {
+        await ValidateAndSearch();
+    }    private async Task CheckAbuseIPDBAsync()
+    {
+        if (!IsValidIPAddress(ipAddress))
+        {
+            statusMessage = "Invalid IP address. Please enter a valid public routable IPv4 or IPv6 address (private/reserved ranges are not allowed).";
+            return;
+        }        isCheckingAbuse = true;
+        statusMessage = "Checking IP reputation...";
+        abuseIpResult = null;
+        formattedJson = string.Empty;
+        StateHasChanged();
+
+        try
+        {
+            // Log to browser console for debugging
+            await JSRuntime.InvokeVoidAsync("console.log", "Checking IP: " + ipAddress);
+            
+            abuseIpResult = await AbuseIPDBService.CheckIPAsync(ipAddress, 30, true);
+            
+            // Format the JSON for display
+            var options = new JsonSerializerOptions { WriteIndented = true };
+            formattedJson = JsonSerializer.Serialize(abuseIpResult, options);
+            
+            // Log the JSON to browser console
+            await JSRuntime.InvokeVoidAsync("console.log", "Response JSON: " + formattedJson);
+            
+            // Debug check
+            if (string.IsNullOrEmpty(formattedJson))
+            {
+                formattedJson = "No data returned from API.";
+            }
+            
+            statusMessage = "IP reputation check completed.";
+            
+            // Force UI update
+            StateHasChanged();
+            
+            // Apply syntax highlighting after the component has rendered
+            await Task.Delay(50); // Small delay to ensure rendering completes
+            await ApplyJsonHighlighting();
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("console.error", "Error: " + ex.Message);
+            statusMessage = $"Error checking IP reputation: {ex.Message}";
+            formattedJson = $"Error: {ex.Message}";
+        }        finally
+        {
+            isCheckingAbuse = false;
+        }}    private async Task ValidateAndSearch()
+    {
+        azureMatchedServices = null;
+        awsMatchedServices = null;
+        gcpMatchedServices = null;
+        oracleMatchedServices = null;        
+        if (!IsValidIPAddress(ipAddress))
+        {
+            statusMessage = "Invalid IP address. Please enter a valid public routable IPv4 or IPv6 address (private/reserved ranges are not allowed).";
+            return;
+        }        isSearching = true;
+        statusMessage = "Searching IP ranges...";
+        StateHasChanged();        try
+        {
+            // Parse the entered IP address
+            IPAddress enteredIp = IPAddress.Parse(ipAddress);
+
+            // Load all manifest files in parallel for optimal performance
+            var downloadTasks = new[]
+            {
+                Http.GetStringAsync("ip-manifests/Azure.json"),
+                Http.GetStringAsync("ip-manifests/AWS.json"),
+                Http.GetStringAsync("ip-manifests/GCP.json"),
+                Http.GetStringAsync("ip-manifests/Oracle.json")
+            };
+
+            statusMessage = "Loading cloud IP manifests...";
+            StateHasChanged();
+
+            // Wait for all downloads to complete
+            var manifestContents = await Task.WhenAll(downloadTasks);
+
+            statusMessage = "Searching IP ranges...";
+            StateHasChanged();
+
+            // Process all manifests in parallel using separate threads
+            var searchTasks = new[]
+            {
+                Task.Run(() => SearchAzureRanges(enteredIp, manifestContents[0])),
+                Task.Run(() => SearchAwsRanges(enteredIp, manifestContents[1])),
+                Task.Run(() => SearchGcpRanges(enteredIp, manifestContents[2])),
+                Task.Run(() => SearchOracleRanges(enteredIp, manifestContents[3]))
+            };
+
+            // Wait for all searches to complete
+            var searchResults = await Task.WhenAll(searchTasks);
+
+            // Assign results
+            azureMatchedServices = searchResults[0];
+            awsMatchedServices = searchResults[1];
+            gcpMatchedServices = searchResults[2];
+            oracleMatchedServices = searchResults[3];
+
+            // Determine if any matches were found
+            bool foundMatch = (azureMatchedServices?.Count > 0) || 
+                             (awsMatchedServices?.Count > 0) || 
+                             (gcpMatchedServices?.Count > 0) ||
+                             (oracleMatchedServices?.Count > 0);
+
+            if (foundMatch)
+            {
+                var totalMatches = (azureMatchedServices?.Count ?? 0) + 
+                                 (awsMatchedServices?.Count ?? 0) + 
+                                 (gcpMatchedServices?.Count ?? 0) +
+                                 (oracleMatchedServices?.Count ?? 0);
+                statusMessage = $"Found {totalMatches} matching cloud service(s)!";
+            }
+            else
+            {
+                statusMessage = "No matching cloud services found for this IP address.";
+            }
+        }
+        catch (Exception ex)
+        {
+            statusMessage = $"Error during search: {ex.Message}";
+            await JSRuntime.InvokeVoidAsync("console.error", "Cloud IP search error: " + ex.Message);
+        }        finally
+        {
+            isSearching = false;
+            StateHasChanged();
+        }
+    }    private List<CloudMatch> SearchAzureRanges(IPAddress enteredIp, string jsonContent)
+    {
+        var matchedServices = new List<CloudMatch>();
+        
+        try
+        {
+            var azureData = JsonSerializer.Deserialize<AzureIpRanges>(jsonContent);
+            
+            if (azureData?.values != null)
+            {
+                foreach (var value in azureData.values)
+                {
+                    if (value.properties?.addressPrefixes != null)
+                    {
+                        foreach (var prefix in value.properties.addressPrefixes)
+                        {
+                            if (IsIpInRange(enteredIp, prefix) && !string.IsNullOrEmpty(value.name))
+                            {
+                                var match = new CloudMatch
+                                {
+                                    ServiceInfo = value.name,
+                                    CidrRange = prefix
+                                };
+                                // Only add if we don't already have this exact match
+                                if (!matchedServices.Any(m => m.ServiceInfo == match.ServiceInfo && m.CidrRange == match.CidrRange))
+                                {
+                                    matchedServices.Add(match);
+                                }
+                                break; // Only add each service once per address prefix
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error searching Azure ranges: {ex.Message}");
+        }
+        
+        return matchedServices;
+    }    private List<CloudMatch> SearchAwsRanges(IPAddress enteredIp, string jsonContent)
+    {
+        var matchedServices = new List<CloudMatch>();
+        
+        try
+        {
+            var awsData = JsonSerializer.Deserialize<AwsIpRanges>(jsonContent);
+            
+            if (awsData?.prefixes != null)
+            {
+                foreach (var prefix in awsData.prefixes)
+                {
+                    if (!string.IsNullOrEmpty(prefix.ip_prefix) && !string.IsNullOrEmpty(prefix.service))
+                    {
+                        if (IsIpInRange(enteredIp, prefix.ip_prefix))
+                        {
+                            string serviceInfo = $"{prefix.service} ({prefix.region})";
+                            var match = new CloudMatch
+                            {
+                                ServiceInfo = serviceInfo,
+                                CidrRange = prefix.ip_prefix
+                            };
+                            // Only add if we don't already have this exact match
+                            if (!matchedServices.Any(m => m.ServiceInfo == match.ServiceInfo && m.CidrRange == match.CidrRange))
+                            {
+                                matchedServices.Add(match);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error searching AWS ranges: {ex.Message}");
+        }
+        
+        return matchedServices;
+    }    private List<CloudMatch> SearchGcpRanges(IPAddress enteredIp, string jsonContent)
+    {
+        var matchedServices = new List<CloudMatch>();
+        
+        try
+        {
+            var gcpData = JsonSerializer.Deserialize<GcpIpRanges>(jsonContent);
+            
+            if (gcpData?.prefixes != null)
+            {
+                foreach (var prefix in gcpData.prefixes)
+                {
+                    string? ipRange = prefix.ipv4Prefix ?? prefix.ipv6Prefix;
+                    if (!string.IsNullOrEmpty(ipRange) && !string.IsNullOrEmpty(prefix.service))
+                    {
+                        if (IsIpInRange(enteredIp, ipRange))
+                        {
+                            string serviceInfo = $"{prefix.service} ({prefix.scope ?? "Global"})";
+                            var match = new CloudMatch
+                            {
+                                ServiceInfo = serviceInfo,
+                                CidrRange = ipRange
+                            };
+                            // Only add if we don't already have this exact match
+                            if (!matchedServices.Any(m => m.ServiceInfo == match.ServiceInfo && m.CidrRange == match.CidrRange))
+                            {
+                                matchedServices.Add(match);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error searching GCP ranges: {ex.Message}");
+        }
+          return matchedServices;
+    }
+
+    private List<CloudMatch> SearchOracleRanges(IPAddress enteredIp, string jsonContent)
+    {
+        var matchedServices = new List<CloudMatch>();
+        
+        try
+        {
+            var oracleData = JsonSerializer.Deserialize<OracleIpRanges>(jsonContent);
+            
+            if (oracleData?.regions != null)
+            {
+                foreach (var region in oracleData.regions)
+                {
+                    if (region.cidrs != null)
+                    {
+                        foreach (var cidrInfo in region.cidrs)
+                        {
+                            if (!string.IsNullOrEmpty(cidrInfo.cidr) && cidrInfo.tags != null && cidrInfo.tags.Any())
+                            {
+                                if (IsIpInRange(enteredIp, cidrInfo.cidr))
+                                {
+                                    string serviceInfo = $"{string.Join(", ", cidrInfo.tags)} ({region.region})";
+                                    var match = new CloudMatch
+                                    {
+                                        ServiceInfo = serviceInfo,
+                                        CidrRange = cidrInfo.cidr
+                                    };
+                                    // Only add if we don't already have this exact match
+                                    if (!matchedServices.Any(m => m.ServiceInfo == match.ServiceInfo && m.CidrRange == match.CidrRange))
+                                    {
+                                        matchedServices.Add(match);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error searching Oracle ranges: {ex.Message}");
+        }
+        
+        return matchedServices;    }    private bool IsValidIPAddress(string input)
+    {
+        // Parse the input to extract just the IP address part
+        string actualIpAddress;
+        
+        if (input.Contains(';'))
+        {
+            var parts = input.Split(';', 2);
+            actualIpAddress = parts[0].Trim();
+        }
+        else
+        {
+            actualIpAddress = input.Trim();
+        }
+
+        if (!IPAddress.TryParse(actualIpAddress, out IPAddress? parsedIP))
+            return false;
+
+        return IsPublicRoutableIP(parsedIP);
+    }
+
+    private bool IsPublicRoutableIP(IPAddress ip)
+    {
+        // Check if it's a valid public routable IP address
+        if (ip.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork)
+        {
+            return IsPublicIPv4(ip);
+        }
+        else if (ip.AddressFamily == System.Net.Sockets.AddressFamily.InterNetworkV6)
+        {
+            return IsPublicIPv6(ip);
+        }
+
+        return false;
+    }
+
+    private bool IsPublicIPv4(IPAddress ip)
+    {
+        byte[] bytes = ip.GetAddressBytes();
+        
+        // Check for private/reserved IPv4 ranges
+        
+        // 0.0.0.0/8 - "This network"
+        if (bytes[0] == 0)
+            return false;
+            
+        // 10.0.0.0/8 - Private network
+        if (bytes[0] == 10)
+            return false;
+            
+        // 100.64.0.0/10 - Carrier-grade NAT
+        if (bytes[0] == 100 && (bytes[1] & 0xC0) == 64)
+            return false;
+            
+        // 127.0.0.0/8 - Loopback
+        if (bytes[0] == 127)
+            return false;
+            
+        // 169.254.0.0/16 - Link-local
+        if (bytes[0] == 169 && bytes[1] == 254)
+            return false;
+            
+        // 172.16.0.0/12 - Private network
+        if (bytes[0] == 172 && (bytes[1] & 0xF0) == 16)
+            return false;
+            
+        // 192.0.0.0/24 - IETF Protocol Assignments
+        if (bytes[0] == 192 && bytes[1] == 0 && bytes[2] == 0)
+            return false;
+            
+        // 192.0.2.0/24 - TEST-NET-1
+        if (bytes[0] == 192 && bytes[1] == 0 && bytes[2] == 2)
+            return false;
+            
+        // 192.88.99.0/24 - 6to4 Relay Anycast
+        if (bytes[0] == 192 && bytes[1] == 88 && bytes[2] == 99)
+            return false;
+            
+        // 192.168.0.0/16 - Private network
+        if (bytes[0] == 192 && bytes[1] == 168)
+            return false;
+            
+        // 198.18.0.0/15 - Network interconnect device benchmark testing
+        if (bytes[0] == 198 && (bytes[1] & 0xFE) == 18)
+            return false;
+            
+        // 198.51.100.0/24 - TEST-NET-2
+        if (bytes[0] == 198 && bytes[1] == 51 && bytes[2] == 100)
+            return false;
+            
+        // 203.0.113.0/24 - TEST-NET-3
+        if (bytes[0] == 203 && bytes[1] == 0 && bytes[2] == 113)
+            return false;
+            
+        // 224.0.0.0/4 - Multicast
+        if ((bytes[0] & 0xF0) == 224)
+            return false;
+            
+        // 240.0.0.0/4 - Reserved for future use
+        if ((bytes[0] & 0xF0) == 240)
+            return false;
+            
+        // 255.255.255.255/32 - Limited broadcast
+        if (bytes[0] == 255 && bytes[1] == 255 && bytes[2] == 255 && bytes[3] == 255)
+            return false;
+
+        return true;
+    }
+
+    private bool IsPublicIPv6(IPAddress ip)
+    {
+        byte[] bytes = ip.GetAddressBytes();
+        
+        // Check for private/reserved IPv6 ranges
+        
+        // ::1/128 - Loopback
+        if (ip.Equals(IPAddress.IPv6Loopback))
+            return false;
+            
+        // ::/128 - Unspecified
+        if (ip.Equals(IPAddress.IPv6Any))
+            return false;
+            
+        // ::ffff:0:0/96 - IPv4-mapped IPv6
+        if (bytes[0] == 0 && bytes[1] == 0 && bytes[2] == 0 && bytes[3] == 0 &&
+            bytes[4] == 0 && bytes[5] == 0 && bytes[6] == 0 && bytes[7] == 0 &&
+            bytes[8] == 0 && bytes[9] == 0 && bytes[10] == 0xFF && bytes[11] == 0xFF)
+            return false;
+            
+        // fe80::/10 - Link-local
+        if (bytes[0] == 0xFE && (bytes[1] & 0xC0) == 0x80)
+            return false;
+            
+        // fc00::/7 - Unique local address
+        if ((bytes[0] & 0xFE) == 0xFC)
+            return false;
+            
+        // ff00::/8 - Multicast
+        if (bytes[0] == 0xFF)
+            return false;
+            
+        // 2001:db8::/32 - Documentation
+        if (bytes[0] == 0x20 && bytes[1] == 0x01 && bytes[2] == 0x0D && bytes[3] == 0xB8)
+            return false;
+
+        return true;
+    }
+
+    private bool IsIpInRange(IPAddress ip, string cidrRange)
+    {
+        try
+        {
+            // Split CIDR range into IP and prefix length
+            string[] parts = cidrRange.Split('/');
+            if (parts.Length != 2)
+                return false;
+
+            IPAddress networkAddress = IPAddress.Parse(parts[0]);
+            int prefixLength = int.Parse(parts[1]);
+
+            // Convert IP addresses to bytes for comparison
+            byte[] ipBytes = ip.GetAddressBytes();
+            byte[] networkBytes = networkAddress.GetAddressBytes();
+
+            if (ipBytes.Length != networkBytes.Length)
+                return false; // Different IP versions
+
+            // Compare the network portions
+            int numBytes = prefixLength / 8;
+            int remainingBits = prefixLength % 8;
+
+            // Compare full bytes
+            for (int i = 0; i < numBytes && i < ipBytes.Length; i++)
+            {
+                if (ipBytes[i] != networkBytes[i])
+                    return false;
+            }
+
+            // Compare remaining bits if any
+            if (remainingBits > 0 && numBytes < ipBytes.Length)
+            {
+                int mask = 0xFF << (8 - remainingBits);
+                if ((ipBytes[numBytes] & mask) != (networkBytes[numBytes] & mask))
+                    return false;
+            }
+
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private string GetScoreClass(int score)
+    {
+        if (score < 25) return "text-success";
+        if (score < 75) return "text-warning";
+        return "text-danger";
+    }
+
+    private bool HasSearchResults()
+    {
+        return (azureMatchedServices != null && azureMatchedServices.Any()) ||
+               (awsMatchedServices != null && awsMatchedServices.Any()) ||
+               (gcpMatchedServices != null && gcpMatchedServices.Any()) ||
+               (oracleMatchedServices != null && oracleMatchedServices.Any());
+    }
+
+    private class CloudMatch
+    {
+        public string ServiceInfo { get; set; } = string.Empty;
+        public string CidrRange { get; set; } = string.Empty;
+        
+        public override string ToString()
+        {
+            return $"{ServiceInfo} (CIDR: {CidrRange})";
+        }
+    }
+
+    private class AzureIpRanges
+    {
+        public int changeNumber { get; set; }
+        public string? cloud { get; set; }
+        public List<AzureService>? values { get; set; }
+    }
+
+    private class AzureService
+    {
+        public string? name { get; set; }
+        public string? id { get; set; }
+        public ServiceProperties? properties { get; set; }
+    }
+
+    private class ServiceProperties
+    {
+        public string[]? addressPrefixes { get; set; }
+        public string[]? networkFeatures { get; set; }
+        public string[]? platformFeatures { get; set; }
+        public string? systemService { get; set; }
+    }
+
+    private class AwsIpRanges
+    {
+        public string? syncToken { get; set; }
+        public string? createDate { get; set; }
+        public List<AwsPrefix>? prefixes { get; set; }
+        public List<AwsPrefix>? ipv6_prefixes { get; set; }
+    }
+
+    private class AwsPrefix
+    {
+        public string? ip_prefix { get; set; }
+        public string? region { get; set; }
+        public string? service { get; set; }
+        public string? network_border_group { get; set; }
+    }
+
+    private class GcpIpRanges
+    {
+        public string? syncToken { get; set; }
+        public string? creationTime { get; set; }
+        public List<GcpPrefix>? prefixes { get; set; }
+    }    private class GcpPrefix
+    {
+        public string? ipv4Prefix { get; set; }
+        public string? ipv6Prefix { get; set; }
+        public string? service { get; set; }
+        public string? scope { get; set; }
+    }
+
+    private class OracleIpRanges
+    {
+        public string? last_updated_timestamp { get; set; }
+        public List<OracleRegion>? regions { get; set; }
+    }
+
+    private class OracleRegion
+    {
+        public string? region { get; set; }
+        public List<OracleCidr>? cidrs { get; set; }
+    }
+
+    private class OracleCidr
+    {
+        public string? cidr { get; set; }
+        public List<string>? tags { get; set; }
+    }
+}
