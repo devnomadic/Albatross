@@ -114,6 +114,23 @@ main {
     display: inline;
 }
 
+/* Style the build link */
+.build-number a {
+    color: #666;
+    text-decoration: underline;
+    font-size: 0.7rem;
+    font-family: monospace;
+}
+
+.build-number a:hover {
+    color: #333;
+    text-decoration: underline;
+}
+
+.build-number a:visited {
+    color: #666;
+}
+
 .cloud-logos {
     text-align: center;
     flex-grow: 1;
@@ -155,10 +172,25 @@ main {
         content: "\A";
         white-space: pre;
     }
-    
-    .build-label, .build-value {
+      .build-label, .build-value {
         display: block;
         text-align: center;
+    }
+      /* Mobile style for build link */
+    .build-number a {
+        color: #666;
+        text-decoration: underline;
+        font-size: 0.6rem;
+        font-family: monospace;
+    }
+    
+    .build-number a:hover {
+        color: #333;
+        text-decoration: underline;
+    }
+    
+    .build-number a:visited {
+        color: #666;
     }
     
     .build-value {
