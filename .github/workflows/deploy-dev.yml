@@ -203,20 +203,25 @@ jobs:
             comment.user.type === 'Bot' && comment.body.includes('🚀 Albatross Preview')
           );
           
-          const workerUrl = '${{ needs.build.outputs.worker-url }}';
-          const spaUrl = '${{ needs.build.outputs.spa-url }}';
+          // Set fallback URLs since we don't depend on build job
+          let workerUrl = 'https://abuseipdb-preview.devnomadic.workers.dev';
+          let spaUrl = 'https://${{ github.head_ref || github.ref_name }}.albatross-5kt.pages.dev';
           
-          const commentBody = `## 🚀 Albatross Preview Deployment
+          // Replace slashes with dashes for Cloudflare Pages URL format
+          spaUrl = spaUrl.replace(/\//g, '-');
           
-          **🌐 SPA Preview:** ${spaUrl || 'Not deployed'}
-          **🔧 Worker Preview:** ${workerUrl || 'Not deployed'}
+          const commentBody = \`## 🚀 Albatross Preview Deployment
+          
+          **🌐 SPA Preview:** \${spaUrl}
+          **🔧 Worker Preview:** \${workerUrl}
           
           **Environment:** Development/Preview
-          **Branch:** \`${{ github.head_ref }}\`
-          **Commit:** \`${{ github.sha }}\`
-          **Preview Name:** \`${{ needs.build.outputs.preview-name }}\`
+          **Branch:** \\\`${{ github.head_ref || github.ref_name }}\\\`
+          **Commit:** \\\`${{ github.sha }}\\\`
+          **Event:** ${{ github.event.action || 'push' }}
+          **Updated:** \${new Date().toISOString()}
           
-          This preview will be automatically cleaned up when the PR is merged or closed.`;
+          This preview will be automatically cleaned up when the PR is merged or closed.\`;
           
           if (botComment) {
             await github.rest.issues.updateComment({
@@ -225,6 +230,7 @@ jobs:
               comment_id: botComment.id,
               body: commentBody
             });
+            console.log('Updated existing comment');
           } else {
             await github.rest.issues.createComment({
               owner: context.repo.owner,
@@ -232,4 +238,5 @@ jobs:
               issue_number: context.issue.number,
               body: commentBody
             });
+            console.log('Created new comment');
           }
