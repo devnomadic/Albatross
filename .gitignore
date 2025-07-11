@@ -68,6 +68,7 @@ Generated/
 cloudflare-worker.js
 build.env
 build-manifest.json
+wwwroot/sitemap.xml
 
 # IDE/Editor files
 .vscode/settings.json
