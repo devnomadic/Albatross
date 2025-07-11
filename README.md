@@ -93,10 +93,18 @@ The project uses automated GitHub Actions workflows for deployment:
 4. **Deploy App**: Use your preferred hosting platform
 
 ### GitHub Actions
-The project includes two main deployment workflows in `.github/workflows/`:
+The project includes comprehensive GitHub Actions workflows in `.github/workflows/`:
+
+**🚀 Deployment Workflows:**
 - **`deploy-dev.yml`**: Handles development and preview deployments
 - **`deploy-production.yml`**: Handles production deployments
-- **`ci.yml`**: Runs tests and code formatting checks
+
+**🔧 CI/CD Workflows:**
+- **`ci.yml`**: Runs tests, code formatting checks, and builds
+
+**🛡️ Security Workflows:**
+- **`codeql.yml`**: GitHub's CodeQL security analysis for code vulnerabilities
+- **`dependency-review.yml`**: Reviews dependencies for security vulnerabilities in PRs
 
 These workflows automatically:
 - Generate authentication keys during CI/CD
@@ -104,6 +112,8 @@ These workflows automatically:
 - Process and deploy the Cloudflare Worker to static preview or production workers
 - Create preview environments for feature branches and PRs
 - Maintain a shared `abuseipdb-preview` worker for all development deployments
+- Perform comprehensive security scanning on code and dependencies
+- Analyze C# and JavaScript/TypeScript code for vulnerabilities
 
 ## Project Structure
 
@@ -211,6 +221,17 @@ Users can specify custom report age limits using a semicolon delimiter:
 ✅ **Production Deployment**: Live at `https://albatross.devnomadic.com`
 ✅ **Build System**: Automated key generation and injection working
 ✅ **GitHub Actions**: Automated CI/CD pipeline functional
+✅ **Security Scanning**: CodeQL and dependency review workflows active
+✅ **Code Quality**: Automated formatting and testing in CI/CD
+
+## Image Credits
+
+This project uses free images sourced from:
+
+- **[Flaticon](https://www.flaticon.com/)** - Free icons and graphics
+- **[Unsplash](https://unsplash.com/)** - Free high-quality photography
+
+We appreciate these platforms for providing free resources to the developer community.
 
 ## License
 
