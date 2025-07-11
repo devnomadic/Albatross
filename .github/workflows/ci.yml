@@ -159,7 +159,7 @@ jobs:
   preview-build:
     name: Preview Build
     runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request'
+    if: github.event_name == 'pull_request' && github.event.action == 'synchronize'
     
     steps:
     - name: Checkout repository

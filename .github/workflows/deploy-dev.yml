@@ -185,7 +185,7 @@ jobs:
     name: Update PR Comment
     needs: build
     runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request'
+    if: github.event_name == 'pull_request' && github.event.action == 'synchronize'
     
     steps:
     - name: Update PR Comment
