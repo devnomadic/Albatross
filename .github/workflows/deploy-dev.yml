@@ -1,0 +1,244 @@
+# Deploy Albatross to Development/Preview (SPA + Worker)
+name: Deploy Dev
+
+on:
+  push:
+    branches: [ develop, dev, feature/*, fix/* ]
+    paths-ignore:
+      - '*.md'
+      - 'LICENSE'
+      - '.gitignore'
+#  pull_request:
+#    branches: [ develop, main ]
+#    types: [opened, synchronize, reopened]
+#    paths-ignore:
+#      - '*.md'
+#      - 'LICENSE'
+#      - '.gitignore'
+  workflow_dispatch:
+    inputs:
+      deploy_spa:
+        description: 'Deploy SPA'
+        required: false
+        default: true
+        type: boolean
+      deploy_worker:
+        description: 'Deploy Worker'
+        required: false
+        default: true
+        type: boolean
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+  actions: read
+
+env:
+  DOTNET_VERSION: '8.0.x'
+  NODE_VERSION: '20'
+
+jobs:
+  build:
+    name: Build Albatross Application
+    runs-on: ubuntu-latest
+    
+    outputs:
+      preview-name: ${{ steps.preview.outputs.name }}
+      spa-url: ${{ steps.spa-deploy.outputs.url }}
+      worker-url: ${{ steps.worker-deploy.outputs.url }}
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: ${{ env.DOTNET_VERSION }}
+        
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+        cache: 'npm'
+        
+    - name: Install npm dependencies
+      run: npm ci
+      
+    - name: Generate Preview Name
+      id: preview
+      run: |
+        if [ "${{ github.event_name }}" == "pull_request" ]; then
+          PREVIEW_NAME="pr-${{ github.event.number }}"
+        else
+          BRANCH_NAME="${{ github.ref_name }}"
+          PREVIEW_NAME=$(echo "${BRANCH_NAME}" | sed 's/[^a-zA-Z0-9-]/-/g' | tr '[:upper:]' '[:lower:]' | cut -c1-32)
+        fi
+        echo "name=${PREVIEW_NAME}" >> $GITHUB_OUTPUT
+        echo "Preview name: ${PREVIEW_NAME}"
+        
+    - name: Generate Auth Key and Build
+      shell: pwsh
+      env:
+        ABUSEIPDB_API_KEY: ${{ secrets.ABUSEIPDB_API_KEY_DEV }}
+        CLOUDFLARE_RADAR_API_TOKEN: ${{ secrets.CLOUDFLARE_RADAR_API_TOKEN_DEV }}
+        SkipCodeGeneration: false
+        ALBATROSS_ENVIRONMENT: preview
+      run: |
+        # Generate authentication key with environment context
+        ./Generate-AuthKey.ps1 -OutputPath "Generated" -Environment "preview" -Verbose
+        
+        # Restore .NET dependencies
+        dotnet restore
+        
+        # Build application (this generates both SPA and Worker files)
+        dotnet build --configuration Release --no-restore
+        
+        # Process worker template with generated constants
+        ./Process-Worker.ps1 -TemplateFile "cloudflare-worker.template.js" -OutputFile "cloudflare-worker.js" -ConstantsFile "Generated/build-constants.js"
+        
+        # Inject development API keys
+        if ($env:ABUSEIPDB_API_KEY) {
+          (Get-Content cloudflare-worker.js) -replace 'const ABUSEIPDB_API_KEY = "[^"]*"', "const ABUSEIPDB_API_KEY = `"$env:ABUSEIPDB_API_KEY`"" | Set-Content cloudflare-worker.js
+          Write-Host "✅ Injected AbuseIPDB API key from GitHub secret (DEV)"
+        } else {
+          Write-Warning "⚠️ ABUSEIPDB_API_KEY_DEV secret not found - using template default"
+        }
+        
+        if ($env:CLOUDFLARE_RADAR_API_TOKEN) {
+          (Get-Content cloudflare-worker.js) -replace 'const CLOUDFLARE_API_TOKEN = "[^"]*"', "const CLOUDFLARE_API_TOKEN = `"$env:CLOUDFLARE_RADAR_API_TOKEN`"" | Set-Content cloudflare-worker.js
+          Write-Host "✅ Injected Cloudflare Radar API token from GitHub secret (DEV)"
+        } else {
+          Write-Warning "⚠️ CLOUDFLARE_RADAR_API_TOKEN_DEV secret not found - using template default"
+        }
+        
+    - name: Publish SPA
+      run: |
+        dotnet publish Albatross.csproj --configuration Release --no-build --output ./dist
+        
+        # Update base href for preview deployment
+        if [ "${{ github.event_name }}" == "pull_request" ]; then
+          sed -i 's|<base href="/" />|<base href="/pr-${{ github.event.number }}/" />|g' ./dist/wwwroot/index.html
+        fi
+        
+    - name: Deploy Worker to Preview
+      id: worker-deploy
+      if: github.event.inputs.deploy_worker != 'false'
+      env:
+        CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      run: |
+        # Deploy to static preview worker
+        WORKER_NAME="abuseipdb-preview"
+        
+        DEPLOYMENT_OUTPUT=$(npx wrangler deploy \
+          --name "${WORKER_NAME}" \
+          --compatibility-date 2024-06-08 \
+          cloudflare-worker.js 2>&1)
+        
+        # Extract the worker URL from deployment output
+        WORKER_URL=$(echo "$DEPLOYMENT_OUTPUT" | grep -oE 'https://[a-zA-Z0-9.-]+\.workers\.dev' | head -1)
+        
+        if [ -z "$WORKER_URL" ]; then
+          # Construct the URL from the worker name
+          WORKER_URL="https://${WORKER_NAME}.workers.dev"
+        fi
+        
+        echo "url=${WORKER_URL}" >> $GITHUB_OUTPUT
+        echo "Worker URL: ${WORKER_URL}"
+        echo "Worker Name: ${WORKER_NAME}"
+        echo "Deployment output: $DEPLOYMENT_OUTPUT"
+        
+    - name: Deploy SPA to Cloudflare Pages
+      id: spa-deploy
+      if: github.event.inputs.deploy_spa != 'false'
+      env:
+        CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      run: |
+        # Deploy to Cloudflare Pages preview
+        DEPLOYMENT_OUTPUT=$(npx wrangler pages deploy ./dist/wwwroot --project-name ${{ secrets.CLOUDFLARE_PAGES_PROJECT }} --branch ${{ steps.preview.outputs.name }})
+        
+        # Extract the URL from the deployment output
+        SPA_URL=$(echo "$DEPLOYMENT_OUTPUT" | grep -oE 'https://[a-zA-Z0-9.-]+\.pages\.dev' | head -1)
+        
+        if [ -z "$SPA_URL" ]; then
+          # Fallback URL format using branch name
+          SPA_URL="https://${{ github.head_ref || github.ref_name }}.albatross-5kt.pages.dev"
+          echo "Using fallback URL: ${SPA_URL}"
+        fi
+        
+        echo "url=${SPA_URL}" >> $GITHUB_OUTPUT
+        echo "SPA URL: ${SPA_URL}"
+        
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: albatross-${{ steps.preview.outputs.name }}
+        path: |
+          ./dist/wwwroot/
+          ./cloudflare-worker.js
+          ./Generated/
+        retention-days: 7
+
+  update-pr-comment:
+    name: Update PR Comment
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request' && github.event.action == 'synchronize'
+    
+    steps:
+    - name: Update PR Comment
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const { data: comments } = await github.rest.issues.listComments({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            issue_number: context.issue.number,
+          });
+          
+          const botComment = comments.find(comment => 
+            comment.user.type === 'Bot' && comment.body.includes('🚀 Albatross Preview')
+          );
+          
+          // Set fallback URLs since we don't depend on build job
+          let workerUrl = 'https://abuseipdb-preview.devnomadic.workers.dev';
+          
+          // Get branch name and replace slashes with dashes for Cloudflare Pages URL format
+          const branchName = '${{ github.head_ref || github.ref_name }}';
+          const cleanBranchName = branchName.replace(/\//g, '-');
+          let spaUrl = 'https://' + cleanBranchName + '.albatross-5kt.pages.dev';
+          
+          const timestamp = new Date().toISOString();
+          const commitSha = '${{ github.sha }}';
+          const eventAction = '${{ github.event.action }}' || 'push';
+          
+          const commentBody = '## 🚀 Albatross Preview Deployment\n\n' +
+            '**🌐 SPA Preview:** ' + spaUrl + '\n' +
+            '**🔧 Worker Preview:** ' + workerUrl + '\n\n' +
+            '**Environment:** Development/Preview\n' +
+            '**Branch:** `' + branchName + '`\n' +
+            '**Commit:** `' + commitSha + '`\n' +
+            '**Event:** ' + eventAction + '\n' +
+            '**Updated:** ' + timestamp + '\n\n' +
+            'This preview will be automatically cleaned up when the PR is merged or closed.';
+          
+          if (botComment) {
+            await github.rest.issues.updateComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              comment_id: botComment.id,
+              body: commentBody
+            });
+            console.log('Updated existing comment');
+          } else {
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: commentBody
+            });
+            console.log('Created new comment');
+          }

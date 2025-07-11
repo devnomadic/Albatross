@@ -1,0 +1,66 @@
+<Project Sdk="Microsoft.NET.Sdk.BlazorWebAssembly">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+  <!-- Exclude Generated folder from automatic compilation to avoid duplicates -->
+  <ItemGroup>
+    <Compile Remove="Generated/**/*.cs" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <AssemblyTitle>$([System.DateTime]::Now.ToString(yyyyMMdd-HHmm))</AssemblyTitle>
+  </PropertyGroup>  <!-- Pre-build target to generate authentication keys -->
+  <Target Name="GenerateAuthKey" BeforeTargets="BeforeCompile" Condition="'$(SkipCodeGeneration)' != 'true' AND '$(DesignTimeBuild)' != 'true'">
+    <Message Text="Generating build-time authentication key..." Importance="high" />
+      <!-- Create Generated directory if it doesn't exist -->
+    <MakeDir Directories="$(MSBuildProjectDirectory)/Generated" Condition="!Exists('$(MSBuildProjectDirectory)/Generated')" />
+    
+    <!-- Determine environment parameter from environment variable or default to production -->
+    <PropertyGroup>
+      <AlbatrossEnvironment Condition="'$(AlbatrossEnvironment)' == ''">$(ALBATROSS_ENVIRONMENT)</AlbatrossEnvironment>
+      <AlbatrossEnvironment Condition="'$(AlbatrossEnvironment)' == ''">production</AlbatrossEnvironment>
+    </PropertyGroup>
+    
+    <!-- Run PowerShell script to generate auth key with environment parameter -->
+    <Exec Command="pwsh -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)/Generate-AuthKey.ps1&quot; -OutputPath &quot;$(MSBuildProjectDirectory)/Generated&quot; -Environment &quot;$(AlbatrossEnvironment)&quot; -Verbose" 
+          ContinueOnError="false" 
+          WorkingDirectory="$(MSBuildProjectDirectory)" />
+    
+    <Message Text="Authentication key generation completed for environment: $(AlbatrossEnvironment)" Importance="high" />
+  </Target>  <!-- Post-auth-key target to process worker -->
+  <Target Name="ProcessWorker" AfterTargets="GenerateAuthKey" BeforeTargets="BeforeCompile" Condition="'$(SkipCodeGeneration)' != 'true' AND '$(DesignTimeBuild)' != 'true'">
+    <Message Text="Processing Cloudflare Worker with generated constants..." Importance="high" />
+    
+    <!-- Process the worker template with generated constants -->
+    <Exec Command="pwsh -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)/Process-Worker.ps1&quot; -TemplateFile &quot;$(MSBuildProjectDirectory)/cloudflare-worker.template.js&quot; -OutputFile &quot;$(MSBuildProjectDirectory)/cloudflare-worker.js&quot; -ConstantsFile &quot;$(MSBuildProjectDirectory)/Generated/build-constants.js&quot; -Verbose" 
+          ContinueOnError="false" 
+          WorkingDirectory="$(MSBuildProjectDirectory)" />
+      <Message Text="Worker processing completed" Importance="high" />
+  </Target>  <!-- Include generated C# files in compilation -->
+  <Target Name="IncludeGeneratedFiles" BeforeTargets="BeforeCompile" AfterTargets="ProcessWorker" Condition="'$(SkipCodeGeneration)' != 'true' AND '$(DesignTimeBuild)' != 'true'">
+    <ItemGroup>
+      <Compile Include="Generated/BuildConstants.cs" Condition="Exists('Generated/BuildConstants.cs')" />
+    </ItemGroup>
+  </Target>
+
+  <!-- Clean generated files -->
+  <Target Name="CleanGenerated" BeforeTargets="Clean">
+    <ItemGroup>
+      <GeneratedFiles Include="Generated/**/*" />
+      <GeneratedFiles Include="cloudflare-worker.js" Condition="Exists('cloudflare-worker.js')" />
+      <GeneratedFiles Include="build.env" Condition="Exists('build.env')" />
+      <GeneratedFiles Include="build-manifest.json" Condition="Exists('build-manifest.json')" />
+    </ItemGroup>
+    <Delete Files="@(GeneratedFiles)" />
+    <RemoveDir Directories="Generated" Condition="Exists('Generated')" />
+    <Message Text="Cleaned generated files" Importance="high" />
+  </Target>
+  
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly" Version="8.0.13" />
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly.DevServer" Version="8.0.13" PrivateAssets="all" />
+  </ItemGroup>
+
+</Project>

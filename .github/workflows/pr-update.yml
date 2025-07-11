@@ -1,0 +1,281 @@
+# PR Update Workflow - Updates PR comments with CI and deployment status
+name: PR Update
+
+on:
+  workflow_run:
+    workflows: ["CI", "Deploy Dev"]
+    types: [completed]
+  pull_request:
+    branches: [ main, master, develop ]
+    types: [opened, synchronize, reopened]
+  pull_request_review:
+    types: [submitted]
+  # Remove check_suite trigger to avoid premature updates
+  schedule:
+    # Fallback: run every 10 minutes to catch any missed updates
+    - cron: '*/10 * * * *'
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+  actions: read
+  checks: read
+
+jobs:
+  update-pr-status:
+    name: Update PR Status
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request' || github.event_name == 'pull_request_review' || github.event_name == 'workflow_run' || github.event_name == 'schedule'
+    
+    steps:
+    - name: Wait for workflows to complete
+      if: github.event_name == 'pull_request' || github.event_name == 'pull_request_review'
+      uses: actions/github-script@v7
+      with:
+        script: |
+          // Get PR number
+          let prNumber;
+          if (context.payload.pull_request) {
+            prNumber = context.payload.pull_request.number;
+          } else {
+            console.log('No PR found for workflow waiting, skipping wait');
+            return;
+          }
+          
+          console.log(`Waiting for workflows to complete for PR #${prNumber}`);
+          
+          // Get PR details
+          const { data: pr } = await github.rest.pulls.get({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            pull_number: prNumber,
+          });
+          
+          const maxWaitMinutes = 15; // Maximum wait time
+          const checkIntervalSeconds = 30;
+          const maxChecks = (maxWaitMinutes * 60) / checkIntervalSeconds;
+          
+          for (let i = 0; i < maxChecks; i++) {
+            try {
+              const { data: workflowRuns } = await github.rest.actions.listWorkflowRunsForRepo({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                per_page: 50
+              });
+              
+              const relevantRuns = workflowRuns.workflow_runs.filter(run => 
+                run.head_sha === pr.head.sha && 
+                (run.name === 'CI' || run.name === 'Deploy Dev') &&
+                run.status !== 'completed'
+              );
+              
+              if (relevantRuns.length === 0) {
+                console.log('All workflows completed');
+                break;
+              }
+              
+              console.log(`${relevantRuns.length} workflows still running, waiting ${checkIntervalSeconds}s...`);
+              await new Promise(resolve => setTimeout(resolve, checkIntervalSeconds * 1000));
+            } catch (error) {
+              console.log(`Error checking workflows: ${error.message}`);
+              break;
+            }
+          }
+    
+    - name: Update PR Comment
+      uses: actions/github-script@v7
+      with:
+        script: |
+          try {
+            // Get PR number from different event types
+            let prNumber;
+            if (context.payload.pull_request) {
+              prNumber = context.payload.pull_request.number;
+            } else if (context.payload.workflow_run && context.payload.workflow_run.pull_requests.length > 0) {
+              prNumber = context.payload.workflow_run.pull_requests[0].number;
+            } else if (context.payload.check_suite && context.payload.check_suite.pull_requests.length > 0) {
+              prNumber = context.payload.check_suite.pull_requests[0].number;
+            } else {
+              console.log('No PR number found, skipping');
+              return;
+            }
+            
+            console.log(`Updating PR #${prNumber}`);
+            
+            // Get existing comments
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber,
+            });
+            
+            const botComment = comments.find(comment => 
+              comment.user.type === 'Bot' && comment.body.includes('🚀 PR Status Dashboard')
+            );
+            
+            // Get PR details
+            const { data: pr } = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: prNumber,
+            });
+            
+            console.log(`PR head SHA: ${pr.head.sha}`);
+            console.log(`PR branch: ${pr.head.ref}`);
+          
+          // Get check runs for this PR's head SHA
+          let checkRuns = { check_runs: [] };
+          try {
+            const checkResponse = await github.rest.checks.listForRef({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              ref: pr.head.sha
+            });
+            checkRuns = checkResponse.data;
+            console.log(`Found ${checkRuns.check_runs.length} check runs`);
+          } catch (error) {
+            console.log(`Error fetching check runs: ${error.message}`);
+          }
+          
+          // Find CI and Deploy Dev workflow runs
+          let ciStatus = 'pending';
+          let deployStatus = 'not deployed';
+          let ciUrl = '';
+          let deployUrl = '';
+          
+          // Also get recent workflow runs to match by SHA
+          try {
+            const { data: workflowRuns } = await github.rest.actions.listWorkflowRunsForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              per_page: 50
+            });
+            
+            console.log(`Found ${workflowRuns.workflow_runs.length} recent workflow runs`);
+            
+            // Find matching workflow runs by head SHA
+            let matchingRuns = 0;
+            for (const run of workflowRuns.workflow_runs) {
+              if (run.head_sha === pr.head.sha) {
+                matchingRuns++;
+                console.log(`Found matching run: ${run.name} - ${run.conclusion || run.status}`);
+                if (run.name === 'CI') {
+                  ciStatus = run.conclusion || run.status;
+                  ciUrl = run.html_url;
+                } else if (run.name === 'Deploy Dev') {
+                  deployStatus = run.conclusion || run.status;
+                  deployUrl = run.html_url;
+                }
+              }
+            }
+            console.log(`Found ${matchingRuns} matching workflow runs for SHA ${pr.head.sha}`);
+          } catch (error) {
+            console.log(`Error fetching workflow runs: ${error.message}`);
+          }
+          
+          // Also check for check runs that might have status
+          for (const check of checkRuns.check_runs) {
+            if (check.name.includes('CI')) {
+              const checkStatus = check.conclusion || check.status;
+              if (checkStatus !== 'pending' && ciStatus === 'pending') {
+                ciStatus = checkStatus;
+                ciUrl = check.html_url;
+              }
+            }
+          }
+          
+          // Generate status emojis
+          const getStatusEmoji = (status) => {
+            switch (status) {
+              case 'success': return '✅';
+              case 'failure': return '❌';
+              case 'cancelled': return '⏹️';
+              case 'in_progress': return '🔄';
+              case 'queued': return '⏳';
+              case 'pending': return '⏳';
+              default: return '⚪';
+            }
+          };
+          
+          // Generate preview URLs
+          const branchName = pr.head.ref;
+          const cleanBranchName = branchName.replace(/\//g, '-');
+          const spaUrl = `https://${cleanBranchName}.albatross-5kt.pages.dev`;
+          const workerUrl = 'https://abuseipdb-preview.devnomadic.workers.dev';
+          
+          // Build comment body
+          const timestamp = new Date().toISOString();
+          const commentBody = '## 🚀 PR Status Dashboard\n\n' +
+            '### 📊 Workflow Status\n' +
+            `${getStatusEmoji(ciStatus)} **CI**: ${ciStatus}` + (ciUrl ? ` ([view](${ciUrl}))` : '') + '\n' +
+            `${getStatusEmoji(deployStatus)} **Deploy**: ${deployStatus}` + (deployUrl ? ` ([view](${deployUrl}))` : '') + '\n\n' +
+            '### 🌐 Preview Environments\n' +
+            `**SPA Preview**: [${spaUrl}](${spaUrl})\n` +
+            `**Worker Preview**: [${workerUrl}](${workerUrl})\n\n` +
+            '### 📝 PR Details\n' +
+            `**Branch**: \`${branchName}\`\n` +
+            `**Commit**: \`${pr.head.sha.substring(0, 8)}\`\n` +
+            `**Author**: @${pr.user.login}\n` +
+            `**Target**: \`${pr.base.ref}\`\n` +
+            `**Last Updated**: ${timestamp}\n\n` +
+            '---\n' +
+            '*This comment is automatically updated by the PR Update workflow*';
+          
+          if (botComment) {
+            await github.rest.issues.updateComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              comment_id: botComment.id,
+              body: commentBody
+            });
+            console.log('Updated existing PR status comment');
+          } else {
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber,
+              body: commentBody
+            });
+            console.log('Created new PR status comment');
+          }
+          
+          } catch (error) {
+            console.error('Error updating PR status:', error);
+            core.setFailed(`Failed to update PR status: ${error.message}`);
+          }
+
+  check-deployment-health:
+    name: Check Deployment Health
+    runs-on: ubuntu-latest
+    needs: update-pr-status
+    if: github.event_name == 'pull_request' || github.event_name == 'workflow_run'
+    
+    steps:
+    - name: Health Check Preview Deployments
+      env:
+        HEAD_REF: ${{ github.head_ref }}
+      run: |
+        # Get branch name and create URLs
+        BRANCH_NAME="$HEAD_REF"
+        CLEAN_BRANCH=$(echo "$BRANCH_NAME" | sed 's/\//-/g')
+        SPA_URL="https://${CLEAN_BRANCH}.albatross-5kt.pages.dev"
+        WORKER_URL="https://abuseipdb-preview.devnomadic.workers.dev"
+        
+        echo "Checking deployment health..."
+        echo "SPA URL: $SPA_URL"
+        echo "Worker URL: $WORKER_URL"
+        
+        # Check SPA health (expect 200)
+        SPA_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$SPA_URL" || echo "000")
+        echo "SPA Status: $SPA_STATUS"
+        
+        # Check Worker health (expect 405 for GET request)
+        WORKER_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$WORKER_URL" || echo "000")
+        echo "Worker Status: $WORKER_STATUS"
+        
+        # Set outputs for other jobs to use
+        echo "spa_status=$SPA_STATUS" >> $GITHUB_OUTPUT
+        echo "worker_status=$WORKER_STATUS" >> $GITHUB_OUTPUT
+        echo "spa_url=$SPA_URL" >> $GITHUB_OUTPUT
+        echo "worker_url=$WORKER_URL" >> $GITHUB_OUTPUT

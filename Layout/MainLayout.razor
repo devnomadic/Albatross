@@ -1,0 +1,67 @@
+﻿@inherits LayoutComponentBase
+@using System.Reflection
+
+<div class="page">
+
+    <!--
+    <div class="sidebar">
+        <NavMenu />
+    </div>
+    -->
+
+    <main>
+        <!--
+        <div class="top-row ps-3">
+                <a class="navbar-brand" href="">Albatross</a>
+        </div>
+        -->
+
+        <!--
+        <div class="top-row px-4">
+            <a href="https://learn.microsoft.com/aspnet/core/" target="_blank">About</a>
+        </div>
+        -->
+        <article class="content px-4">
+            @Body
+        </article>        <div class="footer">
+            <div class="build-number">
+                <span class="build-label">Build:</span>
+                <a href="https://github.com/devnomadic/Albatross" alt="Albatross"><span class="build-value">@BuildInfo</span></a>
+            </div><div class="cloud-logos">
+                <a href="/ip-manifests/Azure.json" target="_blank">
+                    <img src="/images/Azure.png" alt="Azure" width="3%" border="0" />
+                </a>
+                <a href="/ip-manifests/AWS.json" target="_blank">
+                    <img src="/images/AWS.webp" alt="AWS" width="3%" border="0" />
+                </a>
+                <a href="/ip-manifests/GCP.json" target="_blank">
+                    <img src="/images/GCP.webp" alt="GCP" width="3%" border="0" />
+                </a>
+                <a href="/ip-manifests/Oracle.json" target="_blank">
+                    <img src="/images/OCI.png" alt="OCI" width="2%" border="0" />
+                </a>
+                <a href="https://radar.cloudflare.com/" target="_blank">
+                    <img src="/images/Cloudflare.svg" alt="Cloudflare" width="3%" border="0" />
+                </a>
+                <a href="https://www.abuseipdb.com" target="_blank">
+                    <img src="/images/abuseipdb.svg" alt="abuseipdb" width="2%" border="0" />
+                </a>
+            </div>
+        </div>
+    </main>
+</div>
+
+@code {
+    string BuildInfo = string.Empty;
+    
+    protected override void OnInitialized()
+    {
+        Assembly assembly = typeof(Program).Assembly;
+        var version = assembly.GetName().Version;
+        var title = assembly.GetCustomAttribute<AssemblyTitleAttribute>()?.Title ?? "Albatross";
+        var buildDate = DateTime.Now.ToString("yyyy-MM-dd");
+        
+        @* BuildInfo = $"{title} v{version}"; *@
+        BuildInfo = $"{title}";
+    }
+}

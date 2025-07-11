@@ -1,0 +1,30 @@
+# Robots.txt for Albatross
+# Allow general site access but discourage indexing of search functionality
+
+User-agent: *
+Allow: /
+
+# Block access to search-related functionality and sensitive areas
+Disallow: /api/
+Disallow: /*abuseipdb*
+Disallow: /*abuse*
+Disallow: /*search*
+Disallow: /*check*
+
+# Block access to sensitive files and directories
+Disallow: /.well-known/
+Disallow: /bin/
+Disallow: /obj/
+
+# Allow access to static resources
+Allow: /css/
+Allow: /js/
+Allow: /images/
+Allow: /fonts/
+Allow: /ip-manifests/
+
+# Discourage aggressive crawling with crawl delay
+Crawl-delay: 10
+
+# Sitemap location
+Sitemap: https://albatross.devnomadic.com/sitemap.xml
