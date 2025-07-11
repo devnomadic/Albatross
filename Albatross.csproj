@@ -44,7 +44,7 @@
       <Compile Include="Generated/BuildConstants.cs" Condition="Exists('Generated/BuildConstants.cs')" />
     </ItemGroup>
   </Target>  <!-- Generate dynamic sitemap during build using MSBuild -->
-  <Target Name="GenerateSitemap" BeforeTargets="GenerateStaticWebAssetsManifest;ComputeFilesToPublish" Condition="'$(SkipCodeGeneration)' != 'true' AND '$(DesignTimeBuild)' != 'true'">
+  <Target Name="GenerateSitemap" BeforeTargets="ResolveStaticWebAssetsInputs;PrepareForBuild" Condition="'$(SkipCodeGeneration)' != 'true' AND '$(DesignTimeBuild)' != 'true'">
     <Message Text="Generating dynamic sitemap..." Importance="high" />
     
     <!-- Determine domain from environment variable or use default -->
