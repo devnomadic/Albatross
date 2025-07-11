@@ -43,71 +43,9 @@
     <ItemGroup>
       <Compile Include="Generated/BuildConstants.cs" Condition="Exists('Generated/BuildConstants.cs')" />
     </ItemGroup>
-  </Target>  <!-- Generate dynamic sitemap before any build activities -->
-  <Target Name="GenerateSitemap" BeforeTargets="Build;Restore;PrepareForBuild;BeforeBuild" Condition="'$(SkipCodeGeneration)' != 'true' AND '$(DesignTimeBuild)' != 'true'">
-    <Message Text="Generating dynamic sitemap..." Importance="high" />
-    
-    <!-- Determine domain from environment variable or use default -->
-    <PropertyGroup>
-      <SitemapDomain Condition="'$(SitemapDomain)' == ''">$(SITEMAP_DOMAIN)</SitemapDomain>
-      <SitemapDomain Condition="'$(SitemapDomain)' == ''">https://albatross.devnomadic.com</SitemapDomain>
-      <CurrentDate>$([System.DateTime]::UtcNow.ToString(yyyy-MM-dd))</CurrentDate>
-    </PropertyGroup>
+  </Target>
 
-    <!-- Create sitemap XML content -->
-    <PropertyGroup>
-      <SitemapHeader>&lt;?xml version="1.0" encoding="UTF-8"?&gt;
-&lt;urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
-        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-        xsi:schemaLocation="http://www.sitemaps.org/schemas/sitemap/0.9
-        http://www.sitemaps.org/schemas/sitemap/0.9/sitemap.xsd"&gt;
-
-  &lt;!-- Main Application Page --&gt;
-  &lt;url&gt;
-    &lt;loc&gt;$(SitemapDomain)/&lt;/loc&gt;
-    &lt;lastmod&gt;$(CurrentDate)&lt;/lastmod&gt;
-    &lt;changefreq&gt;weekly&lt;/changefreq&gt;
-    &lt;priority&gt;1.0&lt;/priority&gt;
-  &lt;/url&gt;</SitemapHeader>
-      
-      <SitemapFooter>
-  &lt;url&gt;
-    &lt;loc&gt;$(SitemapDomain)/robots.txt&lt;/loc&gt;
-    &lt;lastmod&gt;$(CurrentDate)&lt;/lastmod&gt;
-    &lt;changefreq&gt;monthly&lt;/changefreq&gt;
-    &lt;priority&gt;0.3&lt;/priority&gt;
-  &lt;/url&gt;
-
-  &lt;!-- Note: Search functionality intentionally excluded per robots.txt --&gt;
-  &lt;!-- AbuseIPDB search endpoints are blocked from crawling --&gt;
-
-&lt;/urlset&gt;</SitemapFooter>
-    </PropertyGroup>
-
-    <!-- Find all IP manifest files -->
-    <ItemGroup>
-      <IpManifestFiles Include="wwwroot/ip-manifests/*.json" />
-    </ItemGroup>
-
-    <!-- Generate manifest URLs -->
-    <PropertyGroup>
-      <ManifestUrls>@(IpManifestFiles -> '
-  &lt;url&gt;
-    &lt;loc&gt;$(SitemapDomain)/ip-manifests/%(Filename)%(Extension)&lt;/loc&gt;
-    &lt;lastmod&gt;$(CurrentDate)&lt;/lastmod&gt;
-    &lt;changefreq&gt;daily&lt;/changefreq&gt;
-    &lt;priority&gt;0.8&lt;/priority&gt;
-  &lt;/url&gt;', '')</ManifestUrls>
-    </PropertyGroup>
-
-    <!-- Write sitemap file -->
-    <WriteLinesToFile File="wwwroot/sitemap.xml" 
-                      Lines="$(SitemapHeader)$(ManifestUrls)$(SitemapFooter)"
-                      Overwrite="true" 
-                      Encoding="UTF-8" />
-    
-    <Message Text="Sitemap generated: wwwroot/sitemap.xml with domain $(SitemapDomain)" Importance="high" />
-  </Target><!-- Clean generated files -->
+  <!-- Clean generated files -->
   <Target Name="CleanGenerated" BeforeTargets="Clean">
     <ItemGroup>
       <GeneratedFiles Include="Generated/**/*" />
