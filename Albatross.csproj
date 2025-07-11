@@ -4,7 +4,6 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
-
   <!-- Exclude Generated folder from automatic compilation to avoid duplicates -->
   <ItemGroup>
     <Compile Remove="Generated/**/*.cs" />
@@ -45,7 +44,7 @@
       <Compile Include="Generated/BuildConstants.cs" Condition="Exists('Generated/BuildConstants.cs')" />
     </ItemGroup>
   </Target>  <!-- Generate dynamic sitemap during build using MSBuild -->
-  <Target Name="GenerateSitemap" AfterTargets="IncludeGeneratedFiles" BeforeTargets="BeforeCompile" Condition="'$(SkipCodeGeneration)' != 'true' AND '$(DesignTimeBuild)' != 'true'">
+  <Target Name="GenerateSitemap" BeforeTargets="GenerateStaticWebAssetsManifest;ComputeFilesToPublish" Condition="'$(SkipCodeGeneration)' != 'true' AND '$(DesignTimeBuild)' != 'true'">
     <Message Text="Generating dynamic sitemap..." Importance="high" />
     
     <!-- Determine domain from environment variable or use default -->
