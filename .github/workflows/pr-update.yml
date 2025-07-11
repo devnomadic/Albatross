@@ -31,45 +31,56 @@ jobs:
       uses: actions/github-script@v7
       with:
         script: |
-          // Get PR number from different event types
-          let prNumber;
-          if (context.payload.pull_request) {
-            prNumber = context.payload.pull_request.number;
-          } else if (context.payload.workflow_run && context.payload.workflow_run.pull_requests.length > 0) {
-            prNumber = context.payload.workflow_run.pull_requests[0].number;
-          } else if (context.payload.check_suite && context.payload.check_suite.pull_requests.length > 0) {
-            prNumber = context.payload.check_suite.pull_requests[0].number;
-          } else {
-            console.log('No PR number found, skipping');
-            return;
+          try {
+            // Get PR number from different event types
+            let prNumber;
+            if (context.payload.pull_request) {
+              prNumber = context.payload.pull_request.number;
+            } else if (context.payload.workflow_run && context.payload.workflow_run.pull_requests.length > 0) {
+              prNumber = context.payload.workflow_run.pull_requests[0].number;
+            } else if (context.payload.check_suite && context.payload.check_suite.pull_requests.length > 0) {
+              prNumber = context.payload.check_suite.pull_requests[0].number;
+            } else {
+              console.log('No PR number found, skipping');
+              return;
+            }
+            
+            console.log(`Updating PR #${prNumber}`);
+            
+            // Get existing comments
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber,
+            });
+            
+            const botComment = comments.find(comment => 
+              comment.user.type === 'Bot' && comment.body.includes('🚀 PR Status Dashboard')
+            );
+            
+            // Get PR details
+            const { data: pr } = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: prNumber,
+            });
+            
+            console.log(`PR head SHA: ${pr.head.sha}`);
+            console.log(`PR branch: ${pr.head.ref}`);
+          
+          // Get check runs for this PR's head SHA
+          let checkRuns = { check_runs: [] };
+          try {
+            const checkResponse = await github.rest.checks.listForRef({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              ref: pr.head.sha
+            });
+            checkRuns = checkResponse.data;
+            console.log(`Found ${checkRuns.check_runs.length} check runs`);
+          } catch (error) {
+            console.log(`Error fetching check runs: ${error.message}`);
           }
-          
-          console.log(`Updating PR #${prNumber}`);
-          
-          // Get existing comments
-          const { data: comments } = await github.rest.issues.listComments({
-            owner: context.repo.owner,
-            repo: context.repo.repo,
-            issue_number: prNumber,
-          });
-          
-          const botComment = comments.find(comment => 
-            comment.user.type === 'Bot' && comment.body.includes('🚀 PR Status Dashboard')
-          );
-          
-          // Get PR details
-          const { data: pr } = await github.rest.pulls.get({
-            owner: context.repo.owner,
-            repo: context.repo.repo,
-            pull_number: prNumber,
-          });
-          
-          // Get latest workflow runs for this PR
-          const { data: workflowRuns } = await github.rest.actions.listWorkflowRuns({
-            owner: context.repo.owner,
-            repo: context.repo.repo,
-            head_sha: pr.head.sha
-          });
           
           // Find CI and Deploy Dev workflow runs
           let ciStatus = 'pending';
@@ -77,13 +88,44 @@ jobs:
           let ciUrl = '';
           let deployUrl = '';
           
-          for (const run of workflowRuns.workflow_runs) {
-            if (run.name === 'CI') {
-              ciStatus = run.conclusion || run.status;
-              ciUrl = run.html_url;
-            } else if (run.name === 'Deploy Dev') {
-              deployStatus = run.conclusion || run.status;
-              deployUrl = run.html_url;
+          // Also get recent workflow runs to match by SHA
+          try {
+            const { data: workflowRuns } = await github.rest.actions.listWorkflowRunsForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              per_page: 50
+            });
+            
+            console.log(`Found ${workflowRuns.workflow_runs.length} recent workflow runs`);
+            
+            // Find matching workflow runs by head SHA
+            let matchingRuns = 0;
+            for (const run of workflowRuns.workflow_runs) {
+              if (run.head_sha === pr.head.sha) {
+                matchingRuns++;
+                console.log(`Found matching run: ${run.name} - ${run.conclusion || run.status}`);
+                if (run.name === 'CI') {
+                  ciStatus = run.conclusion || run.status;
+                  ciUrl = run.html_url;
+                } else if (run.name === 'Deploy Dev') {
+                  deployStatus = run.conclusion || run.status;
+                  deployUrl = run.html_url;
+                }
+              }
+            }
+            console.log(`Found ${matchingRuns} matching workflow runs for SHA ${pr.head.sha}`);
+          } catch (error) {
+            console.log(`Error fetching workflow runs: ${error.message}`);
+          }
+          
+          // Also check for check runs that might have status
+          for (const check of checkRuns.check_runs) {
+            if (check.name.includes('CI')) {
+              const checkStatus = check.conclusion || check.status;
+              if (checkStatus !== 'pending' && ciStatus === 'pending') {
+                ciStatus = checkStatus;
+                ciUrl = check.html_url;
+              }
             }
           }
           
@@ -140,6 +182,11 @@ jobs:
               body: commentBody
             });
             console.log('Created new PR status comment');
+          }
+          
+          } catch (error) {
+            console.error('Error updating PR status:', error);
+            core.setFailed(`Failed to update PR status: ${error.message}`);
           }
 
   check-deployment-health:
