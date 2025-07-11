@@ -14,13 +14,13 @@ namespace Albatross.Services
     {
         private readonly string _baseUrl;
         private readonly string _contentRoot;
-        
+
         public SitemapService(string baseUrl = "https://albatross.devnomadic.com", string? contentRoot = null)
         {
             _baseUrl = baseUrl.TrimEnd('/');
             _contentRoot = contentRoot ?? GetContentRoot();
         }
-        
+
         /// <summary>
         /// Generates a complete sitemap XML string
         /// </summary>
@@ -33,10 +33,10 @@ namespace Albatross.Services
             sitemap.AppendLine("        xsi:schemaLocation=\"http://www.sitemaps.org/schemas/sitemap/0.9");
             sitemap.AppendLine("        http://www.sitemaps.org/schemas/sitemap/0.9/sitemap.xsd\">");
             sitemap.AppendLine();
-            
+
             // Main page
             AddUrl(sitemap, "/", DateTime.UtcNow, "weekly", "1.0");
-            
+
             // IP Manifests (dynamically discovered from filesystem)
             var manifestFiles = GetIpManifestFiles();
             foreach (var manifest in manifestFiles)
@@ -44,18 +44,18 @@ namespace Albatross.Services
                 var lastModified = GetFileLastModified(manifest);
                 AddUrl(sitemap, $"/ip-manifests/{Path.GetFileName(manifest)}", lastModified, "daily", "0.8");
             }
-            
+
             // Static files
             AddUrl(sitemap, "/robots.txt", DateTime.UtcNow, "monthly", "0.3");
-            
+
             sitemap.AppendLine("  <!-- Note: Search functionality intentionally excluded per robots.txt -->");
             sitemap.AppendLine("  <!-- AbuseIPDB search endpoints are blocked from crawling -->");
             sitemap.AppendLine();
             sitemap.AppendLine("</urlset>");
-            
+
             return sitemap.ToString();
         }
-        
+
         /// <summary>
         /// Writes the sitemap to a file
         /// </summary>
@@ -73,9 +73,9 @@ namespace Albatross.Services
                 return false;
             }
         }
-        
 
-        
+
+
         private void AddUrl(StringBuilder sitemap, string path, DateTime lastMod, string changeFreq, string priority)
         {
             sitemap.AppendLine("  <url>");
@@ -86,7 +86,7 @@ namespace Albatross.Services
             sitemap.AppendLine("  </url>");
             sitemap.AppendLine();
         }
-        
+
         private string[] GetIpManifestFiles()
         {
             var manifestDir = Path.Combine(_contentRoot, "wwwroot", "ip-manifests");
@@ -94,12 +94,12 @@ namespace Albatross.Services
             {
                 return Array.Empty<string>();
             }
-            
+
             return Directory.GetFiles(manifestDir, "*.json")
                            .OrderBy(f => Path.GetFileName(f))
                            .ToArray();
         }
-        
+
         private DateTime GetFileLastModified(string filePath)
         {
             try
@@ -111,7 +111,7 @@ namespace Albatross.Services
                 return DateTime.UtcNow;
             }
         }
-        
+
         private static string GetContentRoot()
         {
             // Try to get the content root from the executing assembly location
@@ -119,7 +119,7 @@ namespace Albatross.Services
             if (!string.IsNullOrEmpty(assemblyLocation))
             {
                 var dir = new DirectoryInfo(Path.GetDirectoryName(assemblyLocation)!);
-                
+
                 // Walk up the directory tree to find the project root
                 while (dir != null && dir.Exists)
                 {
@@ -130,7 +130,7 @@ namespace Albatross.Services
                     dir = dir.Parent;
                 }
             }
-            
+
             // Fallback to current directory
             return Directory.GetCurrentDirectory();
         }
