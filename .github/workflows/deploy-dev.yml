@@ -210,18 +210,20 @@ jobs:
           // Replace slashes with dashes for Cloudflare Pages URL format
           spaUrl = spaUrl.replace(/\//g, '-');
           
-          const commentBody = \`## 🚀 Albatross Preview Deployment
+          const timestamp = new Date().toISOString();
+          const branchName = '${{ github.head_ref || github.ref_name }}';
+          const commitSha = '${{ github.sha }}';
+          const eventAction = '${{ github.event.action }}' || 'push';
           
-          **🌐 SPA Preview:** \${spaUrl}
-          **🔧 Worker Preview:** \${workerUrl}
-          
-          **Environment:** Development/Preview
-          **Branch:** \\\`${{ github.head_ref || github.ref_name }}\\\`
-          **Commit:** \\\`${{ github.sha }}\\\`
-          **Event:** ${{ github.event.action || 'push' }}
-          **Updated:** \${new Date().toISOString()}
-          
-          This preview will be automatically cleaned up when the PR is merged or closed.\`;
+          const commentBody = '## 🚀 Albatross Preview Deployment\n\n' +
+            '**🌐 SPA Preview:** ' + spaUrl + '\n' +
+            '**🔧 Worker Preview:** ' + workerUrl + '\n\n' +
+            '**Environment:** Development/Preview\n' +
+            '**Branch:** `' + branchName + '`\n' +
+            '**Commit:** `' + commitSha + '`\n' +
+            '**Event:** ' + eventAction + '\n' +
+            '**Updated:** ' + timestamp + '\n\n' +
+            'This preview will be automatically cleaned up when the PR is merged or closed.';
           
           if (botComment) {
             await github.rest.issues.updateComment({
