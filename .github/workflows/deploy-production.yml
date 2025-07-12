@@ -137,7 +137,7 @@ jobs:
         CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       run: |
         # Deploy to Cloudflare Pages production slot
-        DEPLOYMENT_OUTPUT=$(npx wrangler pages deploy ./dist/wwwroot --project-name ${{ secrets.CLOUDFLARE_PAGES_PROJECT }} --branch=initial)
+        DEPLOYMENT_OUTPUT=$(npx wrangler pages deploy ./dist/wwwroot --project-name ${{ secrets.CLOUDFLARE_PAGES_PROJECT }} --branch=inital)
         
         SPA_URL="https://albatross.devnomadic.com"
         echo "url=${SPA_URL}" >> $GITHUB_OUTPUT
