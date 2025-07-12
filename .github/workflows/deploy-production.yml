@@ -137,7 +137,7 @@ jobs:
         CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       run: |
         # Deploy to Cloudflare Pages production slot
-        DEPLOYMENT_OUTPUT=$(npx wrangler pages deploy ./dist/wwwroot --project-name ${{ secrets.CLOUDFLARE_PAGES_PROJECT }} --branch=production)
+        DEPLOYMENT_OUTPUT=$(npx wrangler pages deploy ./dist/wwwroot --project-name ${{ secrets.CLOUDFLARE_PAGES_PROJECT }} --branch=initial)
         
         SPA_URL="https://albatross.devnomadic.com"
         echo "url=${SPA_URL}" >> $GITHUB_OUTPUT
@@ -195,9 +195,9 @@ jobs:
         # Create release body
         cat > release_body.md << EOF
         ## 🚀 Albatross Production Deployment
-        
-        **🌐 SPA URL:** ${{ needs.build-and-deploy.outputs.spa-url }}
-        **🔧 Worker URL:** ${{ needs.build-and-deploy.outputs.worker-url }}
+
+        **🌐 SPA URL:** https://albatross.devnomadic.com
+        **🔧 Worker URL:** https://abuseipdb.workers.dev
         
         **Deployed from:** \`${{ github.sha }}\`
         **Deployed at:** ${DEPLOY_TIME}
