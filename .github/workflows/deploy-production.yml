@@ -39,6 +39,8 @@ jobs:
       spa-url: ${{ steps.spa-deploy.outputs.url }}
       worker-url: ${{ steps.worker-deploy.outputs.url }}
       version: ${{ steps.version.outputs.version }}
+      build-timestamp: ${{ steps.version.outputs.build-timestamp }}
+      build-id: ${{ steps.version.outputs.build-id }}
     
     steps:
     - name: Checkout repository
@@ -61,9 +63,17 @@ jobs:
     - name: Generate Version
       id: version
       run: |
-        VERSION="${{ github.sha }}"
+        # Generate build timestamp in the same format as the app (yyyyMMdd-HHmm)
+        BUILD_TIMESTAMP=$(date -u +"%Y%m%d-%H%M")
+        BUILD_ID=$(echo "${{ github.sha }}" | cut -c1-8)
+        VERSION="${BUILD_TIMESTAMP}-${BUILD_ID}"
+        
         echo "version=${VERSION}" >> $GITHUB_OUTPUT
+        echo "build-timestamp=${BUILD_TIMESTAMP}" >> $GITHUB_OUTPUT
+        echo "build-id=${BUILD_ID}" >> $GITHUB_OUTPUT
         echo "Production version: ${VERSION}"
+        echo "Build timestamp: ${BUILD_TIMESTAMP}"
+        echo "Build ID: ${BUILD_ID}"
         
     - name: Generate Auth Key and Build
       shell: pwsh
@@ -127,17 +137,9 @@ jobs:
         CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       run: |
         # Deploy to Cloudflare Pages production slot
-        DEPLOYMENT_OUTPUT=$(npx wrangler pages deploy ./dist/wwwroot --project-name ${{ secrets.CLOUDFLARE_PAGES_PROJECT }})
+        DEPLOYMENT_OUTPUT=$(npx wrangler pages deploy ./dist/wwwroot --project-name ${{ secrets.CLOUDFLARE_PAGES_PROJECT }} --branch=production)
         
-        # Extract the URL from the deployment output
-        SPA_URL=$(echo "$DEPLOYMENT_OUTPUT" | grep -oE 'https://[a-zA-Z0-9.-]+\.pages\.dev' | head -1)
-        
-        if [ -z "$SPA_URL" ]; then
-          # Fallback to standard production URL
-          SPA_URL="https://albatross.devnomadic.com"
-          echo "Using fallback URL: ${SPA_URL}"
-        fi
-        
+        SPA_URL="https://albatross.devnomadic.com"
         echo "url=${SPA_URL}" >> $GITHUB_OUTPUT
         echo "Production SPA URL: ${SPA_URL}"
         
@@ -187,17 +189,18 @@ jobs:
       run: |
         # Create tag and release using gh CLI
         TAG_NAME="v${{ needs.build-and-deploy.outputs.version }}"
-        RELEASE_NAME="Albatross v${{ needs.build-and-deploy.outputs.version }}"
+        RELEASE_NAME="Albatross Build ${{ needs.build-and-deploy.outputs.build-timestamp }} (${{ needs.build-and-deploy.outputs.build-id }})"
+        DEPLOY_TIME=$(date -u)
         
         # Create release body
-        cat > release_body.md << 'EOF'
+        cat > release_body.md << EOF
         ## 🚀 Albatross Production Deployment
         
         **🌐 SPA URL:** ${{ needs.build-and-deploy.outputs.spa-url }}
         **🔧 Worker URL:** ${{ needs.build-and-deploy.outputs.worker-url }}
         
-        **Deployed from:** `${{ github.sha }}`
-        **Deployed at:** $(date -u)
+        **Deployed from:** \`${{ github.sha }}\`
+        **Deployed at:** ${DEPLOY_TIME}
         
         ### Changes
         ${{ github.event.head_commit.message }}
@@ -209,12 +212,28 @@ jobs:
           --notes-file release_body.md \
           --target ${{ github.sha }}
         
-        # Upload artifacts
+        # Upload artifacts (excluding sensitive files)
         if [ -d "release" ]; then
           cd release
+          
+          # Upload individual files (excluding cloudflare-worker.js for security)
           for file in *; do
-            if [ -f "$file" ]; then
+            if [ -f "$file" ] && [ "$file" != "cloudflare-worker.js" ]; then
+              echo "Uploading file: $file"
               gh release upload "${TAG_NAME}" "$file"
+            elif [ -f "$file" ] && [ "$file" = "cloudflare-worker.js" ]; then
+              echo "Skipping cloudflare-worker.js (contains sensitive data)"
+            fi
+          done
+          
+          # Create and upload compressed archives for directories
+          for dir in */; do
+            if [ -d "$dir" ]; then
+              dir_name=${dir%/}  # Remove trailing slash
+              echo "Creating archive for directory: $dir_name"
+              tar -czf "${dir_name}.tar.gz" "$dir_name"
+              echo "Uploading archive: ${dir_name}.tar.gz"
+              gh release upload "${TAG_NAME}" "${dir_name}.tar.gz"
             fi
           done
         fi
