@@ -126,8 +126,8 @@ jobs:
         CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       run: |
-        # Deploy to Cloudflare Pages production slot (use --production flag)
-        DEPLOYMENT_OUTPUT=$(npx wrangler pages deploy ./dist/wwwroot --project-name ${{ secrets.CLOUDFLARE_PAGES_PROJECT }} --production)
+        # Deploy to Cloudflare Pages production slot
+        DEPLOYMENT_OUTPUT=$(npx wrangler pages deploy ./dist/wwwroot --project-name ${{ secrets.CLOUDFLARE_PAGES_PROJECT }})
         
         # Extract the URL from the deployment output
         SPA_URL=$(echo "$DEPLOYMENT_OUTPUT" | grep -oE 'https://[a-zA-Z0-9.-]+\.pages\.dev' | head -1)
@@ -166,7 +166,7 @@ jobs:
     name: Create GitHub Release
     needs: build-and-deploy
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    #if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     permissions:
       contents: write
       pull-requests: read
