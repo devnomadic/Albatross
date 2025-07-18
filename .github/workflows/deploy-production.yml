@@ -192,8 +192,10 @@ jobs:
         RELEASE_NAME="${{ needs.build-and-deploy.outputs.build-timestamp }} (${{ needs.build-and-deploy.outputs.build-id }})"
         DEPLOY_TIME=$(date -u)
         
+        # Safely sanitize commit message to prevent injection
+        SAFE_COMMIT_MESSAGE="$( printf '%s' '${{ github.event.head_commit.message }}' | head -c 500 | tr -d '\0\r' | sed 's/[`$"\\]/\\&/g' )"
+        
         # Create release body
-        export COMMIT_MESSAGE="${{ github.event.head_commit.message }}"
         cat > release_body.md << EOF
         ## 🚀 Albatross Production Deployment
 
@@ -204,7 +206,7 @@ jobs:
         **Deployed at:** ${DEPLOY_TIME}
         
         ### Changes
-        $COMMIT_MESSAGE
+        ${SAFE_COMMIT_MESSAGE}
         EOF
         
         # Create the release
