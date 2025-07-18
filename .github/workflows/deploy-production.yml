@@ -193,6 +193,7 @@ jobs:
         DEPLOY_TIME=$(date -u)
         
         # Create release body
+        export COMMIT_MESSAGE="${{ github.event.head_commit.message }}"
         cat > release_body.md << EOF
         ## 🚀 Albatross Production Deployment
 
@@ -203,7 +204,7 @@ jobs:
         **Deployed at:** ${DEPLOY_TIME}
         
         ### Changes
-        ${{ github.event.head_commit.message }}
+        $COMMIT_MESSAGE
         EOF
         
         # Create the release
