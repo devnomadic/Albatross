@@ -189,7 +189,7 @@ jobs:
       run: |
         # Create tag and release using gh CLI
         TAG_NAME="v${{ needs.build-and-deploy.outputs.version }}"
-        RELEASE_NAME="Albatross Build ${{ needs.build-and-deploy.outputs.build-timestamp }} (${{ needs.build-and-deploy.outputs.build-id }})"
+        RELEASE_NAME="${{ needs.build-and-deploy.outputs.build-timestamp }} (${{ needs.build-and-deploy.outputs.build-id }})"
         DEPLOY_TIME=$(date -u)
         
         # Create release body
