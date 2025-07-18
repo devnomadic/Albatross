@@ -107,8 +107,10 @@ a, .btn-link {
 
 /* Loading logo with 8-bit retro styling - ONLY for loading page */
 .loading-container .loading-logo {
-    width: 80px;
-    height: 80px;
+    width: 80px !important;
+    height: 80px !important;
+    max-width: 80px !important;
+    max-height: 80px !important;
     margin-bottom: 2rem;
     border-radius: 0; /* Sharp corners for pixel art feel */
     image-rendering: pixelated; /* Makes image crisp/pixelated */
@@ -132,16 +134,20 @@ a, .btn-link {
 /* Responsive logo sizing - maintaining pixel perfect scaling */
 @media (max-width: 768px) {
     .loading-container .loading-logo {
-        width: 64px;
-        height: 64px;
+        width: 64px !important;
+        height: 64px !important;
+        max-width: 64px !important;
+        max-height: 64px !important;
         margin-bottom: 1.5rem;
     }
 }
 
 @media (max-width: 480px) {
     .loading-container .loading-logo {
-        width: 48px;
-        height: 48px;
+        width: 48px !important;
+        height: 48px !important;
+        max-width: 48px !important;
+        max-height: 48px !important;
         margin-bottom: 1rem;
     }
 }
@@ -872,18 +878,36 @@ html body div.card div.card-header .btn {
     img[alt="CloudIPSearch"] {
         width: 60% !important;
         max-width: 90% !important;
+        /* Add pixel-perfect rendering */
+        image-rendering: pixelated !important;
+        image-rendering: -moz-crisp-edges !important;
+        image-rendering: crisp-edges !important;
+        image-rendering: -webkit-optimize-contrast !important;
+        -ms-interpolation-mode: nearest-neighbor !important;
     }
     
     /* ASCII text art albatross - scale up from 10% to 25% */
     img[alt="ascii-text-art-albatross"] {
         width: 25% !important;
         max-width: 40% !important;
+        /* Add pixel-perfect rendering */
+        image-rendering: pixelated !important;
+        image-rendering: -moz-crisp-edges !important;
+        image-rendering: crisp-edges !important;
+        image-rendering: -webkit-optimize-contrast !important;
+        -ms-interpolation-mode: nearest-neighbor !important;
     }
     
     /* Main Albatross ASCII art - scale up from 50% to 75% */
     img[alt="Albatross"] {
         width: 75% !important;
         max-width: 85% !important;
+        /* Add pixel-perfect rendering */
+        image-rendering: pixelated !important;
+        image-rendering: -moz-crisp-edges !important;
+        image-rendering: crisp-edges !important;
+        image-rendering: -webkit-optimize-contrast !important;
+        -ms-interpolation-mode: nearest-neighbor !important;
     }
 }
 
@@ -892,18 +916,36 @@ html body div.card div.card-header .btn {
     img[alt="CloudIPSearch"] {
         width: 70% !important;
         max-width: 95% !important;
+        /* Add pixel-perfect rendering */
+        image-rendering: pixelated !important;
+        image-rendering: -moz-crisp-edges !important;
+        image-rendering: crisp-edges !important;
+        image-rendering: -webkit-optimize-contrast !important;
+        -ms-interpolation-mode: nearest-neighbor !important;
     }
     
     /* ASCII text art albatross - larger for small phones */
     img[alt="ascii-text-art-albatross"] {
         width: 30% !important;
         max-width: 45% !important;
+        /* Add pixel-perfect rendering */
+        image-rendering: pixelated !important;
+        image-rendering: -moz-crisp-edges !important;
+        image-rendering: crisp-edges !important;
+        image-rendering: -webkit-optimize-contrast !important;
+        -ms-interpolation-mode: nearest-neighbor !important;
     }
     
     /* Main Albatross ASCII art - larger for small phones */
     img[alt="Albatross"] {
         width: 85% !important;
         max-width: 95% !important;
+        /* Add pixel-perfect rendering */
+        image-rendering: pixelated !important;
+        image-rendering: -moz-crisp-edges !important;
+        image-rendering: crisp-edges !important;
+        image-rendering: -webkit-optimize-contrast !important;
+        -ms-interpolation-mode: nearest-neighbor !important;
     }
 }
 
@@ -912,17 +954,35 @@ html body div.card div.card-header .btn {
     img[alt="CloudIPSearch"] {
         width: 80% !important;
         max-width: 98% !important;
+        /* Add pixel-perfect rendering */
+        image-rendering: pixelated !important;
+        image-rendering: -moz-crisp-edges !important;
+        image-rendering: crisp-edges !important;
+        image-rendering: -webkit-optimize-contrast !important;
+        -ms-interpolation-mode: nearest-neighbor !important;
     }
     
     /* ASCII text art albatross - maximum size for very small phones */
     img[alt="ascii-text-art-albatross"] {
         width: 35% !important;
         max-width: 50% !important;
+        /* Add pixel-perfect rendering */
+        image-rendering: pixelated !important;
+        image-rendering: -moz-crisp-edges !important;
+        image-rendering: crisp-edges !important;
+        image-rendering: -webkit-optimize-contrast !important;
+        -ms-interpolation-mode: nearest-neighbor !important;
     }
       /* Main Albatross ASCII art - maximum size for very small phones */
     img[alt="Albatross"] {
         width: 90% !important;
         max-width: 98% !important;
+        /* Add pixel-perfect rendering */
+        image-rendering: pixelated !important;
+        image-rendering: -moz-crisp-edges !important;
+        image-rendering: crisp-edges !important;
+        image-rendering: -webkit-optimize-contrast !important;
+        -ms-interpolation-mode: nearest-neighbor !important;
     }
 }
 
