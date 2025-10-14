@@ -79,7 +79,9 @@ jobs:
         echo "Preview name: ${PREVIEW_NAME}"
         
     - name: Restore Dependencies
-      run: dotnet restore
+      run: |
+        dotnet restore
+        dotnet restore Tests/Albatross.Tests.csproj
         
     - name: Run Unit Tests
       run: |

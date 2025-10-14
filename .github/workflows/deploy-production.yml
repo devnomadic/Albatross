@@ -76,7 +76,9 @@ jobs:
         echo "Build ID: ${BUILD_ID}"
         
     - name: Restore Dependencies
-      run: dotnet restore
+      run: |
+        dotnet restore
+        dotnet restore Tests/Albatross.Tests.csproj
         
     - name: Run Unit Tests
       run: |
