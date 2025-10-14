@@ -415,8 +415,13 @@
         statusMessage = "Searching IP ranges...";
         StateHasChanged();        try
         {
+            // Extract just the IP address part (strip ;maxDays if present)
+            string actualIpAddress = ipAddress.Contains(';') 
+                ? ipAddress.Split(';', 2)[0].Trim() 
+                : ipAddress.Trim();
+            
             // Parse the entered IP address
-            IPAddress enteredIp = IPAddress.Parse(ipAddress);
+            IPAddress enteredIp = IPAddress.Parse(actualIpAddress);
 
             // Load all manifest files in parallel for optimal performance
             var downloadTasks = new[]
