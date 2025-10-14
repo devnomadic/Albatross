@@ -68,6 +68,73 @@ The project uses MSBuild targets for automated key generation and code injection
 3. Build the project: `dotnet build`
 4. Run the application: `dotnet run`
 
+## Testing
+
+The project includes a comprehensive unit test suite to ensure IP range matching accuracy across IPv4 and IPv6 addresses.
+
+### Test Coverage
+- **Total Tests**: 41 unit tests
+- **Test Framework**: xUnit 2.4.2
+- **Target Framework**: .NET 8.0
+- **Test Categories**:
+  - IPv4 basic matching and validation
+  - IPv6 basic matching and validation
+  - Boundary condition testing (first/last address in ranges)
+  - Edge cases (single hosts /32 and /128, large networks /0)
+  - Real-world cloud provider IP ranges (AWS, Azure, GCP, Oracle)
+  - Invalid input handling (malformed CIDR, out-of-range prefixes)
+  - Mixed version validation (IPv4 vs IPv6 range mismatches)
+
+### Running Tests
+
+**Run all tests:**
+```bash
+dotnet test Tests/Albatross.Tests.csproj
+```
+
+**Run tests with detailed output:**
+```bash
+dotnet test Tests/Albatross.Tests.csproj --logger "console;verbosity=normal"
+```
+
+**Run tests as part of the build:**
+```bash
+./build.sh
+```
+
+The build script automatically:
+1. Updates cloud IP manifests
+2. Runs all unit tests
+3. Builds and publishes the application (only if tests pass)
+
+### Test Examples
+
+**IPv4 Cloud Range Tests:**
+- AWS EC2: `3.5.140.50` in `3.5.140.0/22` ✓
+- AWS S3: `52.216.100.10` in `52.216.0.0/15` ✓
+- Azure: `13.64.50.100` in `13.64.0.0/11` ✓
+- GCP: `34.64.100.200` in `34.64.0.0/10` ✓
+- Oracle: `132.145.100.50` in `132.145.0.0/16` ✓
+
+**IPv6 Cloud Range Tests:**
+- AWS CloudFront: `2600:9000:5300::1` in `2600:9000:5300::/40` ✓
+- AWS EC2: `2600:1900:8000::1` in `2600:1900:8000::/44` ✓
+- Azure: `2603:1030:100::1` in `2603:1030:100::/47` ✓
+- GCP: `2001:4860:4860::8888` in `2001:4860:4860::/48` ✓
+
+**Boundary & Edge Cases:**
+- First/last addresses in ranges
+- Single host ranges (/32 for IPv4, /128 for IPv6)
+- Large networks (/0 ranges)
+- Invalid CIDR notation handling
+
+### CI/CD Integration
+
+Tests are automatically run as part of the CI/CD pipeline:
+- **Pre-deployment validation**: Tests must pass before any deployment
+- **Build verification**: Each build runs the full test suite
+- **Continuous integration**: Tests run on all pull requests and commits
+
 ### Deployment
 
 The project uses automated GitHub Actions workflows for deployment:
@@ -126,6 +193,9 @@ Albatross/
 ├── Layout/
 │   ├── MainLayout.razor             # Application layout
 │   └── NavMenu.razor                # Navigation menu
+├── Tests/                           # Unit test suite
+│   ├── Albatross.Tests.csproj       # Test project configuration
+│   └── IpRangeTests.cs              # 41 IPv4/IPv6 range matching tests
 ├── Generated/                       # Auto-generated build artifacts
 │   ├── BuildConstants.cs            # C# authentication constants
 │   ├── build-constants.js           # JavaScript constants

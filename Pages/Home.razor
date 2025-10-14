@@ -536,6 +536,7 @@
         {
             var awsData = JsonSerializer.Deserialize<AwsIpRanges>(jsonContent);
             
+            // Search IPv4 prefixes
             if (awsData?.prefixes != null)
             {
                 foreach (var prefix in awsData.prefixes)
@@ -549,6 +550,31 @@
                             {
                                 ServiceInfo = serviceInfo,
                                 CidrRange = prefix.ip_prefix
+                            };
+                            // Only add if we don't already have this exact match
+                            if (!matchedServices.Any(m => m.ServiceInfo == match.ServiceInfo && m.CidrRange == match.CidrRange))
+                            {
+                                matchedServices.Add(match);
+                            }
+                        }
+                    }
+                }
+            }
+            
+            // Search IPv6 prefixes
+            if (awsData?.ipv6_prefixes != null)
+            {
+                foreach (var prefix in awsData.ipv6_prefixes)
+                {
+                    if (!string.IsNullOrEmpty(prefix.ipv6_prefix) && !string.IsNullOrEmpty(prefix.service))
+                    {
+                        if (IsIpInRange(enteredIp, prefix.ipv6_prefix))
+                        {
+                            string serviceInfo = $"{prefix.service} ({prefix.region})";
+                            var match = new CloudMatch
+                            {
+                                ServiceInfo = serviceInfo,
+                                CidrRange = prefix.ipv6_prefix
                             };
                             // Only add if we don't already have this exact match
                             if (!matchedServices.Any(m => m.ServiceInfo == match.ServiceInfo && m.CidrRange == match.CidrRange))
@@ -813,10 +839,16 @@
             byte[] ipBytes = ip.GetAddressBytes();
             byte[] networkBytes = networkAddress.GetAddressBytes();
 
+            // Check if both IPs are the same version (IPv4 = 4 bytes, IPv6 = 16 bytes)
             if (ipBytes.Length != networkBytes.Length)
-                return false; // Different IP versions
+                return false;
 
-            // Compare the network portions
+            // Validate prefix length based on IP version
+            int maxPrefixLength = ipBytes.Length * 8; // 32 for IPv4, 128 for IPv6
+            if (prefixLength < 0 || prefixLength > maxPrefixLength)
+                return false;
+
+            // Calculate the number of full bytes and remaining bits to compare
             int numBytes = prefixLength / 8;
             int remainingBits = prefixLength % 8;
 
@@ -827,18 +859,22 @@
                     return false;
             }
 
-            // Compare remaining bits if any
+            // Compare remaining bits in the next byte (if any)
             if (remainingBits > 0 && numBytes < ipBytes.Length)
             {
-                int mask = 0xFF << (8 - remainingBits);
+                // Create a mask for the remaining bits
+                // For example, if remainingBits = 5, mask = 11111000 = 0xF8
+                int mask = (0xFF << (8 - remainingBits)) & 0xFF;
+                
                 if ((ipBytes[numBytes] & mask) != (networkBytes[numBytes] & mask))
                     return false;
             }
 
             return true;
         }
-        catch
+        catch (Exception ex)
         {
+            Console.WriteLine($"Error in IsIpInRange for CIDR '{cidrRange}': {ex.Message}");
             return false;
         }
     }
@@ -902,6 +938,7 @@
     private class AwsPrefix
     {
         public string? ip_prefix { get; set; }
+        public string? ipv6_prefix { get; set; }
         public string? region { get; set; }
         public string? service { get; set; }
         public string? network_border_group { get; set; }

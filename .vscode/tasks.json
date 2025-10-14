@@ -36,6 +36,35 @@
                 "${workspaceFolder}/Albatross.sln"
             ],
             "problemMatcher": "$msCompile"
+        },
+        {
+            "label": "test",
+            "command": "dotnet",
+            "type": "process",
+            "args": [
+                "test",
+                "${workspaceFolder}/Tests/Albatross.Tests.csproj",
+                "--logger",
+                "console;verbosity=normal"
+            ],
+            "problemMatcher": "$msCompile",
+            "group": {
+                "kind": "test",
+                "isDefault": true
+            }
+        },
+        {
+            "label": "build-and-test",
+            "dependsOrder": "sequence",
+            "dependsOn": [
+                "build",
+                "test"
+            ],
+            "problemMatcher": [],
+            "group": {
+                "kind": "build",
+                "isDefault": false
+            }
         }
     ]
 }
