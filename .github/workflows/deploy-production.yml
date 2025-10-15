@@ -75,6 +75,16 @@ jobs:
         echo "Build timestamp: ${BUILD_TIMESTAMP}"
         echo "Build ID: ${BUILD_ID}"
         
+    - name: Restore Dependencies
+      run: |
+        dotnet restore
+        dotnet restore Tests/Albatross.Tests.csproj
+        
+    - name: Run Unit Tests
+      run: |
+        echo "🧪 Running unit tests..."
+        dotnet test Tests/Albatross.Tests.csproj --configuration Release --logger "console;verbosity=normal" --no-restore
+        
     - name: Generate Auth Key and Build
       shell: pwsh
       env:
@@ -85,9 +95,6 @@ jobs:
       run: |
         # Generate authentication key with environment context
         ./Generate-AuthKey.ps1 -OutputPath "Generated" -Environment "production" -Verbose
-        
-        # Restore .NET dependencies
-        dotnet restore
         
         # Build application (this generates both SPA and Worker files)
         dotnet build --configuration Release --no-restore

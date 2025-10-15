@@ -31,9 +31,9 @@
 *.out
 *.app
 
-#bib & obj
-/bin/
-/obj/
+# Build outputs (bin & obj folders anywhere in the repo)
+bin/
+obj/
 .DS_Store
 
 # Deployment artifacts
@@ -61,6 +61,7 @@ wrangler.toml.backup
 
 # Local development
 dotnet-install.sh
+/dotnet/
 vulnerability-report.txt
 
 # Generated files (build-time)
