@@ -142,6 +142,7 @@
                     <li><strong>Cloud Detection:</strong> Identifies if IPs belong to AWS, Azure, GCP, or Oracle Cloud</li>
                     <li><strong>Abuse Checking:</strong> Queries AbuseIPDB for security reputation and threat intelligence</li>
                     <li><strong>Network Information:</strong> Provides ASN details and network ownership via Cloudflare Radar</li>
+                    <li><strong>AI-Powered Analysis:</strong> Uses Cloudflare Workers AI (Llama 3.1 70B) to generate risk assessments and actionable recommendations</li>
                 </ul>
 
                 <h6>📝 <strong>Input Formats:</strong></h6>
@@ -151,10 +152,13 @@
                     <li><code>2001:4860:4860::8888</code> - IPv6 addresses supported</li>
                 </ul>
 
+                <h6>🤖 <strong>AI Reputation Analysis:</strong></h6>
+                <p>Automatically analyzes IP reputation data using Cloudflare Workers AI with Llama 3.1 70B Instruct model. Provides risk level assessment (low/medium/high/critical), trust score (0-100), summary of abuse event patterns, and security recommendations based on real-time threat intelligence.</p>
+
                 <h6>🔒 <strong>Security:</strong></h6>
                 <p>All requests use HMAC-SHA256 authentication with timestamp validation. Only public routable IP addresses are accepted (private networks like 10.x.x.x, 192.168.x.x, and 127.x.x.x are blocked).</p>
 
-                <p><small class="text-muted">Data provided by AbuseIPDB, Cloudflare Radar, and official cloud provider IP manifests.</small></p>
+                <p><small class="text-muted">Data provided by AbuseIPDB, Cloudflare Radar, Cloudflare Workers AI, and official cloud provider IP manifests.</small></p>
             </div>
         </div>
     </div>

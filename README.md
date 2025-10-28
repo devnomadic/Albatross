@@ -328,6 +328,7 @@ The worker uses Cloudflare Workers AI with the Llama 3.1 70B Instruct model to g
 - **Risk Levels**: Categorizes threats as low, medium, high, or critical
 - **Trust Scores**: Provides 0-100 trust score for quick assessment
 - **AI Summary**: Natural language explanation of the IP's reputation
+- **Event Pattern Analysis**: Summarizes abuse event types and patterns from historical reports
 - **Actionable Recommendations**: Specific steps to take based on the analysis
 - **Model**: `@cf/meta/llama-3.1-70b-instruct` (70 billion parameter model)
 
@@ -340,6 +341,7 @@ Example AI Response:
       "riskLevel": "medium",
       "trustScore": 65,
       "summary": "This IP from US shows moderate abuse activity with 15 reports. ISP indicates datacenter usage which is common for both legitimate and malicious traffic.",
+      "eventsSummary": "Reported 15 times for Port Scan, Brute-Force, SSH activity over the past 30 days.",
       "recommendations": [
         "Review the specific abuse reports for patterns",
         "Consider rate limiting if used for API access"
