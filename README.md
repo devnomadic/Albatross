@@ -10,6 +10,7 @@ A modern Blazor WebAssembly application that provides comprehensive IP address a
 - **Combined Data Sources**: Integrated AbuseIPDB and Cloudflare Radar API data for comprehensive IP analysis
 - **Secure Authentication**: Build-time generated HMAC authentication with timestamp validation for enhanced security
 - **CORS Protection**: Cloudflare Worker proxy handles CORS and protects API keys from client exposure
+- **SEO-Optimized**: Static HTML prerendering for improved search engine indexing and web crawler accessibility
 - **Modern UI**: Clean, responsive Blazor WebAssembly interface with real-time JSON formatting
 - **Cross-Platform**: Runs on Windows, macOS, and Linux
 
@@ -52,6 +53,41 @@ The project uses MSBuild targets for automated key generation and code injection
 - `Generated/build.env` - Environment file format
 - `Generated/build-manifest.json` - Build metadata and timestamps
 - `cloudflare-worker.js` - Final worker with injected authentication
+
+## Prerendering
+
+Albatross uses **[BlazorWasmPreRendering.Build](https://github.com/jsakamoto/BlazorWasmPreRendering.Build)** to generate static HTML during the publish process, improving SEO and web crawler accessibility.
+
+### How It Works
+- **Build-Time Rendering**: During `dotnet publish`, the app is rendered to static HTML
+- **SEO Benefits**: Search engines can index content without executing JavaScript
+- **Hidden Content**: Prerendered HTML is hidden (opacity: 0, z-index: -1) to prevent visual flash
+- **Blazor Hydration**: The app seamlessly takes over after loading, providing full interactivity
+- **Zero Runtime Overhead**: Prerendering happens at build time, not on the server
+
+### Implementation
+For prerendering to work, service registration must be extracted into a static local function in `Program.cs`:
+```csharp
+static void ConfigureServices(IServiceCollection services, string baseAddress)
+{
+    services.AddScoped(sp => new HttpClient { BaseAddress = new Uri(baseAddress) });
+    services.AddScoped<AbuseIPDBService>(/* ... */);
+}
+```
+
+See the [BlazorWasmPreRendering.Build documentation](https://github.com/jsakamoto/BlazorWasmPreRendering.Build#services-registration) for more details.
+
+### Verification
+To verify prerendering is working after deployment:
+```bash
+# Check for prerendering markers in the HTML
+curl -s https://albatross.devnomadic.com | grep "PRERENDERING-BEGIN"
+
+# Or view page source in browser and search for:
+<!-- %%-PRERENDERING-BEGIN-%% -->
+```
+
+If prerendering is working, you'll see the full app structure in the HTML source, not just "Loading..."
 
 ## Setup and Development
 
