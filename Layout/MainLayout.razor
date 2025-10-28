@@ -1,5 +1,6 @@
 ﻿@inherits LayoutComponentBase
 @using System.Reflection
+@using Generated
 
 <div class="page">
 
@@ -57,11 +58,9 @@
     protected override void OnInitialized()
     {
         Assembly assembly = typeof(Program).Assembly;
-        var version = assembly.GetName().Version;
         var title = assembly.GetCustomAttribute<AssemblyTitleAttribute>()?.Title ?? "Albatross";
-        var buildDate = DateTime.Now.ToString("yyyy-MM-dd");
         
-        @* BuildInfo = $"{title} v{version}"; *@
-        BuildInfo = $"{title}";
+        // Use the same version format as GitHub releases: BuildTimestamp-BuildId
+        BuildInfo = $"{title} v{BuildConstants.BuildTimestamp}-{BuildConstants.BuildId}";
     }
 }
