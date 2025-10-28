@@ -1,5 +1,6 @@
 ﻿@inherits LayoutComponentBase
 @using System.Reflection
+@using Generated
 
 <div class="page">
 
@@ -57,11 +58,16 @@
     protected override void OnInitialized()
     {
         Assembly assembly = typeof(Program).Assembly;
-        var version = assembly.GetName().Version;
         var title = assembly.GetCustomAttribute<AssemblyTitleAttribute>()?.Title ?? "Albatross";
-        var buildDate = DateTime.Now.ToString("yyyy-MM-dd");
         
-        @* BuildInfo = $"{title} v{version}"; *@
+        // Extract date (YYYYMMDD) from timestamp (YYYYMMDD-HHMM) and use short build ID
+        var buildDate = BuildConstants.BuildTimestamp.Length >= 8 
+            ? BuildConstants.BuildTimestamp.Substring(0, 8) 
+            : BuildConstants.BuildTimestamp;
+        var shortId = BuildConstants.BuildId.Length >= 8 
+            ? BuildConstants.BuildId.Substring(0, 8) 
+            : BuildConstants.BuildId;
+        
         BuildInfo = $"{title}";
     }
 }

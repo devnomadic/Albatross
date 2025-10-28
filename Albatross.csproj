@@ -58,10 +58,21 @@
     <RemoveDir Directories="Generated" Condition="Exists('Generated')" />
     <Message Text="Cleaned generated files" Importance="high" />
   </Target>
+
+  <!-- Generate sitemap before build -->
+  <Target Name="GenerateSitemap" BeforeTargets="Build" Condition="'$(SkipCodeGeneration)' != 'true' AND '$(DesignTimeBuild)' != 'true'">
+    <Message Text="Generating sitemap..." Importance="high" />
+    <Exec Command="bash &quot;$(MSBuildProjectDirectory)/generate-sitemap.sh&quot;" 
+          ContinueOnError="false" 
+          WorkingDirectory="$(MSBuildProjectDirectory)" 
+          Condition="Exists('$(MSBuildProjectDirectory)/generate-sitemap.sh')" />
+    <Message Text="Sitemap generation completed" Importance="high" />
+  </Target>
   
   <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly" Version="8.0.13" />
     <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly.DevServer" Version="8.0.13" PrivateAssets="all" />
+    <PackageReference Include="BlazorWasmPreRendering.Build" Version="6.0.0" />
   </ItemGroup>
 
 </Project>

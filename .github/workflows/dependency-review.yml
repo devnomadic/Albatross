@@ -16,6 +16,10 @@ jobs:
           # Fail the action if any vulnerabilities are found
           fail-on-severity: moderate
           # Allow licenses (add/remove as needed for your project)
-          allow-licenses: MIT, Apache-2.0, BSD-2-Clause, BSD-3-Clause, ISC, GPL-3.0
+          allow-licenses: MIT, Apache-2.0, BSD-2-Clause, BSD-3-Clause, ISC, GPL-3.0, MPL-1.1, MPL-2.0
+          # Allow dependencies even if license detection fails
+          # System.Net.Http and System.Text.RegularExpressions are Microsoft packages with MIT licenses
+          # but GitHub may flag them as "OTHER" due to license metadata format
+          allow-dependencies-licenses: pkg:nuget/System.Net.Http, pkg:nuget/System.Text.RegularExpressions
           # Comment on PR with summary
           comment-summary-in-pr: always

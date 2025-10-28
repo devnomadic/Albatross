@@ -7,14 +7,17 @@ var builder = WebAssemblyHostBuilder.CreateDefault(args);
 builder.RootComponents.Add<App>("#app");
 builder.RootComponents.Add<HeadOutlet>("head::after");
 
-builder.Services.AddScoped(sp => new HttpClient { BaseAddress = new Uri(builder.HostEnvironment.BaseAddress) });
-builder.Services.AddScoped<AbuseIPDBService>(sp =>
-    new AbuseIPDBService(
-        sp.GetRequiredService<HttpClient>()
-    )
-);
-
-// API access tokens are now hardcoded in the service for security purposes
-// This makes them less discoverable than storing them in appsettings.json
+ConfigureServices(builder.Services, builder.HostEnvironment.BaseAddress);
 
 await builder.Build().RunAsync();
+
+// Extract service registration to static local function for prerendering support
+static void ConfigureServices(IServiceCollection services, string baseAddress)
+{
+    services.AddScoped(sp => new HttpClient { BaseAddress = new Uri(baseAddress) });
+    services.AddScoped<AbuseIPDBService>(sp =>
+        new AbuseIPDBService(
+            sp.GetRequiredService<HttpClient>()
+        )
+    );
+}
