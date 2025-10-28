@@ -7,6 +7,10 @@ compatibility_flags = ["nodejs_compat"]
 [observability.logs]
 enabled = true
 
+# AI binding for Workers AI
+[ai]
+binding = "AI"
+
 # Production environment (default)
 [env.production]
 name = "abuseipdb"

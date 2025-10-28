@@ -4,11 +4,13 @@
  * This worker provides comprehensive IP analysis by combining multiple data sources:
  * 1. AbuseIPDB API - IP abuse reputation checking
  * 2. Cloudflare Radar API - ASN and network information lookup
+ * 3. Cloudflare Workers AI - AI-powered reputation analysis using Llama 3.1 70B
  * 
  * Features:
  * - Protects API keys from client exposure
  * - Handles CORS for browser requests
- * - Fetches both APIs in parallel for optimal performance
+ * - Fetches multiple APIs in parallel for optimal performance
+ * - Generates AI-powered risk assessments and recommendations
  * - Returns combined data in a single JSON response
  * - Uses HMAC-based authentication for security with build-time generated keys
  * - Provides fallback data when one API fails
@@ -23,6 +25,18 @@
  *     "success": true/false,
  *     "data": [ ... Cloudflare Radar ASN data ... ],
  *     "error": null/string
+ *   },
+ *   "aiReputation": {
+ *     "success": true/false,
+ *     "error": null/string,
+ *     "analysis": {
+ *       "riskLevel": "low|medium|high|critical",
+ *       "trustScore": <0-100>,
+ *       "summary": "<AI-generated assessment>",
+ *       "recommendations": ["<action 1>", "<action 2>"]
+ *     },
+ *     "model": "@cf/meta/llama-3.1-70b-instruct",
+ *     "timestamp": "<ISO timestamp>"
  *   },
  *   "workerInfo": { ... metadata ... }
  * }
@@ -86,20 +100,139 @@ const ALLOWED_ORIGINS = [
 ];
 
 addEventListener('fetch', event => {
-  event.respondWith(handleRequest(event.request));
+  event.respondWith(handleRequest(event.request, event.env));
 });
 
-async function handleRequest(request) {
+async function handleRequest(request, env) {
   // Handle CORS preflight requests
   if (request.method === "OPTIONS") {
     return handleCORS(request);
   }
 
   // All requests go through the combined handler
-  return handleCombinedRequest(request);
+  return handleCombinedRequest(request, env);
 }
 
-async function handleCombinedRequest(request) {
+/**
+ * Generate AI-based IP reputation analysis using Cloudflare Workers AI
+ * @param {object} env - Worker environment with AI binding
+ * @param {string} ipAddress - The IP address to analyze
+ * @param {object} abuseData - AbuseIPDB data for context
+ * @param {object} asnData - ASN data for context
+ * @returns {Promise<object>} AI reputation analysis
+ */
+async function generateAIReputation(env, ipAddress, abuseData, asnData) {
+  try {
+    // Check if AI binding is available
+    if (!env || !env.AI) {
+      console.log('AI binding not available in environment');
+      return {
+        success: false,
+        error: 'AI service not available',
+        analysis: null
+      };
+    }
+
+    // Build context from available data
+    const abuseScore = abuseData?.data?.abuseConfidenceScore || 0;
+    const totalReports = abuseData?.data?.totalReports || 0;
+    const countryCode = abuseData?.data?.countryCode || 'Unknown';
+    const isp = abuseData?.data?.isp || 'Unknown';
+    const usageType = abuseData?.data?.usageType || 'Unknown';
+    const asnName = asnData?.result?.[0]?.asn?.name || 'Unknown';
+    const asnNumber = asnData?.result?.[0]?.asn?.asn || 'Unknown';
+
+    // Create a prompt for the AI to analyze the IP reputation
+    const prompt = `You are a cybersecurity expert analyzing IP address reputation. Based on the following real-time data, provide a concise risk assessment and reputation summary.
+
+IP Address: ${ipAddress}
+Country: ${countryCode}
+ISP: ${isp}
+Usage Type: ${usageType}
+ASN: ${asnNumber} (${asnName})
+Abuse Confidence Score: ${abuseScore}% (0-100 scale, higher is worse)
+Total Abuse Reports: ${totalReports}
+
+Provide a JSON response with the following structure:
+{
+  "riskLevel": "low|medium|high|critical",
+  "trustScore": <number 0-100, higher is better>,
+  "summary": "<2-3 sentence assessment>",
+  "recommendations": ["<action 1>", "<action 2>"]
+}
+
+Focus on actionable insights based on the abuse score, report count, and network information. Keep the summary concise and professional.`;
+
+    console.log('Calling Workers AI with Llama 3.1 70B for IP reputation analysis...');
+
+    // Call Cloudflare Workers AI using Llama 3.1 70B Instruct model
+    const response = await env.AI.run('@cf/meta/llama-3.1-70b-instruct', {
+      messages: [
+        {
+          role: 'system',
+          content: 'You are a cybersecurity expert. Respond only with valid JSON, no markdown formatting or code blocks.'
+        },
+        {
+          role: 'user',
+          content: prompt
+        }
+      ],
+      max_tokens: 500,
+      temperature: 0.3, // Lower temperature for more consistent, factual responses
+    });
+
+    console.log('AI response received:', response);
+
+    // Parse the AI response
+    let analysis = null;
+    if (response && response.response) {
+      try {
+        // The response.response contains the AI's text output
+        const aiText = response.response.trim();
+        
+        // Try to extract JSON from the response (handle cases where AI might add extra text)
+        let jsonText = aiText;
+        if (aiText.includes('{')) {
+          const startIdx = aiText.indexOf('{');
+          const endIdx = aiText.lastIndexOf('}');
+          if (startIdx >= 0 && endIdx > startIdx) {
+            jsonText = aiText.substring(startIdx, endIdx + 1);
+          }
+        }
+        
+        analysis = JSON.parse(jsonText);
+        console.log('AI analysis parsed successfully:', analysis);
+      } catch (parseError) {
+        console.error('Error parsing AI response:', parseError);
+        // Fallback to basic analysis if JSON parsing fails
+        analysis = {
+          riskLevel: abuseScore > 75 ? 'critical' : abuseScore > 50 ? 'high' : abuseScore > 25 ? 'medium' : 'low',
+          trustScore: Math.max(0, 100 - abuseScore),
+          summary: `IP from ${countryCode} with ${abuseScore}% abuse confidence score and ${totalReports} reports.`,
+          recommendations: ['Review the abuse reports for details', 'Consider blocking if risk level is high']
+        };
+      }
+    }
+
+    return {
+      success: true,
+      error: null,
+      analysis: analysis,
+      model: '@cf/meta/llama-3.1-70b-instruct',
+      timestamp: new Date().toISOString()
+    };
+
+  } catch (error) {
+    console.error('AI reputation generation error:', error);
+    return {
+      success: false,
+      error: error.message || 'Failed to generate AI reputation',
+      analysis: null
+    };
+  }
+}
+
+async function handleCombinedRequest(request, env) {
 
   // Get the request origin
   const origin = request.headers.get('Origin') || '';
@@ -336,6 +469,14 @@ async function handleCombinedRequest(request) {
       radarError = `Cloudflare Radar API error: ${status} ${statusText}`;
     }
 
+    // Generate AI-based reputation analysis using the collected data
+    console.log('Generating AI reputation analysis...');
+    const aiReputation = await generateAIReputation(env, ipAddress, abuseIPDBData, radarData);
+    console.log('AI reputation analysis result:', {
+      success: aiReputation.success,
+      error: aiReputation.error
+    });
+
     // Combine the responses into a single response object
     const combinedResponse = {
       // AbuseIPDB data (maintain original structure for compatibility)
@@ -348,6 +489,9 @@ async function handleCombinedRequest(request) {
         error: radarError
       },
       
+      // Add AI reputation analysis
+      aiReputation: aiReputation,
+      
       // Metadata and errors
       abuseIPDBError: abuseIPDBError,
       workerInfo: {
@@ -356,7 +500,8 @@ async function handleCombinedRequest(request) {
         requestId: generateRequestId(),
         sources: {
           abuseipdb: abuseIPDBError ? 'error' : 'success',
-          radar: radarError ? 'error' : 'success'
+          radar: radarError ? 'error' : 'success',
+          ai: aiReputation.success ? 'success' : 'error'
         }
       }
     };
