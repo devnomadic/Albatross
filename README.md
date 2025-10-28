@@ -319,7 +319,7 @@ Users can specify custom report age limits using a semicolon delimiter:
 - **AbuseIPDB**: IP reputation and abuse reports
 - **Cloudflare Radar**: ASN information and network details
 - **Cloudflare Workers AI**: AI-powered risk assessment using Llama 3.1 70B Instruct model
-- **Parallel Processing**: All APIs are queried simultaneously for optimal performance
+- **Optimized Processing**: AbuseIPDB and Radar APIs are queried in parallel; AI analysis processes their results
 - **Graceful Degradation**: Partial results if one API fails
 
 ### AI-Powered Reputation Analysis
