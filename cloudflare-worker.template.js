@@ -542,17 +542,10 @@ async function handleCombinedRequest(request, env) {
         radar: hasRadarData ? 'success' : 'failed'
       });
       
-      // Use custom replacer to enforce property order
-      const orderedKeys = ['aiReputation', 'data', 'asnInfo', 'abuseIPDBError', 'workerInfo'];
-      return new Response(JSON.stringify(combinedResponse, (key, value) => {
-        if (value && typeof value === 'object' && !Array.isArray(value)) {
-          return orderedKeys.reduce((obj, k) => {
-            if (k in value) obj[k] = value[k];
-            return obj;
-          }, {});
-        }
-        return value;
-      }), {
+      // Manually construct JSON to guarantee property order
+      const responseJson = `{"aiReputation":${JSON.stringify(aiReputation)},"data":${JSON.stringify(abuseIPDBData?.data || null)},"asnInfo":${JSON.stringify({success: radarData?.success || false, data: radarData?.result || null, error: radarError})},"abuseIPDBError":${JSON.stringify(abuseIPDBError)},"workerInfo":${JSON.stringify(combinedResponse.workerInfo)}}`;
+      
+      return new Response(responseJson, {
         status: 200,
         headers: {
           'Content-Type': 'application/json',
@@ -563,17 +556,10 @@ async function handleCombinedRequest(request, env) {
       // Both APIs failed
       console.error('Both APIs failed');
       
-      // Use custom replacer to enforce property order
-      const orderedKeys = ['aiReputation', 'data', 'asnInfo', 'abuseIPDBError', 'workerInfo'];
-      return new Response(JSON.stringify(combinedResponse, (key, value) => {
-        if (value && typeof value === 'object' && !Array.isArray(value)) {
-          return orderedKeys.reduce((obj, k) => {
-            if (k in value) obj[k] = value[k];
-            return obj;
-          }, {});
-        }
-        return value;
-      }), {
+      // Manually construct JSON to guarantee property order
+      const responseJson = `{"aiReputation":${JSON.stringify(aiReputation)},"data":${JSON.stringify(abuseIPDBData?.data || null)},"asnInfo":${JSON.stringify({success: radarData?.success || false, data: radarData?.result || null, error: radarError})},"abuseIPDBError":${JSON.stringify(abuseIPDBError)},"workerInfo":${JSON.stringify(combinedResponse.workerInfo)}}`;
+      
+      return new Response(responseJson, {
         status: 502,
         headers: {
           'Content-Type': 'application/json',
