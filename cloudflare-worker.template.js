@@ -542,10 +542,7 @@ async function handleCombinedRequest(request, env) {
         radar: hasRadarData ? 'success' : 'failed'
       });
       
-      // Manually construct JSON to guarantee property order
-      const responseJson = `{"aiReputation":${JSON.stringify(aiReputation)},"data":${JSON.stringify(abuseIPDBData?.data || null)},"asnInfo":${JSON.stringify({success: radarData?.success || false, data: radarData?.result || null, error: radarError})},"abuseIPDBError":${JSON.stringify(abuseIPDBError)},"workerInfo":${JSON.stringify(combinedResponse.workerInfo)}}`;
-      
-      return new Response(responseJson, {
+      return new Response(JSON.stringify(combinedResponse), {
         status: 200,
         headers: {
           'Content-Type': 'application/json',
@@ -555,11 +552,7 @@ async function handleCombinedRequest(request, env) {
     } else {
       // Both APIs failed
       console.error('Both APIs failed');
-      
-      // Manually construct JSON to guarantee property order
-      const responseJson = `{"aiReputation":${JSON.stringify(aiReputation)},"data":${JSON.stringify(abuseIPDBData?.data || null)},"asnInfo":${JSON.stringify({success: radarData?.success || false, data: radarData?.result || null, error: radarError})},"abuseIPDBError":${JSON.stringify(abuseIPDBError)},"workerInfo":${JSON.stringify(combinedResponse.workerInfo)}}`;
-      
-      return new Response(responseJson, {
+      return new Response(JSON.stringify(combinedResponse), {
         status: 502,
         headers: {
           'Content-Type': 'application/json',

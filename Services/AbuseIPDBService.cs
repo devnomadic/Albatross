@@ -17,14 +17,14 @@ namespace Albatross.Services
     /// </summary>
     public class AbuseIPDBApiResponse
     {
+        [JsonPropertyName("aiReputation")]
+        public AIReputation? AIReputation { get; set; }
+
         [JsonPropertyName("data")]
         public AbuseIPDBData? Data { get; set; }
 
         [JsonPropertyName("asnInfo")]
         public AsnInfo? AsnInfo { get; set; }
-
-        [JsonPropertyName("aiReputation")]
-        public AIReputation? AIReputation { get; set; }
 
         [JsonPropertyName("abuseIPDBError")]
         public string? AbuseIPDBError { get; set; }
