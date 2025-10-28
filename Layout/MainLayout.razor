@@ -60,7 +60,14 @@
         Assembly assembly = typeof(Program).Assembly;
         var title = assembly.GetCustomAttribute<AssemblyTitleAttribute>()?.Title ?? "Albatross";
         
-        // Use the same version format as GitHub releases: BuildTimestamp-BuildId
-        BuildInfo = $"{title} v{BuildConstants.BuildTimestamp}-{BuildConstants.BuildId}";
+        // Extract date (YYYYMMDD) from timestamp (YYYYMMDD-HHMM) and use short build ID
+        var buildDate = BuildConstants.BuildTimestamp.Length >= 8 
+            ? BuildConstants.BuildTimestamp.Substring(0, 8) 
+            : BuildConstants.BuildTimestamp;
+        var shortId = BuildConstants.BuildId.Length >= 8 
+            ? BuildConstants.BuildId.Substring(0, 8) 
+            : BuildConstants.BuildId;
+        
+        BuildInfo = $"{title} v{buildDate}-{shortId}";
     }
 }
