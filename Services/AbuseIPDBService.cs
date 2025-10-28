@@ -68,6 +68,9 @@ namespace Albatross.Services
         [JsonPropertyName("summary")]
         public string? Summary { get; set; }
 
+        [JsonPropertyName("eventsSummary")]
+        public string? EventsSummary { get; set; }
+
         [JsonPropertyName("recommendations")]
         public List<string>? Recommendations { get; set; }
     }

@@ -140,6 +140,25 @@ async function generateAIReputation(env, ipAddress, abuseData, asnData) {
     const usageType = abuseData?.data?.usageType || 'Unknown';
     const asnName = asnData?.result?.[0]?.asn?.name || 'Unknown';
     const asnNumber = asnData?.result?.[0]?.asn?.asn || 'Unknown';
+    const numDistinctUsers = abuseData?.data?.numDistinctUsers || 0;
+    const reports = abuseData?.data?.reports || [];
+
+    // Extract sample abuse event details
+    let eventSummary = '';
+    if (reports.length > 0) {
+      const recentReports = reports.slice(0, 5);
+      const categories = recentReports.flatMap(r => r.categories || []);
+      const uniqueCategories = [...new Set(categories)];
+      const comments = recentReports.map(r => r.comment).filter(c => c && c.trim());
+      
+      eventSummary = `\n\nAbuse Events (${totalReports} reports from ${numDistinctUsers} users):`;
+      if (uniqueCategories.length > 0) {
+        eventSummary += `\nEvent Types: ${uniqueCategories.join(', ')}`;
+      }
+      if (comments.length > 0) {
+        eventSummary += `\nSample Reports:\n${comments.slice(0, 3).map((c, i) => `  ${i + 1}. ${c.substring(0, 100)}${c.length > 100 ? '...' : ''}`).join('\n')}`;
+      }
+    }
 
     // Create a prompt for the AI to analyze the IP reputation
     const prompt = `You are a cybersecurity expert analyzing IP address reputation. Based on the following real-time data, provide a concise risk assessment and reputation summary.
@@ -150,17 +169,18 @@ ISP: ${isp}
 Usage Type: ${usageType}
 ASN: ${asnNumber} (${asnName})
 Abuse Confidence Score: ${abuseScore}% (0-100 scale, higher is worse)
-Total Abuse Reports: ${totalReports}
+Total Abuse Reports: ${totalReports}${eventSummary}
 
 Provide a JSON response with the following structure:
 {
   "riskLevel": "low|medium|high|critical",
   "trustScore": <number 0-100, higher is better>,
-  "summary": "<2-3 sentence assessment>",
+  "summary": "<2-3 sentence overall risk assessment>",
+  "eventsSummary": "<1-2 sentence summary of abuse event patterns, or null if no events>",
   "recommendations": ["<action 1>", "<action 2>"]
 }
 
-Focus on actionable insights based on the abuse score, report count, and network information. Keep the summary concise and professional.`;
+Focus on actionable insights based on the abuse score, report count, network information, and abuse event patterns. Keep summaries concise and professional.`;
 
     console.log('Calling Workers AI with Llama 3.1 70B for IP reputation analysis...');
 
@@ -204,10 +224,15 @@ Focus on actionable insights based on the abuse score, report count, and network
       } catch (parseError) {
         console.error('Error parsing AI response:', parseError);
         // Fallback to basic analysis if JSON parsing fails
+        const eventsFallback = reports.length > 0 
+          ? `Reported ${totalReports} times for ${[...new Set(reports.flatMap(r => r.categories || []))].slice(0, 3).join(', ')}.`
+          : null;
+        
         analysis = {
           riskLevel: abuseScore > 75 ? 'critical' : abuseScore > 50 ? 'high' : abuseScore > 25 ? 'medium' : 'low',
           trustScore: Math.max(0, 100 - abuseScore),
           summary: `IP from ${countryCode} with ${abuseScore}% abuse confidence score and ${totalReports} reports.`,
+          eventsSummary: eventsFallback,
           recommendations: ['Review the abuse reports for details', 'Consider blocking if risk level is high']
         };
       }
@@ -478,6 +503,9 @@ async function handleCombinedRequest(request, env) {
 
     // Combine the responses into a single response object
     const combinedResponse = {
+      // Add AI reputation analysis
+      aiReputation: aiReputation,
+      
       // AbuseIPDB data (maintain original structure for compatibility)
       data: abuseIPDBData?.data || null,
       
@@ -487,9 +515,6 @@ async function handleCombinedRequest(request, env) {
         data: radarData?.result || null,
         error: radarError
       },
-      
-      // Add AI reputation analysis
-      aiReputation: aiReputation,
       
       // Metadata and errors
       abuseIPDBError: abuseIPDBError,
