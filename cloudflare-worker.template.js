@@ -542,7 +542,17 @@ async function handleCombinedRequest(request, env) {
         radar: hasRadarData ? 'success' : 'failed'
       });
       
-      return new Response(JSON.stringify(combinedResponse), {
+      // Use custom replacer to enforce property order
+      const orderedKeys = ['aiReputation', 'data', 'asnInfo', 'abuseIPDBError', 'workerInfo'];
+      return new Response(JSON.stringify(combinedResponse, (key, value) => {
+        if (value && typeof value === 'object' && !Array.isArray(value)) {
+          return orderedKeys.reduce((obj, k) => {
+            if (k in value) obj[k] = value[k];
+            return obj;
+          }, {});
+        }
+        return value;
+      }), {
         status: 200,
         headers: {
           'Content-Type': 'application/json',
@@ -552,7 +562,18 @@ async function handleCombinedRequest(request, env) {
     } else {
       // Both APIs failed
       console.error('Both APIs failed');
-      return new Response(JSON.stringify(combinedResponse), {
+      
+      // Use custom replacer to enforce property order
+      const orderedKeys = ['aiReputation', 'data', 'asnInfo', 'abuseIPDBError', 'workerInfo'];
+      return new Response(JSON.stringify(combinedResponse, (key, value) => {
+        if (value && typeof value === 'object' && !Array.isArray(value)) {
+          return orderedKeys.reduce((obj, k) => {
+            if (k in value) obj[k] = value[k];
+            return obj;
+          }, {});
+        }
+        return value;
+      }), {
         status: 502,
         headers: {
           'Content-Type': 'application/json',
