@@ -6,6 +6,8 @@ param(
     [string]$OutputPath = ".",
     [string]$KeyLength = "32",
     [string]$Environment = "production",
+    [string]$BuildTimestamp = "",
+    [string]$BuildId = "",
     [switch]$Verbose
 )
 
@@ -64,9 +66,22 @@ try {
         Write-BuildLog "Created output directory: $OutputPath"
     }
     
-    # Generate build timestamp
-    $buildTimestamp = Get-Date -Format "yyyyMMdd-HHmm"
-    $buildGuid = [System.Guid]::NewGuid().ToString("N").Substring(0, 8)
+    # Generate build timestamp and ID (use provided values or generate new ones)
+    if ([string]::IsNullOrWhiteSpace($BuildTimestamp)) {
+        $buildTimestamp = Get-Date -Format "yyyyMMdd-HHmm"
+        Write-BuildLog "Generated build timestamp: $buildTimestamp"
+    } else {
+        $buildTimestamp = $BuildTimestamp
+        Write-BuildLog "Using provided build timestamp: $buildTimestamp"
+    }
+    
+    if ([string]::IsNullOrWhiteSpace($BuildId)) {
+        $buildGuid = [System.Guid]::NewGuid().ToString("N").Substring(0, 8)
+        Write-BuildLog "Generated build ID: $buildGuid"
+    } else {
+        $buildGuid = $BuildId
+        Write-BuildLog "Using provided build ID: $buildGuid"
+    }
     
     # Create the generated constants file for C#
     $csharpContent = @"
