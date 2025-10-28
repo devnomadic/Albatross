@@ -99,19 +99,18 @@ const ALLOWED_ORIGINS = [
   "http://localhost:5044"
 ];
 
-addEventListener('fetch', event => {
-  event.respondWith(handleRequest(event.request, event.env));
-});
+// ES Module export for Cloudflare Workers (required for AI binding)
+export default {
+  async fetch(request, env, ctx) {
+    // Handle CORS preflight requests
+    if (request.method === "OPTIONS") {
+      return handleCORS(request);
+    }
 
-async function handleRequest(request, env) {
-  // Handle CORS preflight requests
-  if (request.method === "OPTIONS") {
-    return handleCORS(request);
+    // All requests go through the combined handler
+    return handleCombinedRequest(request, env);
   }
-
-  // All requests go through the combined handler
-  return handleCombinedRequest(request, env);
-}
+};
 
 /**
  * Generate AI-based IP reputation analysis using Cloudflare Workers AI
