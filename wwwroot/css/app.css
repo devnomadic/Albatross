@@ -311,6 +311,7 @@ code {
     margin-right: 10px;
     margin-bottom: 20px;
     transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+    text-align: center;
 }
 
 .ip-input:focus {
@@ -322,6 +323,7 @@ code {
 .ip-input::placeholder {
     color: #6c757d;
     opacity: 1;
+    text-align: center;
 }
 
 /* Button spacing */
@@ -1214,15 +1216,16 @@ html body div.card div.card-header .btn {
     display: inline-block;
     margin: 0 auto;
     padding: 10px 0;
-    --pixel-size: 3px;
-    --matrix-cols: 240;
-    --aspect-ratio: 44 / 240;
+    width: 50%;
+    max-width: 1163px;
 }
 
 .pixel-matrix__grid {
     display: grid;
-    grid-template-columns: repeat(240, var(--pixel-size));
-    grid-auto-rows: var(--pixel-size);
+    grid-template-columns: repeat(240, 1fr);
+    grid-auto-rows: auto;
+    aspect-ratio: 1163 / 216;
+    width: 100%;
     gap: 0;
     background: white;
     border: none;
@@ -1232,6 +1235,7 @@ html body div.card div.card-header .btn {
     display: block;
     width: 100%;
     height: 100%;
+    aspect-ratio: 1 / 1;
 }
 
 .pixel-matrix__pixel--empty {
@@ -1257,23 +1261,13 @@ html body div.card div.card-header .btn {
 /* Responsive sizing for pixel matrix */
 @media (max-width: 768px) {
     .ascii-art-pixel-matrix {
-        --pixel-size: 2px;
-    }
-
-    .pixel-matrix__grid {
-        grid-template-columns: repeat(240, var(--pixel-size));
-        grid-auto-rows: var(--pixel-size);
+        width: 70%;
     }
 }
 
 @media (max-width: 480px) {
     .ascii-art-pixel-matrix {
-        --pixel-size: 1px;
-    }
-
-    .pixel-matrix__grid {
-        grid-template-columns: repeat(240, var(--pixel-size));
-        grid-auto-rows: var(--pixel-size);
+        width: 90%;
     }
 }
 
