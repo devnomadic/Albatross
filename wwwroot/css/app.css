@@ -304,7 +304,7 @@ code {
     width: 500px;
     max-width: 90vw;
     font-family: 'Quantico', monospace;
-    font-size: 1rem;
+    font-size: 0.8rem;
     padding: 8px 12px;
     border: 2px solid #dee2e6;
     border-radius: 4px;
@@ -394,10 +394,9 @@ pre {
         padding-left: 2rem;
         padding-right: 2rem;
     }
-      /* Scale down input and button sizes for wide screens */
+      /* Scale input width on wide screens */
     .ip-input {
         width: 450px;
-        font-size: 0.95rem;
     }
     
     .btn {
@@ -437,10 +436,9 @@ pre {
     .content {
         max-width: 1320px;
     }
-      /* Further scale down for very wide screens */
+      /* Further scale input width for very wide screens */
     .ip-input {
         width: 420px;
-        font-size: 0.9rem;
     }
     
     .btn {
@@ -478,10 +476,9 @@ pre {
     .content {
         max-width: 1400px;
     }
-      /* Even more conservative for 4K and ultra-wide monitors */
+      /* Scale input width for 4K and ultra-wide monitors */
     .ip-input {
         width: 400px;
-        font-size: 0.85rem;
     }
     
     .card-container {
@@ -1209,6 +1206,74 @@ html body div.card div.card-header .btn {
     .search-results-container .results.card-container {
         max-width: 95vw !important; /* Override all width constraints for JSON */
         width: 95vw !important;
+    }
+}
+
+/* Pixel matrix styles for ASCII art replacement */
+.ascii-art-pixel-matrix {
+    display: inline-block;
+    margin: 0 auto;
+    padding: 10px 0;
+    --pixel-size: 3px;
+    --matrix-cols: 240;
+    --aspect-ratio: 44 / 240;
+}
+
+.pixel-matrix__grid {
+    display: grid;
+    grid-template-columns: repeat(240, var(--pixel-size));
+    grid-auto-rows: var(--pixel-size);
+    gap: 0;
+    background: white;
+    border: none;
+}
+
+.pixel-matrix__pixel {
+    display: block;
+    width: 100%;
+    height: 100%;
+}
+
+.pixel-matrix__pixel--empty {
+    background-color: #ffffff;
+}
+
+.pixel-matrix__pixel--edge {
+    background-color: #cccccc;
+}
+
+.pixel-matrix__pixel--mid {
+    background-color: #888888;
+}
+
+.pixel-matrix__pixel--dark {
+    background-color: #333333;
+}
+
+.pixel-matrix__pixel--core {
+    background-color: #000000;
+}
+
+/* Responsive sizing for pixel matrix */
+@media (max-width: 768px) {
+    .ascii-art-pixel-matrix {
+        --pixel-size: 2px;
+    }
+
+    .pixel-matrix__grid {
+        grid-template-columns: repeat(240, var(--pixel-size));
+        grid-auto-rows: var(--pixel-size);
+    }
+}
+
+@media (max-width: 480px) {
+    .ascii-art-pixel-matrix {
+        --pixel-size: 1px;
+    }
+
+    .pixel-matrix__grid {
+        grid-template-columns: repeat(240, var(--pixel-size));
+        grid-auto-rows: var(--pixel-size);
     }
 }
 

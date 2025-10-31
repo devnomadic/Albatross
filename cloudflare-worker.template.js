@@ -176,7 +176,7 @@ Provide a JSON response with the following structure:
   "riskLevel": "low|medium|high|critical",
   "trustScore": <number 0-100, higher is better>,
   "summary": "<2-3 sentence overall risk assessment>",
-  "eventsSummary": "<1-2 sentence summary of abuse event patterns, or null if no events>",
+  "eventsSummary": "<2-3 sentence summary of abuse event patterns & targeted services or null if no events>",
   "recommendations": ["<action 1>", "<action 2>"]
 }
 
