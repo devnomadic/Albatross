@@ -13,10 +13,13 @@ using Albatross.Generated;
 namespace Albatross.Services
 {
     /// <summary>
-    /// Complete API response model for AbuseIPDB with integrated ASN information
+    /// Complete API response model for AbuseIPDB with integrated ASN information and AI reputation
     /// </summary>
     public class AbuseIPDBApiResponse
     {
+        [JsonPropertyName("aiReputation")]
+        public AIReputation? AIReputation { get; set; }
+
         [JsonPropertyName("data")]
         public AbuseIPDBData? Data { get; set; }
 
@@ -28,6 +31,48 @@ namespace Albatross.Services
 
         [JsonPropertyName("workerInfo")]
         public WorkerInfo? WorkerInfo { get; set; }
+    }
+
+    /// <summary>
+    /// AI-generated reputation analysis from Cloudflare Workers AI
+    /// </summary>
+    public class AIReputation
+    {
+        [JsonPropertyName("success")]
+        public bool Success { get; set; }
+
+        [JsonPropertyName("error")]
+        public string? Error { get; set; }
+
+        [JsonPropertyName("analysis")]
+        public AIAnalysis? Analysis { get; set; }
+
+        [JsonPropertyName("model")]
+        public string? Model { get; set; }
+
+        [JsonPropertyName("timestamp")]
+        public string? Timestamp { get; set; }
+    }
+
+    /// <summary>
+    /// AI analysis details
+    /// </summary>
+    public class AIAnalysis
+    {
+        [JsonPropertyName("riskLevel")]
+        public string? RiskLevel { get; set; }
+
+        [JsonPropertyName("trustScore")]
+        public int TrustScore { get; set; }
+
+        [JsonPropertyName("summary")]
+        public string? Summary { get; set; }
+
+        [JsonPropertyName("eventsSummary")]
+        public string? EventsSummary { get; set; }
+
+        [JsonPropertyName("recommendations")]
+        public List<string>? Recommendations { get; set; }
     }
 
     /// <summary>

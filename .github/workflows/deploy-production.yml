@@ -92,9 +92,11 @@ jobs:
         CLOUDFLARE_RADAR_API_TOKEN: ${{ secrets.CLOUDFLARE_RADAR_API_TOKEN }}
         SkipCodeGeneration: false
         ALBATROSS_ENVIRONMENT: production
+        BUILD_TIMESTAMP: ${{ steps.version.outputs.build-timestamp }}
+        BUILD_ID: ${{ steps.version.outputs.build-id }}
       run: |
-        # Generate authentication key with environment context
-        ./Generate-AuthKey.ps1 -OutputPath "Generated" -Environment "production" -Verbose
+        # Generate authentication key with environment context and build info
+        ./Generate-AuthKey.ps1 -OutputPath "Generated" -Environment "production" -BuildTimestamp "$env:BUILD_TIMESTAMP" -BuildId "$env:BUILD_ID" -Verbose
         
         # Build application (this generates both SPA and Worker files)
         dotnet build --configuration Release --no-restore
