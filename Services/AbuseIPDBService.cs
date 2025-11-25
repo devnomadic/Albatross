@@ -430,8 +430,9 @@ namespace Albatross.Services
         /// <param name="ipAddress">The IP address to check, optionally with maxAgeInDays delimited by semicolon (e.g., "8.8.8.8;60")</param>
         /// <param name="maxAgeInDays">Reports older than this many days won't be included (default 30). This is overridden if specified in ipAddress parameter</param>
         /// <param name="verbose">Whether to include detailed report information</param>
+        /// <param name="enableAI">Whether to enable AI reputation analysis (default true)</param>
         /// <returns>Complete AbuseIPDB information for the specified IP address</returns>
-        public async Task<AbuseIPDBApiResponse> CheckIPAsync(string ipAddress, int maxAgeInDays = 30, bool verbose = true)
+        public async Task<AbuseIPDBApiResponse> CheckIPAsync(string ipAddress, int maxAgeInDays = 30, bool verbose = true, bool enableAI = true)
         {
             // Parse the input to extract IP address and optionally maxAgeInDays
             string actualIpAddress;
@@ -462,11 +463,12 @@ namespace Albatross.Services
             try
             {
                 var verboseParam = verbose.ToString().ToLower();
+                var enableAIParam = enableAI.ToString().ToLower();
                 var timestamp = GetTimestamp();
 
                 // Include timestamp as a URI parameter
                 var requestUrl =
-                    $"{_cloudflareWorkerUrl}?ipAddress={actualIpAddress}&maxAgeInDays={actualMaxAgeInDays}&verbose={verboseParam}&timestamp={timestamp}"
+                    $"{_cloudflareWorkerUrl}?ipAddress={actualIpAddress}&maxAgeInDays={actualMaxAgeInDays}&verbose={verboseParam}&enableAI={enableAIParam}&timestamp={timestamp}"
                         .ToLower();
                 Console.WriteLine($"Requesting: {requestUrl}");
 

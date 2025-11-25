@@ -6,7 +6,7 @@
 @using System.Linq
 @inject IJSRuntime JSRuntime
 
-<PageTitle>Albatross</PageTitle>
+<PageTitle>Albatross - Cloud IP Analysis & Reputation Checker</PageTitle>
 
 <!-- External CSS and JS references -->
 <link rel="stylesheet" href="css/json-formatter.css">
@@ -107,8 +107,8 @@
 \____/_/\____/\__,_/\__,_/  /___/_/       /____/\___/\__,_/_/   \___/_/ /_/ 
 </b></pre><br>
 -->
-<img src="/images/ascii-text-art.png" alt="CloudIPSearch" width="30%" style="padding-bottom: 5px;" border="0"/> <br>
-<img src="/images/ascii-text-art-albatross.png" alt="ascii-text-art-albatross" width="10%" border="0" /> <br><br>
+<img src="/images/ascii-text-art.png" alt="CloudIPSearch" width="38%" style="padding-bottom: 5px;" border="0"/> <br>
+<img src="/images/ascii-text-art-albatross.png" alt="ascii-text-art-albatross" width="15%" border="0" /> <br><br>
 <div class="ascii-art-pixel-matrix" role="img" aria-label="ASCII art pixel matrix">
     <div class="pixel-matrix__grid">
 @foreach (var row in AsciiArtPixelMatrix)
@@ -129,6 +129,9 @@
 </button>
 <button class="btn btn-warning" @onclick="CheckAbuseIPDBAsync" disabled="@isCheckingAbuse" style="margin-left: 10px;">
     <span class="oi oi-shield"></span> Check IP Reputation
+</button>
+<button class="btn @(enableAI ? "btn-success" : "btn-secondary")" @onclick="ToggleAI" style="margin-left: 10px;" title="@(enableAI ? "AI Analysis Enabled" : "AI Analysis Disabled")">
+    <span class="oi oi-@(enableAI ? "lightbulb" : "ban")"></span> AI @(enableAI ? "On" : "Off")
 </button>
 <br><br>
 
@@ -310,6 +313,7 @@
     private bool showDescription = false;
     private bool isCheckingAbuse = false;
     private bool showJson = true; // Default to showing JSON
+    private bool enableAI = true; // Default to AI enabled
     private string formattedJson = string.Empty;
     private Albatross.Services.AbuseIPDBApiResponse? abuseIpResult;
 
@@ -419,6 +423,12 @@
         showDescription = !showDescription;
     }
     
+    private void ToggleAI()
+    {
+        enableAI = !enableAI;
+        statusMessage = enableAI ? "AI analysis enabled" : "AI analysis disabled";
+    }
+    
     private async void ToggleJsonDisplay()
     {
         showJson = !showJson;
@@ -452,7 +462,7 @@
             // Log to browser console for debugging
             await JSRuntime.InvokeVoidAsync("console.log", "Checking IP: " + ipAddress);
             
-            abuseIpResult = await AbuseIPDBService.CheckIPAsync(ipAddress, 30, true);
+            abuseIpResult = await AbuseIPDBService.CheckIPAsync(ipAddress, 30, true, enableAI);
             
             // Format the JSON for display
             var options = new JsonSerializerOptions { WriteIndented = true };

@@ -399,9 +399,10 @@ async function handleCombinedRequest(request, env) {
   const ipAddress = url.searchParams.get('ipaddress'); // lowercase parameter name
   const maxAgeInDays = url.searchParams.get('maxageindays') || 30; // lowercase parameter name
   const verbose = url.searchParams.get('verbose') === 'true';
+  const enableAI = url.searchParams.get('enableai') === 'true'; // AI toggle parameter
   
   // Debug: Log the parsed parameters
-  console.log('Parsed parameters:', { ipAddress, maxAgeInDays, verbose });
+  console.log('Parsed parameters:', { ipAddress, maxAgeInDays, verbose, enableAI });
   
   // Validate required parameters
   if (!ipAddress) {
@@ -493,13 +494,23 @@ async function handleCombinedRequest(request, env) {
       radarError = `Cloudflare Radar API error: ${status} ${statusText}`;
     }
 
-    // Generate AI-based reputation analysis using the collected data
-    console.log('Generating AI reputation analysis...');
-    const aiReputation = await generateAIReputation(env, ipAddress, abuseIPDBData, radarData);
-    console.log('AI reputation analysis result:', {
-      success: aiReputation.success,
-      error: aiReputation.error
-    });
+    // Generate AI-based reputation analysis using the collected data (only if enabled)
+    let aiReputation = null;
+    if (enableAI) {
+      console.log('Generating AI reputation analysis...');
+      aiReputation = await generateAIReputation(env, ipAddress, abuseIPDBData, radarData);
+      console.log('AI reputation analysis result:', {
+        success: aiReputation.success,
+        error: aiReputation.error
+      });
+    } else {
+      console.log('AI reputation analysis disabled by client request');
+      aiReputation = {
+        success: false,
+        error: 'AI analysis disabled',
+        analysis: null
+      };
+    }
 
     // Combine the responses into a single response object
     const combinedResponse = {
@@ -526,7 +537,7 @@ async function handleCombinedRequest(request, env) {
         sources: {
           abuseipdb: abuseIPDBError ? 'error' : 'success',
           radar: radarError ? 'error' : 'success',
-          ai: aiReputation.success ? 'success' : 'error'
+          ai: enableAI ? (aiReputation.success ? 'success' : 'error') : 'disabled'
         }
       }
     };
