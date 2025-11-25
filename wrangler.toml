@@ -16,6 +16,16 @@ binding = "AI"
 name = "abuseipdb"
 routes = []
 
+[env.production.ai]
+binding = "AI"
+
+# Preview environment
+[env.preview]
+name = "abuseipdb-preview"
+
+[env.preview.ai]
+binding = "AI"
+
 # Environment variables (these will be set via GitHub Actions secrets)
 # [vars]
 # ENVIRONMENT = "production"
