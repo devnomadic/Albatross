@@ -4,11 +4,13 @@
  * This worker provides comprehensive IP analysis by combining multiple data sources:
  * 1. AbuseIPDB API - IP abuse reputation checking
  * 2. Cloudflare Radar API - ASN and network information lookup
+ * 3. Cloudflare Workers AI - AI-powered reputation analysis using Llama 3.1 70B
  * 
  * Features:
  * - Protects API keys from client exposure
  * - Handles CORS for browser requests
- * - Fetches both APIs in parallel for optimal performance
+ * - Fetches multiple APIs in parallel for optimal performance
+ * - Generates AI-powered risk assessments and recommendations
  * - Returns combined data in a single JSON response
  * - Uses HMAC-based authentication for security with build-time generated keys
  * - Provides fallback data when one API fails
@@ -23,6 +25,18 @@
  *     "success": true/false,
  *     "data": [ ... Cloudflare Radar ASN data ... ],
  *     "error": null/string
+ *   },
+ *   "aiReputation": {
+ *     "success": true/false,
+ *     "error": null/string,
+ *     "analysis": {
+ *       "riskLevel": "low|medium|high|critical",
+ *       "trustScore": <0-100>,
+ *       "summary": "<AI-generated assessment>",
+ *       "recommendations": ["<action 1>", "<action 2>"]
+ *     },
+ *     "model": "@cf/meta/llama-3.1-70b-instruct",
+ *     "timestamp": "<ISO timestamp>"
  *   },
  *   "workerInfo": { ... metadata ... }
  * }
@@ -85,21 +99,164 @@ const ALLOWED_ORIGINS = [
   "http://localhost:5044"
 ];
 
-addEventListener('fetch', event => {
-  event.respondWith(handleRequest(event.request));
-});
+// ES Module export for Cloudflare Workers (required for AI binding)
+export default {
+  async fetch(request, env, ctx) {
+    // Handle CORS preflight requests
+    if (request.method === "OPTIONS") {
+      return handleCORS(request);
+    }
 
-async function handleRequest(request) {
-  // Handle CORS preflight requests
-  if (request.method === "OPTIONS") {
-    return handleCORS(request);
+    // All requests go through the combined handler
+    return handleCombinedRequest(request, env);
   }
+};
 
-  // All requests go through the combined handler
-  return handleCombinedRequest(request);
+/**
+ * Generate AI-based IP reputation analysis using Cloudflare Workers AI
+ * @param {object} env - Worker environment with AI binding
+ * @param {string} ipAddress - The IP address to analyze
+ * @param {object} abuseData - AbuseIPDB data for context
+ * @param {object} asnData - ASN data for context
+ * @returns {Promise<object>} AI reputation analysis
+ */
+async function generateAIReputation(env, ipAddress, abuseData, asnData) {
+  try {
+    // Check if AI binding is available
+    if (!env || !env.AI) {
+      console.log('AI binding not available in environment');
+      return {
+        success: false,
+        error: 'AI service not available',
+        analysis: null
+      };
+    }
+
+    // Build context from available data
+    const abuseScore = abuseData?.data?.abuseConfidenceScore || 0;
+    const totalReports = abuseData?.data?.totalReports || 0;
+    const countryCode = abuseData?.data?.countryCode || 'Unknown';
+    const isp = abuseData?.data?.isp || 'Unknown';
+    const usageType = abuseData?.data?.usageType || 'Unknown';
+    const asnName = asnData?.result?.[0]?.asn?.name || 'Unknown';
+    const asnNumber = asnData?.result?.[0]?.asn?.asn || 'Unknown';
+    const numDistinctUsers = abuseData?.data?.numDistinctUsers || 0;
+    const reports = abuseData?.data?.reports || [];
+
+    // Extract sample abuse event details
+    let eventSummary = '';
+    if (reports.length > 0) {
+      const recentReports = reports.slice(0, 5);
+      const categories = recentReports.flatMap(r => r.categories || []);
+      const uniqueCategories = [...new Set(categories)];
+      const comments = recentReports.map(r => r.comment).filter(c => c && c.trim());
+      
+      eventSummary = `\n\nAbuse Events (${totalReports} reports from ${numDistinctUsers} users):`;
+      if (uniqueCategories.length > 0) {
+        eventSummary += `\nEvent Types: ${uniqueCategories.join(', ')}`;
+      }
+      if (comments.length > 0) {
+        eventSummary += `\nSample Reports:\n${comments.slice(0, 3).map((c, i) => `  ${i + 1}. ${c.substring(0, 100)}${c.length > 100 ? '...' : ''}`).join('\n')}`;
+      }
+    }
+
+    // Create a prompt for the AI to analyze the IP reputation
+    const prompt = `You are a cybersecurity expert analyzing IP address reputation. Based on the following real-time data, provide a concise risk assessment and reputation summary.
+
+IP Address: ${ipAddress}
+Country: ${countryCode}
+ISP: ${isp}
+Usage Type: ${usageType}
+ASN: ${asnNumber} (${asnName})
+Abuse Confidence Score: ${abuseScore}% (0-100 scale, higher is worse)
+Total Abuse Reports: ${totalReports}${eventSummary}
+
+Provide a JSON response with the following structure:
+{
+  "riskLevel": "low|medium|high|critical",
+  "trustScore": <number 0-100, higher is better>,
+  "summary": "<2-3 sentence overall risk assessment>",
+  "eventsSummary": "<2-3 sentence summary of abuse event patterns & targeted services or null if no events>",
+  "recommendations": ["<action 1>", "<action 2>"]
 }
 
-async function handleCombinedRequest(request) {
+Focus on actionable insights based on the abuse score, report count, network information, and abuse event patterns. Keep summaries concise and professional.`;
+
+    console.log('Calling Workers AI with Llama 3.1 70B for IP reputation analysis...');
+
+    // Call Cloudflare Workers AI using Llama 3.1 70B Instruct model
+    const response = await env.AI.run('@cf/meta/llama-3.1-70b-instruct', {
+      messages: [
+        {
+          role: 'system',
+          content: 'You are a cybersecurity expert. Respond only with valid JSON, no markdown formatting or code blocks.'
+        },
+        {
+          role: 'user',
+          content: prompt
+        }
+      ],
+      max_tokens: 500,
+      temperature: 0.3, // Lower temperature for more consistent, factual responses
+    });
+
+    console.log('AI response received:', response);
+
+    // Parse the AI response
+    let analysis = null;
+    if (response && response.response) {
+      try {
+        // The response.response contains the AI's text output
+        const aiText = response.response.trim();
+        
+        // Try to extract JSON from the response (handle cases where AI might add extra text)
+        let jsonText = aiText;
+        if (aiText.includes('{')) {
+          const startIdx = aiText.indexOf('{');
+          const endIdx = aiText.lastIndexOf('}');
+          if (startIdx >= 0 && endIdx > startIdx) {
+            jsonText = aiText.substring(startIdx, endIdx + 1);
+          }
+        }
+        
+        analysis = JSON.parse(jsonText);
+        console.log('AI analysis parsed successfully:', analysis);
+      } catch (parseError) {
+        console.error('Error parsing AI response:', parseError);
+        // Fallback to basic analysis if JSON parsing fails
+        const eventsFallback = reports.length > 0 
+          ? `Reported ${totalReports} times for ${[...new Set(reports.flatMap(r => r.categories || []))].slice(0, 3).join(', ')}.`
+          : null;
+        
+        analysis = {
+          riskLevel: abuseScore > 75 ? 'critical' : abuseScore > 50 ? 'high' : abuseScore > 25 ? 'medium' : 'low',
+          trustScore: Math.max(0, 100 - abuseScore),
+          summary: `IP from ${countryCode} with ${abuseScore}% abuse confidence score and ${totalReports} reports.`,
+          eventsSummary: eventsFallback,
+          recommendations: ['Review the abuse reports for details', 'Consider blocking if risk level is high']
+        };
+      }
+    }
+
+    return {
+      success: true,
+      error: null,
+      analysis: analysis,
+      model: '@cf/meta/llama-3.1-70b-instruct',
+      timestamp: new Date().toISOString()
+    };
+
+  } catch (error) {
+    console.error('AI reputation generation error:', error);
+    return {
+      success: false,
+      error: error.message || 'Failed to generate AI reputation',
+      analysis: null
+    };
+  }
+}
+
+async function handleCombinedRequest(request, env) {
 
   // Get the request origin
   const origin = request.headers.get('Origin') || '';
@@ -242,9 +399,10 @@ async function handleCombinedRequest(request) {
   const ipAddress = url.searchParams.get('ipaddress'); // lowercase parameter name
   const maxAgeInDays = url.searchParams.get('maxageindays') || 30; // lowercase parameter name
   const verbose = url.searchParams.get('verbose') === 'true';
+  const enableAI = url.searchParams.get('enableai') === 'true'; // AI toggle parameter
   
   // Debug: Log the parsed parameters
-  console.log('Parsed parameters:', { ipAddress, maxAgeInDays, verbose });
+  console.log('Parsed parameters:', { ipAddress, maxAgeInDays, verbose, enableAI });
   
   // Validate required parameters
   if (!ipAddress) {
@@ -336,8 +494,30 @@ async function handleCombinedRequest(request) {
       radarError = `Cloudflare Radar API error: ${status} ${statusText}`;
     }
 
+    // Generate AI-based reputation analysis using the collected data (only if enabled)
+    let aiReputation = null;
+    if (enableAI) {
+      console.log('Generating AI reputation analysis...');
+      aiReputation = await generateAIReputation(env, ipAddress, abuseIPDBData, radarData);
+      console.log('AI reputation analysis result:', {
+        success: aiReputation.success,
+        error: aiReputation.error
+      });
+    } else {
+      console.log('AI reputation analysis disabled by client request');
+      aiReputation = {
+        success: false,
+        error: 'AI analysis disabled',
+        analysis: null
+      };
+    }
+
     // Combine the responses into a single response object
     const combinedResponse = {
+      
+      // Add AI reputation analysis
+      aiReputation: aiReputation,
+      
       // AbuseIPDB data (maintain original structure for compatibility)
       data: abuseIPDBData?.data || null,
       
@@ -356,7 +536,8 @@ async function handleCombinedRequest(request) {
         requestId: generateRequestId(),
         sources: {
           abuseipdb: abuseIPDBError ? 'error' : 'success',
-          radar: radarError ? 'error' : 'success'
+          radar: radarError ? 'error' : 'success',
+          ai: enableAI ? (aiReputation.success ? 'success' : 'error') : 'disabled'
         }
       }
     };

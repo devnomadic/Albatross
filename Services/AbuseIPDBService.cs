@@ -13,10 +13,13 @@ using Albatross.Generated;
 namespace Albatross.Services
 {
     /// <summary>
-    /// Complete API response model for AbuseIPDB with integrated ASN information
+    /// Complete API response model for AbuseIPDB with integrated ASN information and AI reputation
     /// </summary>
     public class AbuseIPDBApiResponse
     {
+        [JsonPropertyName("aiReputation")]
+        public AIReputation? AIReputation { get; set; }
+
         [JsonPropertyName("data")]
         public AbuseIPDBData? Data { get; set; }
 
@@ -28,6 +31,48 @@ namespace Albatross.Services
 
         [JsonPropertyName("workerInfo")]
         public WorkerInfo? WorkerInfo { get; set; }
+    }
+
+    /// <summary>
+    /// AI-generated reputation analysis from Cloudflare Workers AI
+    /// </summary>
+    public class AIReputation
+    {
+        [JsonPropertyName("success")]
+        public bool Success { get; set; }
+
+        [JsonPropertyName("error")]
+        public string? Error { get; set; }
+
+        [JsonPropertyName("analysis")]
+        public AIAnalysis? Analysis { get; set; }
+
+        [JsonPropertyName("model")]
+        public string? Model { get; set; }
+
+        [JsonPropertyName("timestamp")]
+        public string? Timestamp { get; set; }
+    }
+
+    /// <summary>
+    /// AI analysis details
+    /// </summary>
+    public class AIAnalysis
+    {
+        [JsonPropertyName("riskLevel")]
+        public string? RiskLevel { get; set; }
+
+        [JsonPropertyName("trustScore")]
+        public int TrustScore { get; set; }
+
+        [JsonPropertyName("summary")]
+        public string? Summary { get; set; }
+
+        [JsonPropertyName("eventsSummary")]
+        public string? EventsSummary { get; set; }
+
+        [JsonPropertyName("recommendations")]
+        public List<string>? Recommendations { get; set; }
     }
 
     /// <summary>
@@ -385,8 +430,9 @@ namespace Albatross.Services
         /// <param name="ipAddress">The IP address to check, optionally with maxAgeInDays delimited by semicolon (e.g., "8.8.8.8;60")</param>
         /// <param name="maxAgeInDays">Reports older than this many days won't be included (default 30). This is overridden if specified in ipAddress parameter</param>
         /// <param name="verbose">Whether to include detailed report information</param>
+        /// <param name="enableAI">Whether to enable AI reputation analysis (default true)</param>
         /// <returns>Complete AbuseIPDB information for the specified IP address</returns>
-        public async Task<AbuseIPDBApiResponse> CheckIPAsync(string ipAddress, int maxAgeInDays = 30, bool verbose = true)
+        public async Task<AbuseIPDBApiResponse> CheckIPAsync(string ipAddress, int maxAgeInDays = 30, bool verbose = true, bool enableAI = true)
         {
             // Parse the input to extract IP address and optionally maxAgeInDays
             string actualIpAddress;
@@ -417,11 +463,12 @@ namespace Albatross.Services
             try
             {
                 var verboseParam = verbose.ToString().ToLower();
+                var enableAIParam = enableAI.ToString().ToLower();
                 var timestamp = GetTimestamp();
 
                 // Include timestamp as a URI parameter
                 var requestUrl =
-                    $"{_cloudflareWorkerUrl}?ipAddress={actualIpAddress}&maxAgeInDays={actualMaxAgeInDays}&verbose={verboseParam}&timestamp={timestamp}"
+                    $"{_cloudflareWorkerUrl}?ipAddress={actualIpAddress}&maxAgeInDays={actualMaxAgeInDays}&verbose={verboseParam}&enableAI={enableAIParam}&timestamp={timestamp}"
                         .ToLower();
                 Console.WriteLine($"Requesting: {requestUrl}");
 

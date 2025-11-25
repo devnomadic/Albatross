@@ -1,13 +1,14 @@
 # Albatross
 
-A modern Blazor WebAssembly application that provides comprehensive IP address analysis and abuse checking functionality. Albatross combines cloud IP range detection with AbuseIPDB reputation checking through a secure Cloudflare Worker proxy.
+A modern Blazor WebAssembly application that provides comprehensive IP address analysis and abuse checking functionality. Albatross combines cloud IP range detection with AbuseIPDB reputation checking and AI-powered risk assessment through a secure Cloudflare Worker proxy.
 
 ## Features
 
 - **IP Abuse Checking**: Query the AbuseIPDB API to check if an IP address has been reported for malicious activity
+- **AI-Powered Reputation Analysis**: Advanced risk assessment using Cloudflare Workers AI with Llama 3.1 70B Instruct model
 - **Cloud IP Range Detection**: Identify if an IP address belongs to major cloud providers (AWS, Azure, GCP, Oracle Cloud)
 - **Flexible Input Format**: Support for IP addresses with custom report age (e.g., `8.8.8.8;60` for 60 days of history)
-- **Combined Data Sources**: Integrated AbuseIPDB and Cloudflare Radar API data for comprehensive IP analysis
+- **Combined Data Sources**: Integrated AbuseIPDB, Cloudflare Radar API, and Workers AI for comprehensive IP analysis
 - **Secure Authentication**: Build-time generated HMAC authentication with timestamp validation for enhanced security
 - **CORS Protection**: Cloudflare Worker proxy handles CORS and protects API keys from client exposure
 - **SEO-Optimized**: Static HTML prerendering for improved search engine indexing and web crawler accessibility
@@ -317,8 +318,40 @@ Users can specify custom report age limits using a semicolon delimiter:
 ### Combined API Integration
 - **AbuseIPDB**: IP reputation and abuse reports
 - **Cloudflare Radar**: ASN information and network details
-- **Parallel Processing**: Both APIs are queried simultaneously for optimal performance
+- **Cloudflare Workers AI**: AI-powered risk assessment using Llama 3.1 70B Instruct model
+- **Optimized Processing**: AbuseIPDB and Radar APIs are queried in parallel; AI analysis processes their results
 - **Graceful Degradation**: Partial results if one API fails
+
+### AI-Powered Reputation Analysis
+The worker uses Cloudflare Workers AI with the Llama 3.1 70B Instruct model to generate intelligent risk assessments:
+- **Real-time Analysis**: Analyzes data from AbuseIPDB and Cloudflare Radar APIs
+- **Risk Levels**: Categorizes threats as low, medium, high, or critical
+- **Trust Scores**: Provides 0-100 trust score for quick assessment
+- **AI Summary**: Natural language explanation of the IP's reputation
+- **Event Pattern Analysis**: Summarizes abuse event types and patterns from historical reports
+- **Actionable Recommendations**: Specific steps to take based on the analysis
+- **Model**: `@cf/meta/llama-3.1-70b-instruct` (70 billion parameter model)
+
+Example AI Response:
+```json
+{
+  "aiReputation": {
+    "success": true,
+    "analysis": {
+      "riskLevel": "medium",
+      "trustScore": 65,
+      "summary": "This IP from US shows moderate abuse activity with 15 reports. ISP indicates datacenter usage which is common for both legitimate and malicious traffic.",
+      "eventsSummary": "Reported 15 times for Port Scan, Brute-Force, SSH activity over the past 30 days.",
+      "recommendations": [
+        "Review the specific abuse reports for patterns",
+        "Consider rate limiting if used for API access"
+      ]
+    },
+    "model": "@cf/meta/llama-3.1-70b-instruct",
+    "timestamp": "2025-10-28T04:45:00.000Z"
+  }
+}
+```
 
 ## Current Status
 
@@ -329,6 +362,7 @@ Users can specify custom report age limits using a semicolon delimiter:
 ✅ **GitHub Actions**: Automated CI/CD pipeline functional
 ✅ **Security Scanning**: CodeQL and dependency review workflows active
 ✅ **Code Quality**: Automated formatting and testing in CI/CD
+✅ **AI Integration**: Cloudflare Workers AI with Llama 3.1 70B for reputation analysis
 
 ## Image Credits
 

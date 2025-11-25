@@ -66,6 +66,21 @@ jobs:
     - name: Install npm dependencies
       run: npm ci
       
+    - name: Generate Version
+      id: version
+      run: |
+        # Generate build timestamp in the same format as the app (yyyyMMdd-HHmm)
+        BUILD_TIMESTAMP=$(date -u +"%Y%m%d-%H%M")
+        BUILD_ID=$(echo "${{ github.sha }}" | cut -c1-8)
+        VERSION="${BUILD_TIMESTAMP}-${BUILD_ID}"
+        
+        echo "version=${VERSION}" >> $GITHUB_OUTPUT
+        echo "build-timestamp=${BUILD_TIMESTAMP}" >> $GITHUB_OUTPUT
+        echo "build-id=${BUILD_ID}" >> $GITHUB_OUTPUT
+        echo "Preview version: ${VERSION}"
+        echo "Build timestamp: ${BUILD_TIMESTAMP}"
+        echo "Build ID: ${BUILD_ID}"
+      
     - name: Generate Preview Name
       id: preview
       run: |
@@ -95,9 +110,11 @@ jobs:
         CLOUDFLARE_RADAR_API_TOKEN: ${{ secrets.CLOUDFLARE_RADAR_API_TOKEN_DEV }}
         SkipCodeGeneration: false
         ALBATROSS_ENVIRONMENT: preview
+        BUILD_TIMESTAMP: ${{ steps.version.outputs.build-timestamp }}
+        BUILD_ID: ${{ steps.version.outputs.build-id }}
       run: |
-        # Generate authentication key with environment context
-        ./Generate-AuthKey.ps1 -OutputPath "Generated" -Environment "preview" -Verbose
+        # Generate authentication key with environment context and build info
+        ./Generate-AuthKey.ps1 -OutputPath "Generated" -Environment "preview" -BuildTimestamp "$env:BUILD_TIMESTAMP" -BuildId "$env:BUILD_ID" -Verbose
         
         # Build application (this generates both SPA and Worker files)
         dotnet build --configuration Release --no-restore
