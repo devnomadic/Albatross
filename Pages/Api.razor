@@ -1,5 +1,4 @@
 @page "/api"
-@layout null
 @inject HttpClient Http
 @inject Albatross.Services.AbuseIPDBService AbuseIPDBService
 @inject NavigationManager NavigationManager
@@ -152,7 +151,7 @@
                 },
                 reputation = reputationData.Data,
                 asnInfo = reputationData.AsnInfo,
-                aiReputation = reputationData.AiReputation
+                aiReputation = reputationData.AIReputation
             },
             metadata = new
             {
@@ -164,7 +163,7 @@
                     cloudSearch = "success",
                     abuseipdb = reputationData.Data != null ? "success" : "error",
                     radar = reputationData.AsnInfo?.Success == true ? "success" : "error",
-                    ai = reputationData.AiReputation?.Success == true ? "success" : (reputationData.AiReputation != null ? "error" : "disabled")
+                    ai = reputationData.AIReputation?.Success == true ? "success" : (reputationData.AIReputation != null ? "error" : "disabled")
                 },
                 workerInfo = reputationData.WorkerInfo
             }
