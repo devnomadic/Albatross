@@ -107,7 +107,11 @@
 \____/_/\____/\__,_/\__,_/  /___/_/       /____/\___/\__,_/_/   \___/_/ /_/ 
 </b></pre><br>
 -->
-<img src="/images/ascii-text-art.png" alt="CloudIPSearch" width="38%" style="padding-bottom: 5px;" border="0"/> <br>
+@{
+    var currentMonth = DateTime.Now.Month;
+    var logoPath = currentMonth == 12 ? "/images/ascii-text-art-christmas.png" : "/images/ascii-text-art.png";
+}
+<img src="@logoPath" alt="CloudIPSearch" width="38%" style="padding-bottom: 5px;" border="0"/> <br>
 <img src="/images/ascii-text-art-albatross.png" alt="ascii-text-art-albatross" width="15%" border="0" /> <br><br>
 <div class="ascii-art-pixel-matrix" role="img" aria-label="ASCII art pixel matrix">
     <div class="pixel-matrix__grid">
