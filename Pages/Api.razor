@@ -2,25 +2,18 @@
 @inject HttpClient Http
 @inject Albatross.Services.AbuseIPDBService AbuseIPDBService
 @inject NavigationManager NavigationManager
+@inject IJSRuntime JSRuntime
 @using System.Text.Json
 @using System.Net
 @using System.Diagnostics
 
-<!DOCTYPE html>
-<html>
-<head>
-    <meta http-equiv="Content-Type" content="application/json; charset=utf-8">
-</head>
-<body>
-<text>@jsonOutput</text>
-</body>
-</html>
+<div>Generating API response...</div>
 
 @code {
-    private string jsonOutput = string.Empty;
-
-    protected override async Task OnInitializedAsync()
+    protected override async Task OnAfterRenderAsync(bool firstRender)
     {
+        if (!firstRender) return;
+        
         var startTime = Stopwatch.StartNew();
         var requestId = Guid.NewGuid().ToString("N").Substring(0, 16);
         
@@ -38,7 +31,9 @@
             // Validate required parameter
             if (string.IsNullOrEmpty(ipAddress))
             {
-                jsonOutput = BuildErrorResponse("Missing required parameter: ipaddress", "MISSING_PARAMETER", 400, requestId, startTime);
+                var errorJson = BuildErrorResponse("Missing required parameter: ipaddress", "MISSING_PARAMETER", 400, requestId, startTime);
+                await JSRuntime.InvokeVoidAsync("sessionStorage.setItem", "apiResponse", errorJson);
+                NavigationManager.NavigateTo("/apiresults", true);
                 return;
             }
             
@@ -53,7 +48,9 @@
             // Validate IP address
             if (!IsValidIPAddress(ipAddress))
             {
-                jsonOutput = BuildErrorResponse("Invalid IP address. Please enter a valid public routable IPv4 or IPv6 address (private/reserved ranges are not allowed).", "INVALID_IP", 400, requestId, startTime);
+                var errorJson = BuildErrorResponse("Invalid IP address. Please enter a valid public routable IPv4 or IPv6 address (private/reserved ranges are not allowed).", "INVALID_IP", 400, requestId, startTime);
+                await JSRuntime.InvokeVoidAsync("sessionStorage.setItem", "apiResponse", errorJson);
+                NavigationManager.NavigateTo("/apiresults", true);
                 return;
             }
             
@@ -74,11 +71,17 @@
             var reputationResults = await reputationTask;
             
             // Build unified response
-            jsonOutput = BuildSuccessResponse(actualIpAddress, cloudResults, reputationResults, requestId, startTime);
+            var jsonOutput = BuildSuccessResponse(actualIpAddress, cloudResults, reputationResults, requestId, startTime);
+            
+            // Store in sessionStorage and redirect to results page
+            await JSRuntime.InvokeVoidAsync("sessionStorage.setItem", "apiResponse", jsonOutput);
+            NavigationManager.NavigateTo("/apiresults", true);
         }
         catch (Exception ex)
         {
-            jsonOutput = BuildErrorResponse($"Internal server error: {ex.Message}", "INTERNAL_ERROR", 500, requestId, startTime);
+            var errorJson = BuildErrorResponse($"Internal server error: {ex.Message}", "INTERNAL_ERROR", 500, requestId, startTime);
+            await JSRuntime.InvokeVoidAsync("sessionStorage.setItem", "apiResponse", errorJson);
+            NavigationManager.NavigateTo("/apiresults", true);
         }
     }
     
