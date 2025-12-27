@@ -652,24 +652,36 @@ async function searchCloudManifests(ipAddress, provider, env) {
       try {
         // Fetch manifest from origin (wwwroot/ip-manifests/)
         const manifestUrl = `https://albatross.devnomadic.com/ip-manifests/${providerName.toUpperCase()}.json`;
-        const response = await fetch(manifestUrl);
+        console.log(`Fetching manifest: ${manifestUrl}`);
+        
+        const response = await fetch(manifestUrl, {
+          cf: {
+            cacheTtl: 3600, // Cache for 1 hour
+            cacheEverything: true
+          }
+        });
         
         if (!response.ok) {
-          console.error(`Failed to fetch ${providerName} manifest:`, response.status);
+          console.error(`Failed to fetch ${providerName} manifest:`, response.status, response.statusText);
           continue;
         }
         
         const manifestData = await response.json();
+        console.log(`Successfully loaded ${providerName} manifest, searching for ${ipAddress}`);
         
         // Search based on provider format
         if (providerName === 'azure') {
           results.azure = searchAzureManifest(ipAddress, manifestData);
+          console.log(`Azure search complete: ${results.azure.length} matches`);
         } else if (providerName === 'aws') {
           results.aws = searchAwsManifest(ipAddress, manifestData);
+          console.log(`AWS search complete: ${results.aws.length} matches`);
         } else if (providerName === 'gcp') {
           results.gcp = searchGcpManifest(ipAddress, manifestData);
+          console.log(`GCP search complete: ${results.gcp.length} matches`);
         } else if (providerName === 'oracle') {
           results.oracle = searchOracleManifest(ipAddress, manifestData);
+          console.log(`Oracle search complete: ${results.oracle.length} matches`);
         }
       } catch (error) {
         console.error(`Error searching ${providerName} manifest:`, error);

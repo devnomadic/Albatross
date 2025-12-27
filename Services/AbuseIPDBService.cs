@@ -473,10 +473,10 @@ namespace Albatross.Services
                 // Build request URL with optional cloudprovider parameter
                 var requestUrl = $"{_cloudflareWorkerUrl}?ipAddress={actualIpAddress}&maxAgeInDays={actualMaxAgeInDays}&verbose={verboseParam}&enableAI={enableAIParam}";
                 
-                // Add cloudprovider parameter if specified
+                // Add cloudprovider parameter if specified (lowercase to match worker)
                 if (!string.IsNullOrEmpty(cloudProvider))
                 {
-                    requestUrl += $"&cloudProvider={cloudProvider}";
+                    requestUrl += $"&cloudprovider={cloudProvider.ToLower()}";
                 }
                 
                 // Add timestamp

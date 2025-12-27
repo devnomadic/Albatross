@@ -9,9 +9,8 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <meta http-equiv="Content-Type" content="application/json; charset=utf-8">
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
     <link rel="stylesheet" href="css/json-formatter.css">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.7.0/styles/vs2015.min.css">
     <style>
         body {
             margin: 0;
@@ -27,17 +26,41 @@
             font-size: 14px;
             line-height: 1.5;
             overflow-x: auto;
+            border: none;
         }
         pre code {
             background: transparent;
             padding: 0;
+            color: #d4d4d4;
+        }
+        /* VS2015 Dark Theme Colors */
+        .hljs {
+            background: #1e1e1e;
+            color: #dcdcdc;
+        }
+        .hljs-attr {
+            color: #9cdcfe;
+        }
+        .hljs-string {
+            color: #ce9178;
+        }
+        .hljs-number {
+            color: #b5cea8;
+        }
+        .hljs-literal {
+            color: #569cd6;
+        }
+        .hljs-punctuation {
+            color: #d4d4d4;
         }
     </style>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.7.0/highlight.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.7.0/languages/json.min.js"></script>
     <script>
         document.addEventListener('DOMContentLoaded', function() {
-            hljs.highlightAll();
+            document.querySelectorAll('pre code').forEach((block) => {
+                hljs.highlightElement(block);
+            });
         });
     </script>
 </head>
