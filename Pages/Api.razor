@@ -58,12 +58,15 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.7.0/languages/json.min.js"></script>
 </head>
 <body>
-<pre><code class="language-json" id="json-output">@jsonOutput</code></pre>
+<pre id="json-container"><code class="language-json">@jsonOutput</code></pre>
 <script>
-    // Highlight after Blazor renders the content
-    if (typeof hljs !== 'undefined') {
-        hljs.highlightElement(document.getElementById('json-output'));
-    }
+    // Highlight after content is rendered
+    setTimeout(function() {
+        const codeBlock = document.querySelector('#json-container code');
+        if (codeBlock && typeof hljs !== 'undefined') {
+            hljs.highlightElement(codeBlock);
+        }
+    }, 100);
 </script>
 </body>
 </html>
