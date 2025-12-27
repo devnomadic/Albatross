@@ -2,18 +2,55 @@
 @inject HttpClient Http
 @inject Albatross.Services.AbuseIPDBService AbuseIPDBService
 @inject NavigationManager NavigationManager
-@inject IJSRuntime JSRuntime
 @using System.Text.Json
 @using System.Net
 @using System.Diagnostics
 
-<div>Generating API response...</div>
+<!DOCTYPE html>
+<html>
+<head>
+    <meta http-equiv="Content-Type" content="application/json; charset=utf-8">
+    <link rel="stylesheet" href="css/json-formatter.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.7.0/styles/vs2015.min.css">
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            background-color: #1e1e1e;
+            font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+        }
+        pre {
+            margin: 0;
+            padding: 20px;
+            background-color: #1e1e1e;
+            color: #d4d4d4;
+            font-size: 14px;
+            line-height: 1.5;
+            overflow-x: auto;
+        }
+        pre code {
+            background: transparent;
+            padding: 0;
+        }
+    </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.7.0/highlight.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.7.0/languages/json.min.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            hljs.highlightAll();
+        });
+    </script>
+</head>
+<body>
+<pre><code class="language-json">@jsonOutput</code></pre>
+</body>
+</html>
 
 @code {
-    protected override async Task OnAfterRenderAsync(bool firstRender)
+    private string jsonOutput = string.Empty;
+
+    protected override async Task OnInitializedAsync()
     {
-        if (!firstRender) return;
-        
         var startTime = Stopwatch.StartNew();
         var requestId = Guid.NewGuid().ToString("N").Substring(0, 16);
         
@@ -27,13 +64,12 @@
             var maxAgeInDaysStr = query["maxageindays"] ?? "30";
             var verboseStr = query["verbose"] ?? "true";
             var enableAiStr = query["enableai"] ?? "true";
+            var cloudProvider = query["cloudprovider"]; // Optional: aws, azure, gcp, oracle, or all
             
             // Validate required parameter
             if (string.IsNullOrEmpty(ipAddress))
             {
-                var errorJson = BuildErrorResponse("Missing required parameter: ipaddress", "MISSING_PARAMETER", 400, requestId, startTime);
-                await JSRuntime.InvokeVoidAsync("sessionStorage.setItem", "apiResponse", errorJson);
-                NavigationManager.NavigateTo("/apiresults", true);
+                jsonOutput = BuildErrorResponse("Missing required parameter: ipaddress", "MISSING_PARAMETER", 400, requestId, startTime);
                 return;
             }
             
@@ -48,9 +84,7 @@
             // Validate IP address
             if (!IsValidIPAddress(ipAddress))
             {
-                var errorJson = BuildErrorResponse("Invalid IP address. Please enter a valid public routable IPv4 or IPv6 address (private/reserved ranges are not allowed).", "INVALID_IP", 400, requestId, startTime);
-                await JSRuntime.InvokeVoidAsync("sessionStorage.setItem", "apiResponse", errorJson);
-                NavigationManager.NavigateTo("/apiresults", true);
+                jsonOutput = BuildErrorResponse("Invalid IP address. Please enter a valid public routable IPv4 or IPv6 address (private/reserved ranges are not allowed).", "INVALID_IP", 400, requestId, startTime);
                 return;
             }
             
@@ -61,64 +95,19 @@
             
             IPAddress parsedIp = IPAddress.Parse(actualIpAddress);
             
-            // Perform cloud search and reputation check in parallel
-            var cloudSearchTask = PerformCloudSearchAsync(parsedIp);
-            var reputationTask = AbuseIPDBService.CheckIPAsync(actualIpAddress, maxAgeInDays, verbose, enableAi);
-            
-            await Task.WhenAll(cloudSearchTask, reputationTask);
-            
-            var cloudResults = await cloudSearchTask;
-            var reputationResults = await reputationTask;
+            // Perform reputation check (worker handles cloud search)
+            var reputationResults = await AbuseIPDBService.CheckIPAsync(actualIpAddress, maxAgeInDays, verbose, enableAi, cloudProvider);
             
             // Build unified response
-            var jsonOutput = BuildSuccessResponse(actualIpAddress, cloudResults, reputationResults, requestId, startTime);
-            
-            // Store in sessionStorage and redirect to results page
-            await JSRuntime.InvokeVoidAsync("sessionStorage.setItem", "apiResponse", jsonOutput);
-            NavigationManager.NavigateTo("/apiresults", true);
+            jsonOutput = BuildSuccessResponse(actualIpAddress, reputationResults, requestId, startTime);
         }
         catch (Exception ex)
         {
-            var errorJson = BuildErrorResponse($"Internal server error: {ex.Message}", "INTERNAL_ERROR", 500, requestId, startTime);
-            await JSRuntime.InvokeVoidAsync("sessionStorage.setItem", "apiResponse", errorJson);
-            NavigationManager.NavigateTo("/apiresults", true);
+            jsonOutput = BuildErrorResponse($"Internal server error: {ex.Message}", "INTERNAL_ERROR", 500, requestId, startTime);
         }
     }
     
-    private async Task<CloudSearchResults> PerformCloudSearchAsync(IPAddress enteredIp)
-    {
-        // Load all manifest files in parallel
-        var downloadTasks = new[]
-        {
-            Http.GetStringAsync("ip-manifests/Azure.json"),
-            Http.GetStringAsync("ip-manifests/AWS.json"),
-            Http.GetStringAsync("ip-manifests/GCP.json"),
-            Http.GetStringAsync("ip-manifests/Oracle.json")
-        };
-        
-        var manifestContents = await Task.WhenAll(downloadTasks);
-        
-        // Process all manifests in parallel
-        var searchTasks = new[]
-        {
-            Task.Run(() => SearchAzureRanges(enteredIp, manifestContents[0])),
-            Task.Run(() => SearchAwsRanges(enteredIp, manifestContents[1])),
-            Task.Run(() => SearchGcpRanges(enteredIp, manifestContents[2])),
-            Task.Run(() => SearchOracleRanges(enteredIp, manifestContents[3]))
-        };
-        
-        var searchResults = await Task.WhenAll(searchTasks);
-        
-        return new CloudSearchResults
-        {
-            Azure = searchResults[0],
-            Aws = searchResults[1],
-            Gcp = searchResults[2],
-            Oracle = searchResults[3]
-        };
-    }
-    
-    private string BuildSuccessResponse(string ipAddress, CloudSearchResults cloudResults, Albatross.Services.AbuseIPDBApiResponse reputationData, string requestId, Stopwatch timer)
+    private string BuildSuccessResponse(string ipAddress, Albatross.Services.AbuseIPDBApiResponse reputationData, string requestId, Stopwatch timer)
     {
         timer.Stop();
         
@@ -128,30 +117,7 @@
             data = new
             {
                 ipAddress = ipAddress,
-                cloudMatches = new
-                {
-                    azure = cloudResults.Azure.Select(m => new { serviceInfo = m.ServiceInfo, cidrRange = m.CidrRange }).ToArray(),
-                    aws = cloudResults.Aws.Select(m => new { serviceInfo = m.ServiceInfo, cidrRange = m.CidrRange }).ToArray(),
-                    gcp = cloudResults.Gcp.Select(m => new { serviceInfo = m.ServiceInfo, cidrRange = m.CidrRange }).ToArray(),
-                    oracle = cloudResults.Oracle.Select(m => new { serviceInfo = m.ServiceInfo, cidrRange = m.CidrRange }).ToArray(),
-                    summary = new
-                    {
-                        totalMatches = cloudResults.Azure.Count + cloudResults.Aws.Count + cloudResults.Gcp.Count + cloudResults.Oracle.Count,
-                        providers = new
-                        {
-                            azure = cloudResults.Azure.Count,
-                            aws = cloudResults.Aws.Count,
-                            gcp = cloudResults.Gcp.Count,
-                            oracle = cloudResults.Oracle.Count
-                        },
-                        matchedProviders = new[] {
-                            cloudResults.Azure.Any() ? "Azure" : null,
-                            cloudResults.Aws.Any() ? "AWS" : null,
-                            cloudResults.Gcp.Any() ? "GCP" : null,
-                            cloudResults.Oracle.Any() ? "Oracle" : null
-                        }.Where(p => p != null).ToArray()
-                    }
-                },
+                cloudMatches = reputationData.CloudMatches,
                 reputation = reputationData.Data,
                 asnInfo = reputationData.AsnInfo,
                 aiReputation = reputationData.AIReputation
@@ -163,7 +129,7 @@
                 executionTimeMs = timer.ElapsedMilliseconds,
                 sources = new
                 {
-                    cloudSearch = "success",
+                    cloudSearch = reputationData.CloudMatches != null ? "success" : "not-requested",
                     abuseipdb = reputationData.Data != null ? "success" : "error",
                     radar = reputationData.AsnInfo?.Success == true ? "success" : "error",
                     ai = reputationData.AIReputation?.Success == true ? "success" : (reputationData.AIReputation != null ? "error" : "disabled")
@@ -207,180 +173,6 @@
         };
         
         return JsonSerializer.Serialize(response, options);
-    }
-    
-    // Reused from Home.razor
-    private List<CloudMatch> SearchAzureRanges(IPAddress enteredIp, string jsonContent)
-    {
-        var matchedServices = new List<CloudMatch>();
-        
-        try
-        {
-            var azureData = JsonSerializer.Deserialize<AzureIpRanges>(jsonContent);
-            
-            if (azureData?.values != null)
-            {
-                foreach (var value in azureData.values)
-                {
-                    if (value.properties?.addressPrefixes != null)
-                    {
-                        foreach (var prefix in value.properties.addressPrefixes)
-                        {
-                            if (IsIpInRange(enteredIp, prefix) && !string.IsNullOrEmpty(value.name))
-                            {
-                                var match = new CloudMatch
-                                {
-                                    ServiceInfo = value.name,
-                                    CidrRange = prefix
-                                };
-                                if (!matchedServices.Any(m => m.ServiceInfo == match.ServiceInfo && m.CidrRange == match.CidrRange))
-                                {
-                                    matchedServices.Add(match);
-                                }
-                                break;
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"Error searching Azure ranges: {ex.Message}");
-        }
-        
-        return matchedServices;
-    }
-    
-    private List<CloudMatch> SearchAwsRanges(IPAddress enteredIp, string jsonContent)
-    {
-        var matchedServices = new List<CloudMatch>();
-        
-        try
-        {
-            var awsData = JsonSerializer.Deserialize<AwsIpRanges>(jsonContent);
-            
-            if (awsData?.prefixes != null)
-            {
-                foreach (var prefix in awsData.prefixes)
-                {
-                    if (!string.IsNullOrEmpty(prefix.ip_prefix) && !string.IsNullOrEmpty(prefix.service))
-                    {
-                        if (IsIpInRange(enteredIp, prefix.ip_prefix))
-                        {
-                            string serviceInfo = $"{prefix.service} ({prefix.region})";
-                            var match = new CloudMatch { ServiceInfo = serviceInfo, CidrRange = prefix.ip_prefix };
-                            if (!matchedServices.Any(m => m.ServiceInfo == match.ServiceInfo && m.CidrRange == match.CidrRange))
-                            {
-                                matchedServices.Add(match);
-                            }
-                        }
-                    }
-                }
-            }
-            
-            if (awsData?.ipv6_prefixes != null)
-            {
-                foreach (var prefix in awsData.ipv6_prefixes)
-                {
-                    if (!string.IsNullOrEmpty(prefix.ipv6_prefix) && !string.IsNullOrEmpty(prefix.service))
-                    {
-                        if (IsIpInRange(enteredIp, prefix.ipv6_prefix))
-                        {
-                            string serviceInfo = $"{prefix.service} ({prefix.region})";
-                            var match = new CloudMatch { ServiceInfo = serviceInfo, CidrRange = prefix.ipv6_prefix };
-                            if (!matchedServices.Any(m => m.ServiceInfo == match.ServiceInfo && m.CidrRange == match.CidrRange))
-                            {
-                                matchedServices.Add(match);
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"Error searching AWS ranges: {ex.Message}");
-        }
-        
-        return matchedServices;
-    }
-    
-    private List<CloudMatch> SearchGcpRanges(IPAddress enteredIp, string jsonContent)
-    {
-        var matchedServices = new List<CloudMatch>();
-        
-        try
-        {
-            var gcpData = JsonSerializer.Deserialize<GcpIpRanges>(jsonContent);
-            
-            if (gcpData?.prefixes != null)
-            {
-                foreach (var prefix in gcpData.prefixes)
-                {
-                    string? ipRange = prefix.ipv4Prefix ?? prefix.ipv6Prefix;
-                    if (!string.IsNullOrEmpty(ipRange) && !string.IsNullOrEmpty(prefix.service))
-                    {
-                        if (IsIpInRange(enteredIp, ipRange))
-                        {
-                            string serviceInfo = $"{prefix.service} ({prefix.scope ?? "Global"})";
-                            var match = new CloudMatch { ServiceInfo = serviceInfo, CidrRange = ipRange };
-                            if (!matchedServices.Any(m => m.ServiceInfo == match.ServiceInfo && m.CidrRange == match.CidrRange))
-                            {
-                                matchedServices.Add(match);
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"Error searching GCP ranges: {ex.Message}");
-        }
-        
-        return matchedServices;
-    }
-    
-    private List<CloudMatch> SearchOracleRanges(IPAddress enteredIp, string jsonContent)
-    {
-        var matchedServices = new List<CloudMatch>();
-        
-        try
-        {
-            var oracleData = JsonSerializer.Deserialize<OracleIpRanges>(jsonContent);
-            
-            if (oracleData?.regions != null)
-            {
-                foreach (var region in oracleData.regions)
-                {
-                    if (region.cidrs != null)
-                    {
-                        foreach (var cidrInfo in region.cidrs)
-                        {
-                            if (!string.IsNullOrEmpty(cidrInfo.cidr) && cidrInfo.tags != null && cidrInfo.tags.Any())
-                            {
-                                if (IsIpInRange(enteredIp, cidrInfo.cidr))
-                                {
-                                    string serviceInfo = $"{string.Join(", ", cidrInfo.tags)} ({region.region})";
-                                    var match = new CloudMatch { ServiceInfo = serviceInfo, CidrRange = cidrInfo.cidr };
-                                    if (!matchedServices.Any(m => m.ServiceInfo == match.ServiceInfo && m.CidrRange == match.CidrRange))
-                                    {
-                                        matchedServices.Add(match);
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"Error searching Oracle ranges: {ex.Message}");
-        }
-        
-        return matchedServices;
     }
     
     private bool IsValidIPAddress(string input)
@@ -468,92 +260,5 @@
             return true;
         }
         catch { return false; }
-    }
-    
-    // Data structures
-    private class CloudSearchResults
-    {
-        public List<CloudMatch> Azure { get; set; } = new();
-        public List<CloudMatch> Aws { get; set; } = new();
-        public List<CloudMatch> Gcp { get; set; } = new();
-        public List<CloudMatch> Oracle { get; set; } = new();
-    }
-    
-    private class CloudMatch
-    {
-        public string ServiceInfo { get; set; } = string.Empty;
-        public string CidrRange { get; set; } = string.Empty;
-    }
-    
-    private class AzureIpRanges
-    {
-        public int changeNumber { get; set; }
-        public string? cloud { get; set; }
-        public List<AzureService>? values { get; set; }
-    }
-    
-    private class AzureService
-    {
-        public string? name { get; set; }
-        public string? id { get; set; }
-        public ServiceProperties? properties { get; set; }
-    }
-    
-    private class ServiceProperties
-    {
-        public string[]? addressPrefixes { get; set; }
-        public string[]? networkFeatures { get; set; }
-        public string[]? platformFeatures { get; set; }
-        public string? systemService { get; set; }
-    }
-    
-    private class AwsIpRanges
-    {
-        public string? syncToken { get; set; }
-        public string? createDate { get; set; }
-        public List<AwsPrefix>? prefixes { get; set; }
-        public List<AwsPrefix>? ipv6_prefixes { get; set; }
-    }
-    
-    private class AwsPrefix
-    {
-        public string? ip_prefix { get; set; }
-        public string? ipv6_prefix { get; set; }
-        public string? region { get; set; }
-        public string? service { get; set; }
-        public string? network_border_group { get; set; }
-    }
-    
-    private class GcpIpRanges
-    {
-        public string? syncToken { get; set; }
-        public string? creationTime { get; set; }
-        public List<GcpPrefix>? prefixes { get; set; }
-    }
-    
-    private class GcpPrefix
-    {
-        public string? ipv4Prefix { get; set; }
-        public string? ipv6Prefix { get; set; }
-        public string? service { get; set; }
-        public string? scope { get; set; }
-    }
-    
-    private class OracleIpRanges
-    {
-        public string? last_updated_timestamp { get; set; }
-        public List<OracleRegion>? regions { get; set; }
-    }
-    
-    private class OracleRegion
-    {
-        public string? region { get; set; }
-        public List<OracleCidr>? cidrs { get; set; }
-    }
-    
-    private class OracleCidr
-    {
-        public string? cidr { get; set; }
-        public List<string>? tags { get; set; }
     }
 }
