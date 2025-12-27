@@ -56,16 +56,15 @@
     </style>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.7.0/highlight.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.7.0/languages/json.min.js"></script>
-    <script>
-        document.addEventListener('DOMContentLoaded', function() {
-            document.querySelectorAll('pre code').forEach((block) => {
-                hljs.highlightElement(block);
-            });
-        });
-    </script>
 </head>
 <body>
-<pre><code class="language-json">@jsonOutput</code></pre>
+<pre><code class="language-json" id="json-output">@jsonOutput</code></pre>
+<script>
+    // Highlight after Blazor renders the content
+    if (typeof hljs !== 'undefined') {
+        hljs.highlightElement(document.getElementById('json-output'));
+    }
+</script>
 </body>
 </html>
 

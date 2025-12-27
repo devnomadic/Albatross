@@ -727,13 +727,21 @@ async function searchCloudManifests(ipAddress, provider, env) {
 function searchAzureManifest(ipAddress, manifestData) {
   const matches = [];
   
-  if (!manifestData.values) return matches;
+  if (!manifestData.values) {
+    console.error('Azure manifest has no values array');
+    return matches;
+  }
+  
+  console.log(`Searching Azure manifest for ${ipAddress}, found ${manifestData.values.length} value entries`);
+  let checkedPrefixes = 0;
   
   for (const value of manifestData.values) {
     if (!value.properties || !value.properties.addressPrefixes) continue;
     
     for (const cidr of value.properties.addressPrefixes) {
+      checkedPrefixes++;
       if (isIpInRange(ipAddress, cidr)) {
+        console.log(`✓ Azure match found: ${ipAddress} in ${cidr}`);
         matches.push({
           provider: 'Azure',
           region: value.properties.region || 'Unknown',
@@ -745,6 +753,7 @@ function searchAzureManifest(ipAddress, manifestData) {
     }
   }
   
+  console.log(`Azure search complete: checked ${checkedPrefixes} prefixes, found ${matches.length} matches`);
   return matches;
 }
 
@@ -939,8 +948,19 @@ function isTimestampValid(timestamp) {
 function isIpInRange(ip, cidrRange) {
   try {
     // Parse CIDR notation (e.g., "192.168.1.0/24" or "2001:db8::/32")
-    const [rangeIp, prefixLength] = cidrRange.split('/');
-    const prefix = parseInt(prefixLength, 10);
+    const parts = cidrRange.split('/');
+    if (parts.length !== 2) {
+      console.error('Invalid CIDR format:', cidrRange);
+      return false;
+    }
+    
+    const rangeIp = parts[0];
+    const prefix = parseInt(parts[1], 10);
+    
+    if (isNaN(prefix)) {
+      console.error('Invalid prefix length:', parts[1], 'in', cidrRange);
+      return false;
+    }
     
     // Detect IP version
     const isIPv6 = ip.includes(':');
