@@ -643,9 +643,31 @@ async function searchCloudManifests(ipAddress, provider, env) {
     };
     
     // Determine which providers to search
-    const providersToSearch = provider === 'all' 
-      ? ['azure', 'aws', 'gcp', 'oracle']
-      : [provider.toLowerCase()];
+    const validProviders = ['azure', 'aws', 'gcp', 'oracle'];
+    const normalizedProvider = (provider || '').toString().toLowerCase();
+
+    let providersToSearch;
+    if (!normalizedProvider || normalizedProvider === 'all') {
+      // Default to all known providers if "all" or no provider specified
+      providersToSearch = validProviders;
+    } else if (validProviders.includes(normalizedProvider)) {
+      providersToSearch = [normalizedProvider];
+    } else {
+      const errorMessage = `Invalid provider: ${provider}. Valid providers are: ${validProviders.join(', ')} or 'all'.`;
+      console.error(errorMessage);
+      return {
+        azure: [],
+        aws: [],
+        gcp: [],
+        oracle: [],
+        summary: {
+          totalMatches: 0,
+          providers: 0,
+          matchedProviders: []
+        },
+        error: errorMessage
+      };
+    }
     
     // Search each provider's manifest
     for (const providerName of providersToSearch) {
