@@ -472,16 +472,16 @@ namespace Albatross.Services
 
                 // Build request URL with optional cloudprovider parameter
                 var requestUrl = $"{_cloudflareWorkerUrl}?ipAddress={actualIpAddress}&maxAgeInDays={actualMaxAgeInDays}&verbose={verboseParam}&enableAI={enableAIParam}";
-                
+
                 // Add cloudprovider parameter if specified (lowercase to match worker)
                 if (!string.IsNullOrEmpty(cloudProvider))
                 {
                     requestUrl += $"&cloudprovider={cloudProvider.ToLower()}";
                 }
-                
+
                 // Add timestamp
                 requestUrl += $"&timestamp={timestamp}";
-                
+
                 // Normalize to lowercase for HMAC
                 requestUrl = requestUrl.ToLower();
                 Console.WriteLine($"Requesting: {requestUrl}");

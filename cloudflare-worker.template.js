@@ -1008,6 +1008,21 @@ function isIpInRange(ip, cidrRange) {
     const isIPv6 = ip.includes(':');
     const isRangeIPv6 = rangeIp.includes(':');
     
+    // Validate prefix length based on IP version
+    if (isRangeIPv6) {
+      // IPv6: prefix must be 0-128
+      if (prefix < 0 || prefix > 128) {
+        console.error('Invalid IPv6 prefix length:', prefix, '(must be 0-128) in', cidrRange);
+        return false;
+      }
+    } else {
+      // IPv4: prefix must be 0-32
+      if (prefix < 0 || prefix > 32) {
+        console.error('Invalid IPv4 prefix length:', prefix, '(must be 0-32) in', cidrRange);
+        return false;
+      }
+    }
+    
     // IP versions must match
     if (isIPv6 !== isRangeIPv6) {
       return false;
