@@ -1045,8 +1045,24 @@ function isIPv4InRange(ip, rangeIp, prefixLength) {
  * Convert IPv4 address to 32-bit number
  */
 function ipv4ToNumber(ip) {
-  const parts = ip.split('.').map(Number);
-  return ((parts[0] << 24) | (parts[1] << 16) | (parts[2] << 8) | parts[3]) >>> 0;
+  const parts = ip.split('.');
+
+  // IPv4 must have exactly 4 octets
+  if (parts.length !== 4) {
+    throw new Error(`Invalid IPv4 address (expected 4 octets): "${ip}"`);
+  }
+
+  const nums = parts.map((part) => Number(part));
+
+  // Each octet must be an integer between 0 and 255
+  for (let i = 0; i < nums.length; i++) {
+    const value = nums[i];
+    if (!Number.isFinite(value) || !Number.isInteger(value) || value < 0 || value > 255) {
+      throw new Error(`Invalid IPv4 octet "${parts[i]}" in address "${ip}"`);
+    }
+  }
+
+  return ((nums[0] << 24) | (nums[1] << 16) | (nums[2] << 8) | nums[3]) >>> 0;
 }
 
 /**
