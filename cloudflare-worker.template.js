@@ -415,7 +415,25 @@ async function handleCombinedRequest(request, env) {
   const maxAgeInDays = url.searchParams.get('maxageindays') || 30; // lowercase parameter name
   const verbose = url.searchParams.get('verbose') === 'true';
   const enableAI = url.searchParams.get('enableai') === 'true'; // AI toggle parameter
-  const cloudProvider = url.searchParams.get('cloudprovider') || null; // Cloud provider search: aws, azure, gcp, oracle, or all
+  const cloudProvider = url.searchParams.get('cloudprovider') || null; // Cloud provider search: aws, azure, gcp, oracle, all, or none
+
+  // Validate cloudProvider against allowed values if provided
+  const allowedCloudProviders = ['none', 'all', 'azure', 'aws', 'gcp', 'oracle'];
+  if (cloudProvider && !allowedCloudProviders.includes(cloudProvider.toLowerCase())) {
+    return new Response(
+      JSON.stringify({
+        error: "Invalid parameter: cloudprovider must be one of 'none', 'all', 'azure', 'aws', 'gcp', or 'oracle'",
+        buildInfo: BUILD_INFO
+      }),
+      {
+        status: 400,
+        headers: {
+          'Content-Type': 'application/json',
+          ...corsHeaders(origin)
+        }
+      }
+    );
+  }
   
   // Debug: Log the parsed parameters
   console.log('Parsed parameters:', { ipAddress, maxAgeInDays, verbose, enableAI, cloudProvider });
