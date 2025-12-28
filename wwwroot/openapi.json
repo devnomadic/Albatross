@@ -40,11 +40,10 @@
             "name": "cloudprovider",
             "in": "query",
             "required": false,
-            "description": "Filter cloud provider matches. Options: none, all, azure, aws, gcp, oracle.",
+            "description": "Filter cloud provider matches. Options: all, azure, aws, gcp, oracle. Omit this parameter to disable cloud provider manifest search.",
             "schema": {
               "type": "string",
-              "enum": ["none", "all", "azure", "aws", "gcp", "oracle"],
-              "default": "none"
+              "enum": ["all", "azure", "aws", "gcp", "oracle"]
             }
           },
           {
