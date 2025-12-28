@@ -14,7 +14,9 @@ binding = "AI"
 # Production environment (default)
 [env.production]
 name = "abuseipdb"
-routes = []
+routes = [
+  { pattern = "albatross-api.devnomadic.com/*", zone_name = "devnomadic.com" }
+]
 
 [env.production.ai]
 binding = "AI"
@@ -22,6 +24,9 @@ binding = "AI"
 # Preview environment
 [env.preview]
 name = "abuseipdb-preview"
+routes = [
+  { pattern = "albatross-apipreview.devnomadic.com/*", zone_name = "devnomadic.com" }
+]
 
 [env.preview.ai]
 binding = "AI"

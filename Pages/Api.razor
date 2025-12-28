@@ -115,6 +115,21 @@
                         </select>
                     </div>
 
+                    <div class="parameter-group">
+                        <div class="parameter-header">
+                            <span class="parameter-name">API Hostname</span>
+                            <span class="parameter-optional">OPTIONAL</span>
+                        </div>
+                        <div class="parameter-description">
+                            Choose the hostname for the generated API URL. API hostnames bypass authentication.
+                        </div>
+                        <select class="form-select" @bind="apiHostname">
+                            <option value="current">Current (default)</option>
+                            <option value="albatross-api.devnomadic.com">albatross-api.devnomadic.com</option>
+                            <option value="albatross-apipreview.devnomadic.com">albatross-apipreview.devnomadic.com</option>
+                        </select>
+                    </div>
+
                     <div class="mt-4">
                         <button class="try-button" @onclick="ExecuteApiCall" disabled="@isLoading">
                             @if (isLoading)
@@ -132,18 +147,35 @@
                     @if (!string.IsNullOrEmpty(jsonOutput))
                     {
                         <div class="response-section">
-                            <h3 class="section-title">Response</h3>
-                            <div class="response-header">
-                                <span class="@(isSuccess ? "status-success" : "status-error")">
-                                    @(isSuccess ? "✓ 200 OK" : "✗ Error")
-                                </span>
-                                <span style="color: #a0a0a0; font-size: 0.875rem;">
-                                    Execution time: @executionTime ms
-                                </span>
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                                <h3 class="section-title" style="margin: 0;">Response</h3>
+                                <button class="btn btn-sm" style="background-color: #3e3e42; color: #d4d4d4; border: 1px solid #555; padding: 0.25rem 0.75rem; font-size: 0.875rem;" @onclick="@(() => showResponse = !showResponse)">
+                                    @(showResponse ? "Hide" : "Show")
+                                </button>
                             </div>
-                            <div class="response-body">
-                                <pre class="response-code"><code class="language-json" id="json-response">@jsonOutput</code></pre>
-                            </div>
+                            @if (showResponse)
+                            {
+                                <div class="response-header">
+                                    <span class="@(isSuccess ? "status-success" : "status-error")">
+                                        @(isSuccess ? "✓ 200 OK" : "✗ Error")
+                                    </span>
+                                    <span style="color: #a0a0a0; font-size: 0.875rem;">
+                                        Execution time: @executionTime ms
+                                    </span>
+                                </div>
+                                @if (!string.IsNullOrEmpty(requestUrl))
+                                {
+                                    <div style="margin: 1rem 0; padding: 0.75rem; background-color: #1e1e1e; border: 1px solid #3e3e42; border-radius: 4px;">
+                                        <div style="color: #9cdcfe; font-size: 0.875rem; margin-bottom: 0.5rem; font-weight: 600;">📋 Request URL:</div>
+                                        <div style="color: #ce9178; font-family: 'Consolas', 'Monaco', 'Courier New', monospace; font-size: 0.85rem; word-break: break-all;">
+                                            @requestUrl
+                                        </div>
+                                    </div>
+                                }
+                                <div class="response-body">
+                                    <pre class="response-code"><code class="language-json" id="json-response">@jsonOutput</code></pre>
+                                </div>
+                            }
                         </div>
                     }
                 </div>
@@ -182,8 +214,13 @@
             window.highlightApiResponse = function() {
                 const codeBlock = document.querySelector('#json-response');
                 if (codeBlock && typeof hljs !== 'undefined') {
+                    // Clear any existing highlighting
+                    codeBlock.removeAttribute('data-highlighted');
+                    codeBlock.className = 'language-json';
+                    // Get the text content and reset it to clear any HTML from previous highlighting
                     const jsonText = codeBlock.textContent;
                     codeBlock.textContent = jsonText;
+                    // Apply fresh highlighting
                     hljs.highlightElement(codeBlock);
                 }
             };
@@ -223,12 +260,15 @@ else
     private int maxAgeInDays = 30;
     private string verbose = "true";
     private string enableAi = "true";
+    private string apiHostname = "current";
     
     private bool isInteractiveMode = false;
     private bool isLoading = false;
     private bool isSuccess = false;
     private long executionTime = 0;
     private string jsonOutput = string.Empty;
+    private string requestUrl = string.Empty;
+    private bool showResponse = true;
 
     protected override async Task OnInitializedAsync()
     {
@@ -259,11 +299,42 @@ else
             return;
         }
 
+        // Clear previous results
+        jsonOutput = string.Empty;
+        requestUrl = string.Empty;
+        
         isLoading = true;
         await InvokeAsync(StateHasChanged);
 
         var startTime = Stopwatch.StartNew();
         var requestId = Guid.NewGuid().ToString("N").Substring(0, 16);
+
+        // Build the request URL
+        string baseUri;
+        if (apiHostname == "current")
+        {
+            baseUri = NavigationManager.BaseUri.TrimEnd('/');
+        }
+        else
+        {
+            baseUri = $"https://{apiHostname}";
+        }
+        
+        var queryParams = new List<string> { $"ipaddress={Uri.EscapeDataString(ipAddress)}" };
+        
+        if (!string.IsNullOrEmpty(cloudProvider))
+            queryParams.Add($"cloudprovider={Uri.EscapeDataString(cloudProvider)}");
+        
+        if (maxAgeInDays != 30)
+            queryParams.Add($"maxageindays={maxAgeInDays}");
+        
+        if (verbose.ToLower() != "true")
+            queryParams.Add($"verbose={verbose.ToLower()}");
+        
+        if (enableAi.ToLower() != "true")
+            queryParams.Add($"enableai={enableAi.ToLower()}");
+        
+        requestUrl = $"{baseUri}/api?{string.Join("&", queryParams)}";
 
         try
         {
@@ -279,15 +350,31 @@ else
             bool enableAiBool = enableAi.ToLower() == "true";
             string? cloudProviderValue = string.IsNullOrEmpty(cloudProvider) ? null : cloudProvider;
 
-            var reputationResults = await AbuseIPDBService.CheckIPAsync(actualIpAddress, maxAgeInDays, verboseBool, enableAiBool, cloudProviderValue);
+            Albatross.Services.AbuseIPDBApiResponse reputationResults;
+            
+            // If using a specific API hostname, make direct HTTP call
+            if (apiHostname != "current")
+            {
+                var response = await Http.GetAsync(requestUrl);
+                var jsonString = await response.Content.ReadAsStringAsync();
+                reputationResults = JsonSerializer.Deserialize<Albatross.Services.AbuseIPDBApiResponse>(jsonString, new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) 
+                    ?? throw new Exception("Failed to deserialize API response");
+            }
+            else
+            {
+                // Use the service which goes through the default worker
+                reputationResults = await AbuseIPDBService.CheckIPAsync(actualIpAddress, maxAgeInDays, verboseBool, enableAiBool, cloudProviderValue);
+            }
 
             jsonOutput = BuildSuccessResponse(actualIpAddress, reputationResults, requestId, startTime);
             isSuccess = true;
+            showResponse = true;
         }
         catch (Exception ex)
         {
             jsonOutput = BuildErrorResponse($"Internal server error: {ex.Message}", "INTERNAL_ERROR", 500, requestId, startTime);
             isSuccess = false;
+            showResponse = true;
         }
         finally
         {
