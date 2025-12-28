@@ -572,7 +572,7 @@ async function handleCombinedRequest(request, env) {
           abuseipdb: abuseIPDBError ? 'error' : 'success',
           radar: radarError ? 'error' : 'success',
           ai: enableAI ? (aiReputation.success ? 'success' : 'error') : 'disabled',
-          cloudManifests: cloudMatches ? (cloudMatches.error ? 'error' : 'success') : 'not-requested'
+          cloudManifests: cloudMatches ? (cloudMatches && cloudMatches.error ? 'error' : 'success') : 'not-requested'
         }
       }
     };
