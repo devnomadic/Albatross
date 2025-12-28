@@ -526,10 +526,10 @@
             // Load all manifest files in parallel for optimal performance
             var downloadTasks = new[]
             {
-                Http.GetStringAsync("ip-manifests/Azure.json"),
-                Http.GetStringAsync("ip-manifests/AWS.json"),
-                Http.GetStringAsync("ip-manifests/GCP.json"),
-                Http.GetStringAsync("ip-manifests/Oracle.json")
+                Http.GetStringAsync("ip-manifests/azure.json"),
+                Http.GetStringAsync("ip-manifests/aws.json"),
+                Http.GetStringAsync("ip-manifests/gcp.json"),
+                Http.GetStringAsync("ip-manifests/oracle.json")
             };
 
             statusMessage = "Loading cloud IP manifests...";

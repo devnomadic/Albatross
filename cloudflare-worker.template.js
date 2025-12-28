@@ -691,8 +691,8 @@ async function searchCloudManifests(ipAddress, provider, env) {
     for (const providerName of providersToSearch) {
       try {
         // Fetch manifest from origin (wwwroot/ip-manifests/)
-        // Capitalize first letter only (Azure.json, not AZURE.json)
-        const fileName = providerName.charAt(0).toUpperCase() + providerName.slice(1).toLowerCase();
+        // Use lowercase filenames (azure.json, aws.json, etc.)
+        const fileName = providerName.toLowerCase();
         const manifestUrl = `https://albatross.devnomadic.com/ip-manifests/${fileName}.json`;
         console.log(`Fetching manifest: ${manifestUrl}`);
         
