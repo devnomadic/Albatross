@@ -7,123 +7,337 @@
 @using System.Net
 @using System.Diagnostics
 
-<!DOCTYPE html>
-<html>
-<head>
-    <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
-    <link rel="stylesheet" href="css/json-formatter.css">
-    <style>
-        body {
-            margin: 0;
-            padding: 20px;
-            background-color: #1e1e1e;
-            font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
-        }
-        pre {
-            margin: 0;
-            padding: 20px;
-            background-color: #1e1e1e;
-            color: #d4d4d4;
-            font-size: 14px;
-            line-height: 1.5;
-            overflow-x: auto;
-            border: none;
-        }
-        pre code {
-            background: transparent;
-            padding: 0;
-            color: #d4d4d4;
-        }
-        /* VS2015 Dark Theme Colors */
-        .hljs {
-            background: #1e1e1e;
-            color: #dcdcdc;
-        }
-        .hljs-attr {
-            color: #9cdcfe;
-        }
-        .hljs-string {
-            color: #ce9178;
-        }
-        .hljs-number {
-            color: #b5cea8;
-        }
-        .hljs-literal {
-            color: #569cd6;
-        }
-        .hljs-punctuation {
-            color: #d4d4d4;
-        }
-    </style>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.7.0/highlight.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.7.0/languages/json.min.js"></script>
-    <script>
-        window.highlightJson = function() {
-            const codeBlock = document.querySelector('#json-container code');
-            if (codeBlock && typeof hljs !== 'undefined') {
-                hljs.highlightElement(codeBlock);
-            }
-        };
-    </script>
-</head>
-<body>
-<pre id="json-container"><code class="language-json">@jsonOutput</code></pre>
-</body>
-</html>
+@if (isInteractiveMode)
+{
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.7.0/styles/vs2015.min.css">
+        <link rel="stylesheet" href="/css/api-swagger.css">
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.7.0/highlight.min.js"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.7.0/languages/json.min.js"></script>
+    </head>
+    <body>
+        <div class="api-header">
+            <div class="api-container">
+                <h1 class="api-title">🔍 Albatross API</h1>
+                <p class="api-description">Interactive IP Address Analysis & Reputation API</p>
+            </div>
+        </div>
+
+        <div class="api-container">
+            <div class="info-box">
+                <div class="info-box-title">📘 API Overview</div>
+                <div style="color: #d4d4d4;">
+                    Comprehensive IP address analysis including cloud provider detection, 
+                    abuse reputation checking via AbuseIPDB, ASN information from Cloudflare Radar, and 
+                    AI-powered risk assessment.
+                </div>
+            </div>
+
+            <div class="endpoint-section">
+                <div class="endpoint-header">
+                    <span class="endpoint-method">GET</span>
+                    <span class="endpoint-path">/api</span>
+                </div>
+                <div class="endpoint-body">
+                    <h3 class="section-title">Parameters</h3>
+                    
+                    <div class="parameter-group">
+                        <div class="parameter-header">
+                            <span class="parameter-name">ipaddress</span>
+                            <span class="parameter-required">REQUIRED</span>
+                        </div>
+                        <div class="parameter-description">
+                            The IPv4 or IPv6 address to analyze. Must be a valid public routable IP address.
+                        </div>
+                        <input type="text" class="form-control" placeholder="e.g., 8.8.8.8" @bind="ipAddress" />
+                        <div class="example-box">Example: 8.8.8.8</div>
+                    </div>
+
+                    <div class="parameter-group">
+                        <div class="parameter-header">
+                            <span class="parameter-name">cloudprovider</span>
+                            <span class="parameter-optional">OPTIONAL</span>
+                        </div>
+                        <div class="parameter-description">
+                            Filter cloud provider matches. Options: none, all, azure, aws, gcp, oracle.
+                        </div>
+                        <select class="form-select" @bind="cloudProvider">
+                            <option value="">none (default)</option>
+                            <option value="all">all</option>
+                            <option value="azure">azure</option>
+                            <option value="aws">aws</option>
+                            <option value="gcp">gcp</option>
+                            <option value="oracle">oracle</option>
+                        </select>
+                    </div>
+
+                    <div class="parameter-group">
+                        <div class="parameter-header">
+                            <span class="parameter-name">maxageindays</span>
+                            <span class="parameter-optional">OPTIONAL</span>
+                        </div>
+                        <div class="parameter-description">
+                            Maximum age in days for abuse reports. Default: 30 days.
+                        </div>
+                        <input type="number" class="form-control" placeholder="30" min="1" max="365" @bind="maxAgeInDays" />
+                    </div>
+
+                    <div class="parameter-group">
+                        <div class="parameter-header">
+                            <span class="parameter-name">verbose</span>
+                            <span class="parameter-optional">OPTIONAL</span>
+                        </div>
+                        <div class="parameter-description">
+                            Include detailed abuse reports in the response. Default: true.
+                        </div>
+                        <select class="form-select" @bind="verbose">
+                            <option value="true">true (default)</option>
+                            <option value="false">false</option>
+                        </select>
+                    </div>
+
+                    <div class="parameter-group">
+                        <div class="parameter-header">
+                            <span class="parameter-name">enableai</span>
+                            <span class="parameter-optional">OPTIONAL</span>
+                        </div>
+                        <div class="parameter-description">
+                            Enable AI-powered risk analysis using Cloudflare Workers AI. Default: true.
+                        </div>
+                        <select class="form-select" @bind="enableAi">
+                            <option value="true">true (default)</option>
+                            <option value="false">false</option>
+                        </select>
+                    </div>
+
+                    <div class="mt-4">
+                        <button class="try-button" @onclick="ExecuteApiCall" disabled="@isLoading">
+                            @if (isLoading)
+                            {
+                                <span class="spinner-border spinner-border-custom" role="status"></span>
+                                <span>Executing...</span>
+                            }
+                            else
+                            {
+                                <span>🚀 Try it out</span>
+                            }
+                        </button>
+                    </div>
+
+                    @if (!string.IsNullOrEmpty(jsonOutput))
+                    {
+                        <div class="response-section">
+                            <h3 class="section-title">Response</h3>
+                            <div class="response-header">
+                                <span class="@(isSuccess ? "status-success" : "status-error")">
+                                    @(isSuccess ? "✓ 200 OK" : "✗ Error")
+                                </span>
+                                <span style="color: #a0a0a0; font-size: 0.875rem;">
+                                    Execution time: @executionTime ms
+                                </span>
+                            </div>
+                            <div class="response-body">
+                                <pre class="response-code"><code class="language-json" id="json-response">@jsonOutput</code></pre>
+                            </div>
+                        </div>
+                    }
+                </div>
+            </div>
+
+            <div class="endpoint-section">
+                <div class="endpoint-header">
+                    <span style="color: #d4d4d4; font-weight: 600;">📖 Example Usage</span>
+                </div>
+                <div class="endpoint-body">
+                    <div style="margin-bottom: 1rem;">
+                        <strong style="color: #9cdcfe;">Basic Request:</strong>
+                        <div class="example-box">GET /api?ipaddress=8.8.8.8</div>
+                    </div>
+                    <div style="margin-bottom: 1rem;">
+                        <strong style="color: #9cdcfe;">With Cloud Provider Check:</strong>
+                        <div class="example-box">GET /api?ipaddress=8.8.8.8&cloudprovider=all</div>
+                    </div>
+                    <div style="margin-bottom: 1.5rem;">
+                        <strong style="color: #9cdcfe;">Full Parameters:</strong>
+                        <div class="example-box">GET /api?ipaddress=1.1.1.1&cloudprovider=azure&maxageindays=30&verbose=true&enableai=true</div>
+                    </div>
+                    <div style="padding-top: 1rem; border-top: 1px solid #3e3e42;">
+                        <strong style="color: #9cdcfe;">📄 OpenAPI Specification:</strong>
+                        <div style="margin-top: 0.5rem;">
+                            <a href="/openapi.json" style="color: #61affe; text-decoration: none; font-family: 'Consolas', 'Monaco', 'Courier New', monospace; font-size: 0.9rem;">
+                                Download openapi.json
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <script>
+            window.highlightApiResponse = function() {
+                const codeBlock = document.querySelector('#json-response');
+                if (codeBlock && typeof hljs !== 'undefined') {
+                    const jsonText = codeBlock.textContent;
+                    codeBlock.textContent = jsonText;
+                    hljs.highlightElement(codeBlock);
+                }
+            };
+        </script>
+    </body>
+    </html>
+}
+else
+{
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+        <link rel="stylesheet" href="/css/api-json.css">
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.7.0/highlight.min.js"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.7.0/languages/json.min.js"></script>
+        <script>
+            window.highlightJson = function() {
+                const codeBlock = document.querySelector('#json-container code');
+                if (codeBlock && typeof hljs !== 'undefined') {
+                    const jsonText = codeBlock.textContent;
+                    codeBlock.textContent = jsonText;
+                    hljs.highlightElement(codeBlock);
+                }
+            };
+        </script>
+    </head>
+    <body>
+    <pre id="json-container"><code class="language-json">@jsonOutput</code></pre>
+    </body>
+    </html>
+}
 
 @code {
+    private string ipAddress = "";
+    private string cloudProvider = "";
+    private int maxAgeInDays = 30;
+    private string verbose = "true";
+    private string enableAi = "true";
+    
+    private bool isInteractiveMode = false;
+    private bool isLoading = false;
+    private bool isSuccess = false;
+    private long executionTime = 0;
     private string jsonOutput = string.Empty;
 
     protected override async Task OnInitializedAsync()
+    {
+        var uri = new Uri(NavigationManager.Uri);
+        var query = System.Web.HttpUtility.ParseQueryString(uri.Query);
+        
+        var queryIpAddress = query["ipaddress"];
+        
+        if (string.IsNullOrEmpty(queryIpAddress))
+        {
+            isInteractiveMode = true;
+        }
+        else
+        {
+            isInteractiveMode = false;
+            await ExecuteApiCallFromQuery();
+        }
+    }
+
+    private async Task ExecuteApiCall()
+    {
+        if (string.IsNullOrWhiteSpace(ipAddress))
+        {
+            jsonOutput = BuildErrorResponse("Missing required parameter: ipaddress", "MISSING_PARAMETER", 400, "", new Stopwatch());
+            isSuccess = false;
+            await InvokeAsync(StateHasChanged);
+            await JSRuntime.InvokeVoidAsync("highlightApiResponse");
+            return;
+        }
+
+        isLoading = true;
+        await InvokeAsync(StateHasChanged);
+
+        var startTime = Stopwatch.StartNew();
+        var requestId = Guid.NewGuid().ToString("N").Substring(0, 16);
+
+        try
+        {
+            if (!IsValidIPAddress(ipAddress))
+            {
+                jsonOutput = BuildErrorResponse("Invalid IP address. Please enter a valid public routable IPv4 or IPv6 address.", "INVALID_IP", 400, requestId, startTime);
+                isSuccess = false;
+                return;
+            }
+
+            string actualIpAddress = ipAddress.Contains(';') ? ipAddress.Split(';', 2)[0].Trim() : ipAddress.Trim();
+            bool verboseBool = verbose.ToLower() == "true";
+            bool enableAiBool = enableAi.ToLower() == "true";
+            string? cloudProviderValue = string.IsNullOrEmpty(cloudProvider) ? null : cloudProvider;
+
+            var reputationResults = await AbuseIPDBService.CheckIPAsync(actualIpAddress, maxAgeInDays, verboseBool, enableAiBool, cloudProviderValue);
+
+            jsonOutput = BuildSuccessResponse(actualIpAddress, reputationResults, requestId, startTime);
+            isSuccess = true;
+        }
+        catch (Exception ex)
+        {
+            jsonOutput = BuildErrorResponse($"Internal server error: {ex.Message}", "INTERNAL_ERROR", 500, requestId, startTime);
+            isSuccess = false;
+        }
+        finally
+        {
+            executionTime = startTime.ElapsedMilliseconds;
+            isLoading = false;
+            await InvokeAsync(StateHasChanged);
+            await Task.Delay(100);
+            await JSRuntime.InvokeVoidAsync("highlightApiResponse");
+        }
+    }
+
+    private async Task ExecuteApiCallFromQuery()
     {
         var startTime = Stopwatch.StartNew();
         var requestId = Guid.NewGuid().ToString("N").Substring(0, 16);
         
         try
         {
-            // Parse query parameters
             var uri = new Uri(NavigationManager.Uri);
             var query = System.Web.HttpUtility.ParseQueryString(uri.Query);
             
-            var ipAddress = query["ipaddress"];
+            var queryIpAddress = query["ipaddress"];
             var maxAgeInDaysStr = query["maxageindays"] ?? "30";
             var verboseStr = query["verbose"] ?? "true";
             var enableAiStr = query["enableai"] ?? "true";
-            var cloudProvider = query["cloudprovider"]; // Optional: aws, azure, gcp, oracle, or all
+            var cloudProviderValue = query["cloudprovider"];
             
-            // Validate required parameter
-            if (string.IsNullOrEmpty(ipAddress))
+            if (string.IsNullOrEmpty(queryIpAddress))
             {
                 jsonOutput = BuildErrorResponse("Missing required parameter: ipaddress", "MISSING_PARAMETER", 400, requestId, startTime);
                 return;
             }
             
-            // Parse optional parameters
-            if (!int.TryParse(maxAgeInDaysStr, out int maxAgeInDays))
+            if (!int.TryParse(maxAgeInDaysStr, out int maxAge))
             {
-                maxAgeInDays = 30;
+                maxAge = 30;
             }
-            bool verbose = verboseStr.ToLower() == "true";
-            bool enableAi = enableAiStr.ToLower() == "true";
+            bool verboseBool = verboseStr.ToLower() == "true";
+            bool enableAiBool = enableAiStr.ToLower() == "true";
             
-            // Validate IP address
-            if (!IsValidIPAddress(ipAddress))
+            if (!IsValidIPAddress(queryIpAddress))
             {
-                jsonOutput = BuildErrorResponse("Invalid IP address. Please enter a valid public routable IPv4 or IPv6 address (private/reserved ranges are not allowed).", "INVALID_IP", 400, requestId, startTime);
+                jsonOutput = BuildErrorResponse("Invalid IP address. Please enter a valid public routable IPv4 or IPv6 address.", "INVALID_IP", 400, requestId, startTime);
                 return;
             }
             
-            // Extract just the IP part (in case format is ip;maxdays)
-            string actualIpAddress = ipAddress.Contains(';') 
-                ? ipAddress.Split(';', 2)[0].Trim() 
-                : ipAddress.Trim();
+            string actualIpAddress = queryIpAddress.Contains(';') ? queryIpAddress.Split(';', 2)[0].Trim() : queryIpAddress.Trim();
             
-            IPAddress parsedIp = IPAddress.Parse(actualIpAddress);
+            var reputationResults = await AbuseIPDBService.CheckIPAsync(actualIpAddress, maxAge, verboseBool, enableAiBool, cloudProviderValue);
             
-            // Perform reputation check (worker handles cloud search)
-            var reputationResults = await AbuseIPDBService.CheckIPAsync(actualIpAddress, maxAgeInDays, verbose, enableAi, cloudProvider);
-            
-            // Build unified response
             jsonOutput = BuildSuccessResponse(actualIpAddress, reputationResults, requestId, startTime);
         }
         catch (Exception ex)
@@ -134,13 +348,20 @@
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (firstRender && !string.IsNullOrEmpty(jsonOutput))
+        if (!string.IsNullOrEmpty(jsonOutput))
         {
-            await JSRuntime.InvokeVoidAsync("highlightJson");
+            if (isInteractiveMode)
+            {
+                await JSRuntime.InvokeVoidAsync("highlightApiResponse");
+            }
+            else
+            {
+                await JSRuntime.InvokeVoidAsync("highlightJson");
+            }
         }
     }
     
-    private string BuildSuccessResponse(string ipAddress, Albatross.Services.AbuseIPDBApiResponse reputationData, string requestId, Stopwatch timer)
+    private string BuildSuccessResponse(string ipAddressValue, Albatross.Services.AbuseIPDBApiResponse reputationData, string requestId, Stopwatch timer)
     {
         timer.Stop();
         
@@ -149,7 +370,7 @@
             success = true,
             data = new
             {
-                ipAddress = ipAddress,
+                ipAddress = ipAddressValue,
                 cloudMatches = reputationData.CloudMatches,
                 reputation = reputationData.Data,
                 asnInfo = reputationData.AsnInfo,
@@ -264,34 +485,5 @@
         if (bytes[0] == 0xFF) return false;
         if (bytes[0] == 0x20 && bytes[1] == 0x01 && bytes[2] == 0x0D && bytes[3] == 0xB8) return false;
         return true;
-    }
-    
-    private bool IsIpInRange(IPAddress ip, string cidrRange)
-    {
-        try
-        {
-            string[] parts = cidrRange.Split('/');
-            if (parts.Length != 2) return false;
-            IPAddress networkAddress = IPAddress.Parse(parts[0]);
-            int prefixLength = int.Parse(parts[1]);
-            byte[] ipBytes = ip.GetAddressBytes();
-            byte[] networkBytes = networkAddress.GetAddressBytes();
-            if (ipBytes.Length != networkBytes.Length) return false;
-            int maxPrefixLength = ipBytes.Length * 8;
-            if (prefixLength < 0 || prefixLength > maxPrefixLength) return false;
-            int numBytes = prefixLength / 8;
-            int remainingBits = prefixLength % 8;
-            for (int i = 0; i < numBytes && i < ipBytes.Length; i++)
-            {
-                if (ipBytes[i] != networkBytes[i]) return false;
-            }
-            if (remainingBits > 0 && numBytes < ipBytes.Length)
-            {
-                int mask = (0xFF << (8 - remainingBits)) & 0xFF;
-                if ((ipBytes[numBytes] & mask) != (networkBytes[numBytes] & mask)) return false;
-            }
-            return true;
-        }
-        catch { return false; }
     }
 }
