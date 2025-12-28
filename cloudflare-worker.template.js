@@ -1077,10 +1077,23 @@ function isIPv6InRange(ip, rangeIp, prefixLength) {
 function expandIPv6(ip) {
   // Handle :: compression
   if (ip.includes('::')) {
+    // Validate that there is at most one '::' occurrence
+    const doubleColonMatches = ip.match(/::/g);
+    if (doubleColonMatches && doubleColonMatches.length > 1) {
+      // Invalid IPv6 with multiple '::' - return original to avoid runtime errors
+      return ip;
+    }
+
     const sides = ip.split('::');
     const leftParts = sides[0] ? sides[0].split(':') : [];
     const rightParts = sides[1] ? sides[1].split(':') : [];
     const missingParts = 8 - leftParts.length - rightParts.length;
+
+    // If missingParts is negative, the address is malformed; avoid creating
+    // an array with negative length and just return the original string.
+    if (missingParts < 0) {
+      return ip;
+    }
     const middleParts = new Array(missingParts).fill('0000');
     const allParts = [...leftParts, ...middleParts, ...rightParts];
     return allParts.map(p => p.padStart(4, '0')).join(':');
