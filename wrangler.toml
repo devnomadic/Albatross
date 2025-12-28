@@ -19,6 +19,9 @@ routes = [
   { pattern = "albatross-api.devnomadic.com/*", zone_name = "devnomadic.com" }
 ]
 
+[env.production.vars]
+ENVIRONMENT = "production"
+
 [env.production.ai]
 binding = "AI"
 
@@ -29,6 +32,9 @@ workers_dev = true
 routes = [
   { pattern = "albatross-apipreview.devnomadic.com/*", zone_name = "devnomadic.com" }
 ]
+
+[env.preview.vars]
+ENVIRONMENT = "preview"
 
 [env.preview.ai]
 binding = "AI"

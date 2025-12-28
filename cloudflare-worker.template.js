@@ -687,13 +687,20 @@ async function searchCloudManifests(ipAddress, provider, env) {
       };
     }
     
+    // Determine the base URL based on environment
+    // Preview worker uses preview Pages deployment, production uses production site
+    const isPreview = env.ENVIRONMENT === 'preview' || (typeof ENVIRONMENT !== 'undefined' && ENVIRONMENT === 'preview');
+    const baseUrl = isPreview 
+      ? 'https://bug-fix-worker-ai-bindings.albatross-5kt.pages.dev'
+      : 'https://albatross.devnomadic.com';
+    
     // Search each provider's manifest
     for (const providerName of providersToSearch) {
       try {
         // Fetch manifest from origin (wwwroot/ip-manifests/)
         // Use lowercase filenames (azure.json, aws.json, etc.)
         const fileName = providerName.toLowerCase();
-        const manifestUrl = `https://albatross.devnomadic.com/ip-manifests/${fileName}.json`;
+        const manifestUrl = `${baseUrl}/ip-manifests/${fileName}.json`;
         console.log(`Fetching manifest: ${manifestUrl}`);
         
         const response = await fetch(manifestUrl, {
