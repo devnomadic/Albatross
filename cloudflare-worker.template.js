@@ -269,8 +269,19 @@ async function handleCombinedRequest(request, env) {
     referer: request.headers.get('Referer')
   });
   
+  // Check if this is a request to the dedicated API hostname (bypass authentication for API clients)
+  const requestUrl = new URL(request.url);
+  const hostname = requestUrl.hostname.toLowerCase();
+  const isApiHostname = hostname === 'albatross-api.devnomadic.com' || hostname === 'albatross-apipreview.devnomadic.com';
+  
+  console.log('API hostname check:', {
+    hostname,
+    isApiHostname
+  });
+  
   // Enforce browser-only access with proper Origin header validation
   // This ensures the worker can only be called from legitimate browser requests
+  // Skip this check for dedicated API hostnames (to support curl, Postman, etc.)
   const userAgent = request.headers.get('User-Agent') || '';
   const referer = request.headers.get('Referer') || '';
   
@@ -287,7 +298,8 @@ async function handleCombinedRequest(request, env) {
   const hasValidOrigin = origin && isAllowedOrigin(origin);
   
   // Block requests that don't appear to be from a legitimate browser/SPA
-  if (!isBrowserRequest || !hasValidOrigin) {
+  // Skip this check for dedicated API hostnames
+  if (!isApiHostname && (!isBrowserRequest || !hasValidOrigin)) {
     console.log('Blocked non-browser request:', {
       origin,
       userAgent: userAgent.substring(0, 50),
@@ -325,84 +337,106 @@ async function handleCombinedRequest(request, env) {
   console.log('Normalized URL for HMAC:', normalizedUrl);
   
   // Extract and validate timestamp before HMAC validation
-  const urlForTimestamp = new URL(normalizedUrl);
-  const timestamp = urlForTimestamp.searchParams.get('timestamp');
-  
-  if (!timestamp) {
-    return new Response(
-      JSON.stringify({ 
-        error: "Unauthorized: Missing timestamp parameter",
-        buildInfo: BUILD_INFO
-      }),
-      {
-        status: 401,
-        headers: {
-          'Content-Type': 'application/json',
-          ...corsHeaders(origin)
+  // Skip timestamp and HMAC validation for dedicated API hostnames
+  if (!isApiHostname) {
+    const urlForTimestamp = new URL(normalizedUrl);
+    const timestamp = urlForTimestamp.searchParams.get('timestamp');
+    
+    if (!timestamp) {
+      return new Response(
+        JSON.stringify({ 
+          error: "Unauthorized: Missing timestamp parameter",
+          buildInfo: BUILD_INFO
+        }),
+        {
+          status: 401,
+          headers: {
+            'Content-Type': 'application/json',
+            ...corsHeaders(origin)
+          }
         }
-      }
-    );
-  }
-  
-  if (!isTimestampValid(timestamp)) {
-    return new Response(
-      JSON.stringify({ 
-        error: "Unauthorized: Invalid or expired timestamp",
-        buildInfo: BUILD_INFO
-      }),
-      {
-        status: 401,
-        headers: {
-          'Content-Type': 'application/json',
-          ...corsHeaders(origin)
+      );
+    }
+    
+    if (!isTimestampValid(timestamp)) {
+      return new Response(
+        JSON.stringify({ 
+          error: "Unauthorized: Invalid or expired timestamp",
+          buildInfo: BUILD_INFO
+        }),
+        {
+          status: 401,
+          headers: {
+            'Content-Type': 'application/json',
+            ...corsHeaders(origin)
+          }
         }
-      }
-    );
-  }
-  
-  // Validate the HMAC token
-  if (!workerToken || !(await validateHmacToken(workerToken, normalizedUrl))) {
-    return new Response(
-      JSON.stringify({ 
-        error: "Unauthorized: Invalid authentication token",
-        buildInfo: BUILD_INFO
-      }),
-      {
-        status: 401,
-        headers: {
-          'Content-Type': 'application/json',
-          ...corsHeaders(origin)
+      );
+    }
+    
+    // Validate the HMAC token
+    if (!workerToken || !(await validateHmacToken(workerToken, normalizedUrl))) {
+      return new Response(
+        JSON.stringify({ 
+          error: "Unauthorized: Invalid authentication token",
+          buildInfo: BUILD_INFO
+        }),
+        {
+          status: 401,
+          headers: {
+            'Content-Type': 'application/json',
+            ...corsHeaders(origin)
+          }
         }
-      }
-    );
-  }
+      );
+    }
 
-  // Check if the origin is allowed (if an Origin header is present)
-  if (origin && !isAllowedOrigin(origin)) {
-    return new Response(
-      JSON.stringify({ 
-        error: "Unauthorized: Origin not allowed",
-        buildInfo: BUILD_INFO
-      }),
-      {
-        status: 403,
-        headers: {
-          'Content-Type': 'application/json',
-          ...corsHeaders(origin)
+    // Check if the origin is allowed (if an Origin header is present)
+    if (origin && !isAllowedOrigin(origin)) {
+      return new Response(
+        JSON.stringify({ 
+          error: "Unauthorized: Origin not allowed",
+          buildInfo: BUILD_INFO
+        }),
+        {
+          status: 403,
+          headers: {
+            'Content-Type': 'application/json',
+            ...corsHeaders(origin)
+          }
         }
-      }
-    );
+      );
+    }
   }
 
   // Get URL parameters (use normalized lowercase URL for parsing)
-  const url = new URL(normalizedUrl);
+  const url = new URL(isApiHostname ? request.url.toLowerCase() : normalizedUrl);
   const ipAddress = url.searchParams.get('ipaddress'); // lowercase parameter name
   const maxAgeInDays = url.searchParams.get('maxageindays') || 30; // lowercase parameter name
   const verbose = url.searchParams.get('verbose') === 'true';
   const enableAI = url.searchParams.get('enableai') === 'true'; // AI toggle parameter
+  const cloudProvider = url.searchParams.get('cloudprovider') || null; // Cloud provider search: aws, azure, gcp, oracle, all, or none
+
+  // Validate cloudProvider against allowed values if provided
+  const allowedCloudProviders = ['none', 'all', 'azure', 'aws', 'gcp', 'oracle'];
+  if (cloudProvider && !allowedCloudProviders.includes(cloudProvider.toLowerCase())) {
+    return new Response(
+      JSON.stringify({
+        error: "Invalid parameter: cloudprovider must be one of 'none', 'all', 'azure', 'aws', 'gcp', or 'oracle'",
+        buildInfo: BUILD_INFO
+      }),
+      {
+        status: 400,
+        headers: {
+          'Content-Type': 'application/json',
+          ...corsHeaders(origin)
+        }
+      }
+    );
+  }
   
   // Debug: Log the parsed parameters
-  console.log('Parsed parameters:', { ipAddress, maxAgeInDays, verbose, enableAI });
+  console.log('Parsed parameters:', { ipAddress, maxAgeInDays, verbose, enableAI, cloudProvider });
   
   // Validate required parameters
   if (!ipAddress) {
@@ -422,8 +456,8 @@ async function handleCombinedRequest(request, env) {
   }
 
   try {
-    // Fetch both APIs in parallel for better performance
-    const [abuseIPDBResponse, radarResponse] = await Promise.allSettled([
+    // Build array of API calls to execute in parallel
+    const apiCalls = [
       // AbuseIPDB API request
       fetch(`${ABUSEIPDB_API_URL}?ipAddress=${encodeURIComponent(ipAddress)}&maxAgeInDays=${maxAgeInDays}&verbose=${verbose}`, {
         method: 'GET',
@@ -451,7 +485,22 @@ async function handleCombinedRequest(request, env) {
           cacheEverything: true
         }
       })
-    ]);
+    ];
+    
+    // Add cloud manifest search if requested
+    let cloudManifestPromise = null;
+    if (cloudProvider) {
+      cloudManifestPromise = searchCloudManifests(ipAddress, cloudProvider, env);
+    }
+    
+    // Fetch both APIs in parallel for better performance
+    const [abuseIPDBResponse, radarResponse] = await Promise.allSettled(apiCalls);
+    
+    // Wait for cloud manifest search if it was initiated
+    let cloudMatches = null;
+    if (cloudManifestPromise) {
+      cloudMatches = await cloudManifestPromise;
+    }
 
     // Process AbuseIPDB response
     let abuseIPDBData = null;
@@ -528,6 +577,9 @@ async function handleCombinedRequest(request, env) {
         error: radarError
       },
       
+      // Add cloud manifest search results (if requested)
+      ...(cloudMatches && { cloudMatches }),
+      
       // Metadata and errors
       abuseIPDBError: abuseIPDBError,
       workerInfo: {
@@ -537,7 +589,8 @@ async function handleCombinedRequest(request, env) {
         sources: {
           abuseipdb: abuseIPDBError ? 'error' : 'success',
           radar: radarError ? 'error' : 'success',
-          ai: enableAI ? (aiReputation.success ? 'success' : 'error') : 'disabled'
+          ai: enableAI ? (aiReputation.success ? 'success' : 'error') : 'disabled',
+          cloudManifests: cloudMatches ? (cloudMatches && cloudMatches.error ? 'error' : 'success') : 'not-requested'
         }
       }
     };
@@ -593,6 +646,250 @@ async function handleCombinedRequest(request, env) {
       }
     );
   }
+}
+
+/**
+ * Search cloud provider IP manifests for matches
+ */
+async function searchCloudManifests(ipAddress, provider, env) {
+  try {
+    const results = {
+      azure: [],
+      aws: [],
+      gcp: [],
+      oracle: []
+    };
+    
+    // Determine which providers to search
+    const validProviders = ['azure', 'aws', 'gcp', 'oracle'];
+    const normalizedProvider = (provider || '').toString().toLowerCase();
+
+    let providersToSearch;
+    if (!normalizedProvider || normalizedProvider === 'all') {
+      // Default to all known providers if "all" or no provider specified
+      providersToSearch = validProviders;
+    } else if (validProviders.includes(normalizedProvider)) {
+      providersToSearch = [normalizedProvider];
+    } else {
+      const errorMessage = `Invalid provider: ${provider}. Valid providers are: ${validProviders.join(', ')} or 'all'.`;
+      console.error(errorMessage);
+      return {
+        azure: [],
+        aws: [],
+        gcp: [],
+        oracle: [],
+        summary: {
+          totalMatches: 0,
+          providers: 0,
+          matchedProviders: []
+        },
+        error: errorMessage
+      };
+    }
+    
+    // Determine the base URL based on environment
+    // Preview worker uses preview Pages deployment, production uses production site
+    const isPreview = env.ENVIRONMENT === 'preview' || (typeof ENVIRONMENT !== 'undefined' && ENVIRONMENT === 'preview');
+    const baseUrl = isPreview 
+      ? 'https://bug-fix-worker-ai-bindings.albatross-5kt.pages.dev'
+      : 'https://albatross.devnomadic.com';
+    
+    // Search each provider's manifest
+    for (const providerName of providersToSearch) {
+      try {
+        // Fetch manifest from origin (wwwroot/ip-manifests/)
+        // Use lowercase filenames (azure.json, aws.json, etc.)
+        const fileName = providerName.toLowerCase();
+        const manifestUrl = `${baseUrl}/ip-manifests/${fileName}.json`;
+        console.log(`Fetching manifest: ${manifestUrl}`);
+        
+        const response = await fetch(manifestUrl, {
+          cf: {
+            cacheTtl: 3600, // Cache for 1 hour
+            cacheEverything: true
+          }
+        });
+        
+        if (!response.ok) {
+          console.error(`Failed to fetch ${providerName} manifest:`, response.status, response.statusText);
+          continue;
+        }
+        
+        const manifestData = await response.json();
+        console.log(`Successfully loaded ${providerName} manifest, searching for ${ipAddress}`);
+        
+        // Search based on provider format
+        if (providerName === 'azure') {
+          results.azure = searchAzureManifest(ipAddress, manifestData);
+          console.log(`Azure search complete: ${results.azure.length} matches`);
+        } else if (providerName === 'aws') {
+          results.aws = searchAwsManifest(ipAddress, manifestData);
+          console.log(`AWS search complete: ${results.aws.length} matches`);
+        } else if (providerName === 'gcp') {
+          results.gcp = searchGcpManifest(ipAddress, manifestData);
+          console.log(`GCP search complete: ${results.gcp.length} matches`);
+        } else if (providerName === 'oracle') {
+          results.oracle = searchOracleManifest(ipAddress, manifestData);
+          console.log(`Oracle search complete: ${results.oracle.length} matches`);
+        }
+      } catch (error) {
+        console.error(`Error searching ${providerName} manifest:`, error);
+      }
+    }
+    
+    // Build summary
+    const allMatches = [...results.azure, ...results.aws, ...results.gcp, ...results.oracle];
+    const matchedProviders = [];
+    if (results.azure.length > 0) matchedProviders.push('Azure');
+    if (results.aws.length > 0) matchedProviders.push('AWS');
+    if (results.gcp.length > 0) matchedProviders.push('GCP');
+    if (results.oracle.length > 0) matchedProviders.push('Oracle');
+    
+    return {
+      ...results,
+      summary: {
+        totalMatches: allMatches.length,
+        providers: matchedProviders.length,
+        matchedProviders: matchedProviders
+      }
+    };
+  } catch (error) {
+    console.error('Error searching cloud manifests:', error);
+    return {
+      azure: [],
+      aws: [],
+      gcp: [],
+      oracle: [],
+      summary: {
+        totalMatches: 0,
+        providers: 0,
+        matchedProviders: []
+      },
+      error: error.message
+    };
+  }
+}
+
+/**
+ * Search Azure manifest
+ */
+function searchAzureManifest(ipAddress, manifestData) {
+  const matches = [];
+  
+  if (!manifestData.values) {
+    console.error('Azure manifest has no values array');
+    return matches;
+  }
+  
+  console.log(`Searching Azure manifest for ${ipAddress}, found ${manifestData.values.length} value entries`);
+  let checkedPrefixes = 0;
+  
+  for (const value of manifestData.values) {
+    if (!value.properties || !value.properties.addressPrefixes) continue;
+    
+    for (const cidr of value.properties.addressPrefixes) {
+      checkedPrefixes++;
+      if (isIpInRange(ipAddress, cidr)) {
+        console.log(`✓ Azure match found: ${ipAddress} in ${cidr}`);
+        matches.push({
+          provider: 'Azure',
+          region: value.properties.region || 'Unknown',
+          service: value.properties.systemService || value.name || 'Unknown',
+          cidrRange: cidr,
+          platform: value.properties.platform || 'Azure'
+        });
+      }
+    }
+  }
+  
+  console.log(`Azure search complete: checked ${checkedPrefixes} prefixes, found ${matches.length} matches`);
+  return matches;
+}
+
+/**
+ * Search AWS manifest
+ */
+function searchAwsManifest(ipAddress, manifestData) {
+  const matches = [];
+  
+  if (manifestData.prefixes) {
+    for (const prefix of manifestData.prefixes) {
+      if (isIpInRange(ipAddress, prefix.ip_prefix)) {
+        matches.push({
+          provider: 'AWS',
+          region: prefix.region || 'Unknown',
+          service: prefix.service || 'Unknown',
+          cidrRange: prefix.ip_prefix,
+          networkBorderGroup: prefix.network_border_group
+        });
+      }
+    }
+  }
+  
+  if (manifestData.ipv6_prefixes) {
+    for (const prefix of manifestData.ipv6_prefixes) {
+      if (isIpInRange(ipAddress, prefix.ipv6_prefix)) {
+        matches.push({
+          provider: 'AWS',
+          region: prefix.region || 'Unknown',
+          service: prefix.service || 'Unknown',
+          cidrRange: prefix.ipv6_prefix,
+          networkBorderGroup: prefix.network_border_group
+        });
+      }
+    }
+  }
+  
+  return matches;
+}
+
+/**
+ * Search GCP manifest
+ */
+function searchGcpManifest(ipAddress, manifestData) {
+  const matches = [];
+  
+  if (!manifestData.prefixes) return matches;
+  
+  for (const prefix of manifestData.prefixes) {
+    const cidr = prefix.ipv4Prefix || prefix.ipv6Prefix;
+    if (cidr && isIpInRange(ipAddress, cidr)) {
+      matches.push({
+        provider: 'GCP',
+        region: prefix.scope || 'Unknown',
+        service: prefix.service || 'Unknown',
+        cidrRange: cidr
+      });
+    }
+  }
+  
+  return matches;
+}
+
+/**
+ * Search Oracle manifest
+ */
+function searchOracleManifest(ipAddress, manifestData) {
+  const matches = [];
+  
+  if (!manifestData.regions) return matches;
+  
+  for (const region of manifestData.regions) {
+    if (!region.cidrs) continue;
+    
+    for (const cidr of region.cidrs) {
+      if (isIpInRange(ipAddress, cidr.cidr)) {
+        matches.push({
+          provider: 'Oracle',
+          region: region.region || 'Unknown',
+          service: cidr.tags ? cidr.tags.join(', ') : 'Unknown',
+          cidrRange: cidr.cidr
+        });
+      }
+    }
+  }
+  
+  return matches;
 }
 
 /**
@@ -691,6 +988,172 @@ function isTimestampValid(timestamp) {
     console.error('Error validating timestamp:', error);
     return false;
   }
+}
+
+/**
+ * Check if an IP address is within a CIDR range
+ * Supports both IPv4 and IPv6
+ */
+function isIpInRange(ip, cidrRange) {
+  try {
+    // Parse CIDR notation (e.g., "192.168.1.0/24" or "2001:db8::/32")
+    const parts = cidrRange.split('/');
+    if (parts.length !== 2) {
+      console.error('Invalid CIDR format:', cidrRange);
+      return false;
+    }
+    
+    const rangeIp = parts[0];
+    const prefix = parseInt(parts[1], 10);
+    
+    if (isNaN(prefix)) {
+      console.error('Invalid prefix length:', parts[1], 'in', cidrRange);
+      return false;
+    }
+    
+    // Detect IP version
+    const isIPv6 = ip.includes(':');
+    const isRangeIPv6 = rangeIp.includes(':');
+    
+    // Validate prefix length based on IP version
+    if (isRangeIPv6) {
+      // IPv6: prefix must be 0-128
+      if (prefix < 0 || prefix > 128) {
+        console.error('Invalid IPv6 prefix length:', prefix, '(must be 0-128) in', cidrRange);
+        return false;
+      }
+    } else {
+      // IPv4: prefix must be 0-32
+      if (prefix < 0 || prefix > 32) {
+        console.error('Invalid IPv4 prefix length:', prefix, '(must be 0-32) in', cidrRange);
+        return false;
+      }
+    }
+    
+    // IP versions must match
+    if (isIPv6 !== isRangeIPv6) {
+      return false;
+    }
+    
+    if (isIPv6) {
+      // IPv6 handling
+      return isIPv6InRange(ip, rangeIp, prefix);
+    } else {
+      // IPv4 handling
+      return isIPv4InRange(ip, rangeIp, prefix);
+    }
+  } catch (error) {
+    console.error('Error checking IP range:', error, { ip, cidrRange });
+    return false;
+  }
+}
+
+/**
+ * Check if IPv4 address is in CIDR range
+ */
+function isIPv4InRange(ip, rangeIp, prefixLength) {
+  // Convert IP addresses to 32-bit integers
+  const ipNum = ipv4ToNumber(ip);
+  const rangeNum = ipv4ToNumber(rangeIp);
+  
+  // Create subnet mask
+  const mask = (0xFFFFFFFF << (32 - prefixLength)) >>> 0;
+  
+  // Compare network portions
+  return (ipNum & mask) === (rangeNum & mask);
+}
+
+/**
+ * Convert IPv4 address to 32-bit number
+ */
+function ipv4ToNumber(ip) {
+  const parts = ip.split('.');
+
+  // IPv4 must have exactly 4 octets
+  if (parts.length !== 4) {
+    throw new Error(`Invalid IPv4 address (expected 4 octets): "${ip}"`);
+  }
+
+  const nums = parts.map((part) => Number(part));
+
+  // Each octet must be an integer between 0 and 255
+  for (let i = 0; i < nums.length; i++) {
+    const value = nums[i];
+    if (!Number.isFinite(value) || !Number.isInteger(value) || value < 0 || value > 255) {
+      throw new Error(`Invalid IPv4 octet "${parts[i]}" in address "${ip}"`);
+    }
+  }
+
+  return ((nums[0] << 24) | (nums[1] << 16) | (nums[2] << 8) | nums[3]) >>> 0;
+}
+
+/**
+ * Check if IPv6 address is in CIDR range
+ */
+function isIPv6InRange(ip, rangeIp, prefixLength) {
+  // Expand both IPs to full notation
+  const ipExpanded = expandIPv6(ip);
+  const rangeExpanded = expandIPv6(rangeIp);
+  
+  // Convert to bit arrays
+  const ipBits = ipv6ToBits(ipExpanded);
+  const rangeBits = ipv6ToBits(rangeExpanded);
+  
+  // Compare first prefixLength bits
+  for (let i = 0; i < prefixLength; i++) {
+    if (ipBits[i] !== rangeBits[i]) {
+      return false;
+    }
+  }
+  
+  return true;
+}
+
+/**
+ * Expand IPv6 address to full notation
+ */
+function expandIPv6(ip) {
+  // Handle :: compression
+  if (ip.includes('::')) {
+    // Validate that there is at most one '::' occurrence
+    const doubleColonMatches = ip.match(/::/g);
+    if (doubleColonMatches && doubleColonMatches.length > 1) {
+      // Invalid IPv6 with multiple '::' - return original to avoid runtime errors
+      return ip;
+    }
+
+    const sides = ip.split('::');
+    const leftParts = sides[0] ? sides[0].split(':') : [];
+    const rightParts = sides[1] ? sides[1].split(':') : [];
+    const missingParts = 8 - leftParts.length - rightParts.length;
+
+    // If missingParts is negative, the address is malformed; avoid creating
+    // an array with negative length and just return the original string.
+    if (missingParts < 0) {
+      return ip;
+    }
+    const middleParts = new Array(missingParts).fill('0000');
+    const allParts = [...leftParts, ...middleParts, ...rightParts];
+    return allParts.map(p => p.padStart(4, '0')).join(':');
+  }
+  
+  // Just pad existing parts
+  return ip.split(':').map(p => p.padStart(4, '0')).join(':');
+}
+
+/**
+ * Convert IPv6 address to bit array
+ */
+function ipv6ToBits(ip) {
+  const parts = ip.split(':');
+  let bits = '';
+  
+  for (const part of parts) {
+    const num = parseInt(part, 16);
+    bits += num.toString(2).padStart(16, '0');
+  }
+  
+  return bits;
 }
 
 /**

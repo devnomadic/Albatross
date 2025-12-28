@@ -1,0 +1,38 @@
+body {
+    margin: 0;
+    padding: 20px;
+    background-color: #1e1e1e;
+    font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+}
+
+pre {
+    margin: 0;
+    padding: 20px;
+    background-color: #1e1e1e;
+    color: #d4d4d4;
+    font-size: 14px;
+    line-height: 1.5;
+    overflow-x: auto;
+    border: none;
+}
+
+.hljs {
+    background: #1e1e1e;
+    color: #dcdcdc;
+}
+
+.hljs-attr {
+    color: #9cdcfe;
+}
+
+.hljs-string {
+    color: #ce9178;
+}
+
+.hljs-number {
+    color: #b5cea8;
+}
+
+.hljs-literal {
+    color: #569cd6;
+}

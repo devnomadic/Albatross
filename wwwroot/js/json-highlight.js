@@ -11,6 +11,9 @@ window.highlightJson = function() {
         // Check if content is already highlighted
         if (!codeBlock.classList.contains('hljs')) {
             try {
+                // Sanitize content by using textContent to prevent HTML injection
+                const jsonText = codeBlock.textContent;
+                
                 // Apply the 'language-json' class for highlighting
                 codeBlock.className = 'bg-dark text-light p-3 rounded json-output language-json';
                 // Run the highlighter

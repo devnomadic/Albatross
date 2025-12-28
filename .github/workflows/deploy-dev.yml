@@ -153,11 +153,11 @@ jobs:
         CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       run: |
-        # Deploy to static preview worker
+        # Deploy to preview environment
         WORKER_NAME="abuseipdb-preview"
         
         DEPLOYMENT_OUTPUT=$(npx wrangler deploy \
-          --name "${WORKER_NAME}" \
+          --env preview \
           --compatibility-date 2024-06-08 \
           cloudflare-worker.js 2>&1)
         

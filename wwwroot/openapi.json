@@ -1,0 +1,239 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "Albatross IP Analysis API",
+    "version": "1.0.0",
+    "description": "Comprehensive IP address analysis including cloud provider detection, abuse reputation checking via AbuseIPDB, ASN information from Cloudflare Radar, and AI-powered risk assessment.",
+    "contact": {
+      "name": "Albatross API Support",
+      "url": "https://albatross.devnomadic.com"
+    }
+  },
+  "servers": [
+    {
+      "url": "https://albatross.devnomadic.com",
+      "description": "Production server"
+    },
+    {
+      "url": "https://albatross-api.devnomadic.com",
+      "description": "API server (no authentication required)"
+    }
+  ],
+  "paths": {
+    "/api": {
+      "get": {
+        "summary": "Analyze IP Address",
+        "description": "Returns comprehensive analysis of an IP address including cloud provider detection, abuse reputation, ASN information, and AI-powered risk assessment.",
+        "operationId": "analyzeIP",
+        "parameters": [
+          {
+            "name": "ipaddress",
+            "in": "query",
+            "required": true,
+            "description": "The IPv4 or IPv6 address to analyze. Must be a valid public routable IP address.",
+            "schema": {
+              "type": "string",
+              "example": "8.8.8.8"
+            }
+          },
+          {
+            "name": "cloudprovider",
+            "in": "query",
+            "required": false,
+            "description": "Filter cloud provider matches. Options: all, azure, aws, gcp, oracle. Omit this parameter to disable cloud provider manifest search.",
+            "schema": {
+              "type": "string",
+              "enum": ["all", "azure", "aws", "gcp", "oracle"]
+            }
+          },
+          {
+            "name": "maxageindays",
+            "in": "query",
+            "required": false,
+            "description": "Maximum age in days for abuse reports.",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 365,
+              "default": 30
+            }
+          },
+          {
+            "name": "verbose",
+            "in": "query",
+            "required": false,
+            "description": "Include detailed abuse reports in the response.",
+            "schema": {
+              "type": "boolean",
+              "default": true
+            }
+          },
+          {
+            "name": "enableai",
+            "in": "query",
+            "required": false,
+            "description": "Enable AI-powered risk analysis using Cloudflare Workers AI.",
+            "schema": {
+              "type": "boolean",
+              "default": true
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request - Invalid or missing parameters",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "SuccessResponse": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "example": true
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "ipAddress": {
+                "type": "string",
+                "example": "8.8.8.8"
+              },
+              "cloudMatches": {
+                "type": "object",
+                "nullable": true,
+                "description": "Cloud provider matches (if cloudprovider parameter was specified)"
+              },
+              "reputation": {
+                "type": "object",
+                "description": "AbuseIPDB reputation data"
+              },
+              "asnInfo": {
+                "type": "object",
+                "description": "ASN information from Cloudflare Radar"
+              },
+              "aiReputation": {
+                "type": "object",
+                "nullable": true,
+                "description": "AI-powered risk assessment (if enabled)"
+              }
+            }
+          },
+          "metadata": {
+            "type": "object",
+            "properties": {
+              "requestId": {
+                "type": "string",
+                "example": "a1b2c3d4e5f6g7h8"
+              },
+              "timestamp": {
+                "type": "string",
+                "format": "date-time",
+                "example": "2025-12-28T12:00:00Z"
+              },
+              "executionTimeMs": {
+                "type": "integer",
+                "example": 1250
+              },
+              "sources": {
+                "type": "object",
+                "properties": {
+                  "cloudSearch": {
+                    "type": "string",
+                    "enum": ["success", "not-requested"]
+                  },
+                  "abuseipdb": {
+                    "type": "string",
+                    "enum": ["success", "error"]
+                  },
+                  "radar": {
+                    "type": "string",
+                    "enum": ["success", "error"]
+                  },
+                  "ai": {
+                    "type": "string",
+                    "enum": ["success", "error", "disabled"]
+                  }
+                }
+              },
+              "workerInfo": {
+                "type": "object",
+                "description": "Cloudflare Worker metadata"
+              }
+            }
+          }
+        }
+      },
+      "ErrorResponse": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "example": false
+          },
+          "error": {
+            "type": "string",
+            "example": "Missing required parameter: ipaddress"
+          },
+          "code": {
+            "type": "string",
+            "example": "MISSING_PARAMETER"
+          },
+          "status": {
+            "type": "integer",
+            "example": 400
+          },
+          "metadata": {
+            "type": "object",
+            "properties": {
+              "requestId": {
+                "type": "string",
+                "example": "a1b2c3d4e5f6g7h8"
+              },
+              "timestamp": {
+                "type": "string",
+                "format": "date-time",
+                "example": "2025-12-28T12:00:00Z"
+              },
+              "executionTimeMs": {
+                "type": "integer",
+                "example": 25
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

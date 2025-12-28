@@ -26,6 +26,9 @@ namespace Albatross.Services
         [JsonPropertyName("asnInfo")]
         public AsnInfo? AsnInfo { get; set; }
 
+        [JsonPropertyName("cloudMatches")]
+        public object? CloudMatches { get; set; }
+
         [JsonPropertyName("abuseIPDBError")]
         public string? AbuseIPDBError { get; set; }
 
@@ -431,8 +434,9 @@ namespace Albatross.Services
         /// <param name="maxAgeInDays">Reports older than this many days won't be included (default 30). This is overridden if specified in ipAddress parameter</param>
         /// <param name="verbose">Whether to include detailed report information</param>
         /// <param name="enableAI">Whether to enable AI reputation analysis (default true)</param>
+        /// <param name="cloudProvider">Optional cloud provider to search: aws, azure, gcp, oracle, or all</param>
         /// <returns>Complete AbuseIPDB information for the specified IP address</returns>
-        public async Task<AbuseIPDBApiResponse> CheckIPAsync(string ipAddress, int maxAgeInDays = 30, bool verbose = true, bool enableAI = true)
+        public async Task<AbuseIPDBApiResponse> CheckIPAsync(string ipAddress, int maxAgeInDays = 30, bool verbose = true, bool enableAI = true, string? cloudProvider = null)
         {
             // Parse the input to extract IP address and optionally maxAgeInDays
             string actualIpAddress;
@@ -466,10 +470,20 @@ namespace Albatross.Services
                 var enableAIParam = enableAI.ToString().ToLower();
                 var timestamp = GetTimestamp();
 
-                // Include timestamp as a URI parameter
-                var requestUrl =
-                    $"{_cloudflareWorkerUrl}?ipAddress={actualIpAddress}&maxAgeInDays={actualMaxAgeInDays}&verbose={verboseParam}&enableAI={enableAIParam}&timestamp={timestamp}"
-                        .ToLower();
+                // Build request URL with optional cloudprovider parameter
+                var requestUrl = $"{_cloudflareWorkerUrl}?ipAddress={actualIpAddress}&maxAgeInDays={actualMaxAgeInDays}&verbose={verboseParam}&enableAI={enableAIParam}";
+
+                // Add cloudprovider parameter if specified (lowercase to match worker)
+                if (!string.IsNullOrEmpty(cloudProvider))
+                {
+                    requestUrl += $"&cloudprovider={cloudProvider.ToLower()}";
+                }
+
+                // Add timestamp
+                requestUrl += $"&timestamp={timestamp}";
+
+                // Normalize to lowercase for HMAC
+                requestUrl = requestUrl.ToLower();
                 Console.WriteLine($"Requesting: {requestUrl}");
 
                 // Create request message to add custom headers

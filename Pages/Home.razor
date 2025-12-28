@@ -107,7 +107,11 @@
 \____/_/\____/\__,_/\__,_/  /___/_/       /____/\___/\__,_/_/   \___/_/ /_/ 
 </b></pre><br>
 -->
-<img src="/images/ascii-text-art.png" alt="CloudIPSearch" width="38%" style="padding-bottom: 5px;" border="0"/> <br>
+@{
+    var currentMonth = DateTime.Now.Month;
+    var logoPath = currentMonth == 12 ? "/images/ascii-text-art-christmas.png" : "/images/ascii-text-art.png";
+}
+<img src="@logoPath" alt="CloudIPSearch" width="38%" style="padding-bottom: 5px;" border="0"/> <br>
 <img src="/images/ascii-text-art-albatross.png" alt="ascii-text-art-albatross" width="15%" border="0" /> <br><br>
 <div class="ascii-art-pixel-matrix" role="img" aria-label="ASCII art pixel matrix">
     <div class="pixel-matrix__grid">
@@ -171,6 +175,9 @@
 
                 <h6>🔒 <strong>Security:</strong></h6>
                 <p>All requests use HMAC-SHA256 authentication with timestamp validation. Only public routable IP addresses are accepted (private networks like 10.x.x.x, 192.168.x.x, and 127.x.x.x are blocked).</p>
+
+                <h6>🔌 <strong>API Access:</strong></h6>
+                <p>Programmatic access available via REST API with OpenAPI specification. Visit the <a href="/api" style="color: #0d6efd; text-decoration: none; font-weight: 500;">API Documentation</a> for interactive documentation, code examples, and OpenAPI spec download.</p>
 
                 <p><small class="text-muted">Data provided by AbuseIPDB, Cloudflare Radar, Cloudflare Workers AI, and official cloud provider IP manifests.</small></p>
             </div>
@@ -519,10 +526,10 @@
             // Load all manifest files in parallel for optimal performance
             var downloadTasks = new[]
             {
-                Http.GetStringAsync("ip-manifests/Azure.json"),
-                Http.GetStringAsync("ip-manifests/AWS.json"),
-                Http.GetStringAsync("ip-manifests/GCP.json"),
-                Http.GetStringAsync("ip-manifests/Oracle.json")
+                Http.GetStringAsync("ip-manifests/azure.json"),
+                Http.GetStringAsync("ip-manifests/aws.json"),
+                Http.GetStringAsync("ip-manifests/gcp.json"),
+                Http.GetStringAsync("ip-manifests/oracle.json")
             };
 
             statusMessage = "Loading cloud IP manifests...";

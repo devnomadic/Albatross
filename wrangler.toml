@@ -14,7 +14,30 @@ binding = "AI"
 # Production environment (default)
 [env.production]
 name = "abuseipdb"
-routes = []
+workers_dev = true
+routes = [
+  { pattern = "albatross-api.devnomadic.com/*", zone_name = "devnomadic.com" }
+]
+
+[env.production.vars]
+ENVIRONMENT = "production"
+
+[env.production.ai]
+binding = "AI"
+
+# Preview environment
+[env.preview]
+name = "abuseipdb-preview"
+workers_dev = true
+routes = [
+  { pattern = "albatross-apipreview.devnomadic.com/*", zone_name = "devnomadic.com" }
+]
+
+[env.preview.vars]
+ENVIRONMENT = "preview"
+
+[env.preview.ai]
+binding = "AI"
 
 # Environment variables (these will be set via GitHub Actions secrets)
 # [vars]

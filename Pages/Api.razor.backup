@@ -1,0 +1,297 @@
+@page "/api"
+@inject HttpClient Http
+@inject Albatross.Services.AbuseIPDBService AbuseIPDBService
+@inject NavigationManager NavigationManager
+@inject IJSRuntime JSRuntime
+@using System.Text.Json
+@using System.Net
+@using System.Diagnostics
+
+<!DOCTYPE html>
+<html>
+<head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+    <link rel="stylesheet" href="css/json-formatter.css">
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            background-color: #1e1e1e;
+            font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+        }
+        pre {
+            margin: 0;
+            padding: 20px;
+            background-color: #1e1e1e;
+            color: #d4d4d4;
+            font-size: 14px;
+            line-height: 1.5;
+            overflow-x: auto;
+            border: none;
+        }
+        pre code {
+            background: transparent;
+            padding: 0;
+            color: #d4d4d4;
+        }
+        /* VS2015 Dark Theme Colors */
+        .hljs {
+            background: #1e1e1e;
+            color: #dcdcdc;
+        }
+        .hljs-attr {
+            color: #9cdcfe;
+        }
+        .hljs-string {
+            color: #ce9178;
+        }
+        .hljs-number {
+            color: #b5cea8;
+        }
+        .hljs-literal {
+            color: #569cd6;
+        }
+        .hljs-punctuation {
+            color: #d4d4d4;
+        }
+    </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.7.0/highlight.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.7.0/languages/json.min.js"></script>
+    <script>
+        window.highlightJson = function() {
+            const codeBlock = document.querySelector('#json-container code');
+            if (codeBlock && typeof hljs !== 'undefined') {
+                hljs.highlightElement(codeBlock);
+            }
+        };
+    </script>
+</head>
+<body>
+<pre id="json-container"><code class="language-json">@jsonOutput</code></pre>
+</body>
+</html>
+
+@code {
+    private string jsonOutput = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var startTime = Stopwatch.StartNew();
+        var requestId = Guid.NewGuid().ToString("N").Substring(0, 16);
+        
+        try
+        {
+            // Parse query parameters
+            var uri = new Uri(NavigationManager.Uri);
+            var query = System.Web.HttpUtility.ParseQueryString(uri.Query);
+            
+            var ipAddress = query["ipaddress"];
+            var maxAgeInDaysStr = query["maxageindays"] ?? "30";
+            var verboseStr = query["verbose"] ?? "true";
+            var enableAiStr = query["enableai"] ?? "true";
+            var cloudProvider = query["cloudprovider"]; // Optional: aws, azure, gcp, oracle, or all
+            
+            // Validate required parameter
+            if (string.IsNullOrEmpty(ipAddress))
+            {
+                jsonOutput = BuildErrorResponse("Missing required parameter: ipaddress", "MISSING_PARAMETER", 400, requestId, startTime);
+                return;
+            }
+            
+            // Parse optional parameters
+            if (!int.TryParse(maxAgeInDaysStr, out int maxAgeInDays))
+            {
+                maxAgeInDays = 30;
+            }
+            bool verbose = verboseStr.ToLower() == "true";
+            bool enableAi = enableAiStr.ToLower() == "true";
+            
+            // Validate IP address
+            if (!IsValidIPAddress(ipAddress))
+            {
+                jsonOutput = BuildErrorResponse("Invalid IP address. Please enter a valid public routable IPv4 or IPv6 address (private/reserved ranges are not allowed).", "INVALID_IP", 400, requestId, startTime);
+                return;
+            }
+            
+            // Extract just the IP part (in case format is ip;maxdays)
+            string actualIpAddress = ipAddress.Contains(';') 
+                ? ipAddress.Split(';', 2)[0].Trim() 
+                : ipAddress.Trim();
+            
+            IPAddress parsedIp = IPAddress.Parse(actualIpAddress);
+            
+            // Perform reputation check (worker handles cloud search)
+            var reputationResults = await AbuseIPDBService.CheckIPAsync(actualIpAddress, maxAgeInDays, verbose, enableAi, cloudProvider);
+            
+            // Build unified response
+            jsonOutput = BuildSuccessResponse(actualIpAddress, reputationResults, requestId, startTime);
+        }
+        catch (Exception ex)
+        {
+            jsonOutput = BuildErrorResponse($"Internal server error: {ex.Message}", "INTERNAL_ERROR", 500, requestId, startTime);
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && !string.IsNullOrEmpty(jsonOutput))
+        {
+            await JSRuntime.InvokeVoidAsync("highlightJson");
+        }
+    }
+    
+    private string BuildSuccessResponse(string ipAddress, Albatross.Services.AbuseIPDBApiResponse reputationData, string requestId, Stopwatch timer)
+    {
+        timer.Stop();
+        
+        var response = new
+        {
+            success = true,
+            data = new
+            {
+                ipAddress = ipAddress,
+                cloudMatches = reputationData.CloudMatches,
+                reputation = reputationData.Data,
+                asnInfo = reputationData.AsnInfo,
+                aiReputation = reputationData.AIReputation
+            },
+            metadata = new
+            {
+                requestId = requestId,
+                timestamp = DateTime.UtcNow.ToString("o"),
+                executionTimeMs = timer.ElapsedMilliseconds,
+                sources = new
+                {
+                    cloudSearch = reputationData.CloudMatches != null ? "success" : "not-requested",
+                    abuseipdb = reputationData.Data != null ? "success" : "error",
+                    radar = reputationData.AsnInfo?.Success == true ? "success" : "error",
+                    ai = reputationData.AIReputation?.Success == true ? "success" : (reputationData.AIReputation != null ? "error" : "disabled")
+                },
+                workerInfo = reputationData.WorkerInfo
+            }
+        };
+        
+        var options = new JsonSerializerOptions 
+        { 
+            WriteIndented = true,
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+            DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
+        };
+        
+        return JsonSerializer.Serialize(response, options);
+    }
+    
+    private string BuildErrorResponse(string errorMessage, string errorCode, int statusCode, string requestId, Stopwatch timer)
+    {
+        timer.Stop();
+        
+        var response = new
+        {
+            success = false,
+            error = errorMessage,
+            code = errorCode,
+            status = statusCode,
+            metadata = new
+            {
+                requestId = requestId,
+                timestamp = DateTime.UtcNow.ToString("o"),
+                executionTimeMs = timer.ElapsedMilliseconds
+            }
+        };
+        
+        var options = new JsonSerializerOptions 
+        { 
+            WriteIndented = true,
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+        };
+        
+        return JsonSerializer.Serialize(response, options);
+    }
+    
+    private bool IsValidIPAddress(string input)
+    {
+        string actualIpAddress = input.Contains(';') ? input.Split(';', 2)[0].Trim() : input.Trim();
+        if (!IPAddress.TryParse(actualIpAddress, out IPAddress? parsedIP))
+            return false;
+        return IsPublicRoutableIP(parsedIP);
+    }
+    
+    private bool IsPublicRoutableIP(IPAddress ip)
+    {
+        if (ip.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork)
+        {
+            return IsPublicIPv4(ip);
+        }
+        else if (ip.AddressFamily == System.Net.Sockets.AddressFamily.InterNetworkV6)
+        {
+            return IsPublicIPv6(ip);
+        }
+        return false;
+    }
+    
+    private bool IsPublicIPv4(IPAddress ip)
+    {
+        byte[] bytes = ip.GetAddressBytes();
+        if (bytes[0] == 0) return false;
+        if (bytes[0] == 10) return false;
+        if (bytes[0] == 100 && (bytes[1] & 0xC0) == 64) return false;
+        if (bytes[0] == 127) return false;
+        if (bytes[0] == 169 && bytes[1] == 254) return false;
+        if (bytes[0] == 172 && (bytes[1] & 0xF0) == 16) return false;
+        if (bytes[0] == 192 && bytes[1] == 0 && bytes[2] == 0) return false;
+        if (bytes[0] == 192 && bytes[1] == 0 && bytes[2] == 2) return false;
+        if (bytes[0] == 192 && bytes[1] == 88 && bytes[2] == 99) return false;
+        if (bytes[0] == 192 && bytes[1] == 168) return false;
+        if (bytes[0] == 198 && (bytes[1] & 0xFE) == 18) return false;
+        if (bytes[0] == 198 && bytes[1] == 51 && bytes[2] == 100) return false;
+        if (bytes[0] == 203 && bytes[1] == 0 && bytes[2] == 113) return false;
+        if ((bytes[0] & 0xF0) == 224) return false;
+        if ((bytes[0] & 0xF0) == 240) return false;
+        if (bytes[0] == 255 && bytes[1] == 255 && bytes[2] == 255 && bytes[3] == 255) return false;
+        return true;
+    }
+    
+    private bool IsPublicIPv6(IPAddress ip)
+    {
+        byte[] bytes = ip.GetAddressBytes();
+        if (ip.Equals(IPAddress.IPv6Loopback)) return false;
+        if (ip.Equals(IPAddress.IPv6Any)) return false;
+        if (bytes[0] == 0 && bytes[1] == 0 && bytes[2] == 0 && bytes[3] == 0 &&
+            bytes[4] == 0 && bytes[5] == 0 && bytes[6] == 0 && bytes[7] == 0 &&
+            bytes[8] == 0 && bytes[9] == 0 && bytes[10] == 0xFF && bytes[11] == 0xFF) return false;
+        if (bytes[0] == 0xFE && (bytes[1] & 0xC0) == 0x80) return false;
+        if ((bytes[0] & 0xFE) == 0xFC) return false;
+        if (bytes[0] == 0xFF) return false;
+        if (bytes[0] == 0x20 && bytes[1] == 0x01 && bytes[2] == 0x0D && bytes[3] == 0xB8) return false;
+        return true;
+    }
+    
+    private bool IsIpInRange(IPAddress ip, string cidrRange)
+    {
+        try
+        {
+            string[] parts = cidrRange.Split('/');
+            if (parts.Length != 2) return false;
+            IPAddress networkAddress = IPAddress.Parse(parts[0]);
+            int prefixLength = int.Parse(parts[1]);
+            byte[] ipBytes = ip.GetAddressBytes();
+            byte[] networkBytes = networkAddress.GetAddressBytes();
+            if (ipBytes.Length != networkBytes.Length) return false;
+            int maxPrefixLength = ipBytes.Length * 8;
+            if (prefixLength < 0 || prefixLength > maxPrefixLength) return false;
+            int numBytes = prefixLength / 8;
+            int remainingBits = prefixLength % 8;
+            for (int i = 0; i < numBytes && i < ipBytes.Length; i++)
+            {
+                if (ipBytes[i] != networkBytes[i]) return false;
+            }
+            if (remainingBits > 0 && numBytes < ipBytes.Length)
+            {
+                int mask = (0xFF << (8 - remainingBits)) & 0xFF;
+                if ((ipBytes[numBytes] & mask) != (networkBytes[numBytes] & mask)) return false;
+            }
+            return true;
+        }
+        catch { return false; }
+    }
+}
