@@ -156,10 +156,20 @@ jobs:
         # Deploy to preview environment
         WORKER_NAME="abuseipdb-preview"
         
+        set +e
         DEPLOYMENT_OUTPUT=$(npx wrangler deploy \
           --env preview \
           --compatibility-date 2024-06-08 \
           cloudflare-worker.js 2>&1)
+        DEPLOY_EXIT_CODE=$?
+        set -e
+        
+        echo "Deployment output: $DEPLOYMENT_OUTPUT"
+        
+        if [ $DEPLOY_EXIT_CODE -ne 0 ]; then
+          echo "::error::Wrangler deploy failed with exit code ${DEPLOY_EXIT_CODE}"
+          exit $DEPLOY_EXIT_CODE
+        fi
         
         # Extract the worker URL from deployment output
         WORKER_URL=$(echo "$DEPLOYMENT_OUTPUT" | grep -oE 'https://[a-zA-Z0-9.-]+\.workers\.dev' | head -1)
@@ -172,7 +182,6 @@ jobs:
         echo "url=${WORKER_URL}" >> $GITHUB_OUTPUT
         echo "Worker URL: ${WORKER_URL}"
         echo "Worker Name: ${WORKER_NAME}"
-        echo "Deployment output: $DEPLOYMENT_OUTPUT"
         
     - name: Deploy SPA to Cloudflare Pages
       id: spa-deploy
