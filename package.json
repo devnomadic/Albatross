@@ -23,7 +23,7 @@
   "author": "Your Name",
   "license": "MIT",
   "devDependencies": {
-    "wrangler": "^4.59.1"
+    "wrangler": "^4.117.0"
   },
   "engines": {
     "node": ">=20.0.0"
