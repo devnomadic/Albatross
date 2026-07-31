@@ -304,6 +304,22 @@
                         </ul>
                     }
                 </div>
+                @if (attackCategories.Any())
+                {
+                    <div class="category-pie-section mt-3">
+                        <h6 class="world-map-title" style="font-size:0.85rem;">📊 Reported Attack Category Mix</h6>
+                        <div class="category-pie-wrapper">
+                            <div class="category-pie-chart" style="background: conic-gradient(@GetCategoryPieGradient());"></div>
+                            <ul class="category-pie-legend list-unstyled mb-0 text-start">
+                                @{ var totalCategoryReports = attackCategories.Sum(c => c.Count); }
+                                @foreach (var (cat, idx) in attackCategories.Select((c, i) => (c, i)))
+                                {
+                                    <li><span class="legend-swatch legend-round" style="background-color:@GetCategoryColor(idx);"></span>@cat.Name: @cat.Count (@((cat.Count * 100.0 / totalCategoryReports).ToString("0.#"))%)</li>
+                                }
+                            </ul>
+                        </div>
+                    </div>
+                }
             }
             <div class="card">            
                 <div class="card-header d-flex justify-content-between align-items-center" style="padding: 0.25rem 1rem !important; min-height: 32px !important; height: 32px !important; max-height: 32px !important; box-sizing: border-box !important; overflow: hidden !important;">
@@ -346,8 +362,67 @@
     private string? originCountryCode;
     private string? originCountryName;
     private List<ReporterCountrySummary> targetCountries = new();
+    private List<CategorySummary> attackCategories = new();
 
     private sealed record ReporterCountrySummary(string Code, string Name, int Count);
+    private sealed record CategorySummary(int Id, string Name, int Count);
+
+    private static readonly Dictionary<int, string> AbuseCategoryNames = new()
+    {
+        [1] = "DNS Compromise",
+        [2] = "DNS Poisoning",
+        [3] = "Fraud Orders",
+        [4] = "DDoS Attack",
+        [5] = "FTP Brute-Force",
+        [6] = "Ping of Death",
+        [7] = "Phishing",
+        [8] = "Fraud VoIP",
+        [9] = "Open Proxy",
+        [10] = "Web Spam",
+        [11] = "Email Spam",
+        [12] = "Blog Spam",
+        [13] = "VPN IP",
+        [14] = "Port Scan",
+        [15] = "Hacking",
+        [16] = "SQL Injection",
+        [17] = "Spoofing",
+        [18] = "Brute-Force",
+        [19] = "Bad Web Bot",
+        [20] = "Exploited Host",
+        [21] = "Web App Attack",
+        [22] = "SSH",
+        [23] = "IoT Targeted"
+    };
+
+    private static readonly string[] CategoryPieColors = new[]
+    {
+        "#e53935", "#1e88e5", "#43a047", "#fdd835", "#8e24aa", "#fb8c00",
+        "#00acc1", "#d81b60", "#3949ab", "#7cb342", "#c0ca33", "#6d4c41",
+        "#546e7a"
+    };
+
+    private static string GetCategoryColor(int index) => CategoryPieColors[index % CategoryPieColors.Length];
+
+    private string GetCategoryPieGradient()
+    {
+        var total = attackCategories.Sum(c => c.Count);
+        if (total == 0)
+        {
+            return "#3a3f4a 0deg 360deg";
+        }
+
+        var segments = new List<string>();
+        double cumulative = 0;
+        for (int i = 0; i < attackCategories.Count; i++)
+        {
+            double start = cumulative / total * 360;
+            cumulative += attackCategories[i].Count;
+            double end = cumulative / total * 360;
+            segments.Add($"{GetCategoryColor(i)} {start.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)}deg {end.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)}deg");
+        }
+
+        return string.Join(", ", segments);
+    }
 
     private static string GetPixelShadeClass(int value) => value switch
     {
@@ -490,6 +565,7 @@
         originCountryCode = null;
         originCountryName = null;
         targetCountries = new();
+        attackCategories = new();
         await JSRuntime.InvokeVoidAsync("AlbatrossWorldMap.destroy");
         StateHasChanged();
 
@@ -512,6 +588,13 @@
                 .GroupBy(r => r.ReporterCountryCode!.ToUpperInvariant())
                 .Select(g => new ReporterCountrySummary(g.Key, g.FirstOrDefault(r => !string.IsNullOrWhiteSpace(r.ReporterCountryName))?.ReporterCountryName ?? g.Key, g.Count()))
                 .OrderByDescending(t => t.Count)
+                .ToList();
+
+            attackCategories = (abuseIpResult.Data?.Reports ?? new List<Albatross.Services.AbuseReport>())
+                .SelectMany(r => r.Categories ?? new List<int>())
+                .GroupBy(c => c)
+                .Select(g => new CategorySummary(g.Key, AbuseCategoryNames.TryGetValue(g.Key, out var name) ? name : $"Category {g.Key}", g.Count()))
+                .OrderByDescending(c => c.Count)
                 .ToList();
             
             // Log the JSON to browser console

@@ -1293,6 +1293,8 @@ html body div.card div.card-header .btn {
     border-radius: 4px;
     margin-left: auto;
     margin-right: auto;
+    --jvm-zoom-btn-bg-color: #6c757d;
+    --jvm-zoom-btn-color: #ffffff;
 }
 
 .world-map-legend {
@@ -1329,5 +1331,42 @@ html body div.card div.card-header .btn {
 
 .target-country-list li {
     padding: 0.15rem 0;
+}
+
+/* Attack category pie chart (reported abuse categories mix) */
+.category-pie-section {
+    max-width: 900px;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+.category-pie-wrapper {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: 1.5rem;
+}
+
+.category-pie-chart {
+    width: 160px;
+    height: 160px;
+    min-width: 160px;
+    border-radius: 50%;
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.1);
+}
+
+.category-pie-legend {
+    color: #212529;
+    font-size: 0.85rem;
+    max-width: 420px;
+}
+
+.category-pie-legend li {
+    padding: 0.15rem 0;
+}
+
+.legend-swatch.legend-round {
+    border-radius: 50%;
 }
 
