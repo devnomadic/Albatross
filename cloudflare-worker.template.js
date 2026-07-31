@@ -214,19 +214,24 @@ Focus on actionable insights based on the abuse score, report count, network inf
     console.log('AI response received:', response);
 
     // Parse the AI response
+    // Different model families use different response shapes:
+    // - Llama-style models return { response: "<text>" }
+    // - OpenAI-compatible models (e.g. gpt-oss-*) return { choices: [{ message: { content: "<text>" } }] }
+    const aiText = response?.response ?? response?.choices?.[0]?.message?.content ?? null;
+
     let analysis = null;
-    if (response && response.response) {
+    if (aiText) {
       try {
-        // The response.response contains the AI's text output
-        const aiText = response.response.trim();
+        // The extracted text contains the AI's raw output
+        const trimmedText = aiText.trim();
         
         // Try to extract JSON from the response (handle cases where AI might add extra text)
-        let jsonText = aiText;
-        if (aiText.includes('{')) {
-          const startIdx = aiText.indexOf('{');
-          const endIdx = aiText.lastIndexOf('}');
+        let jsonText = trimmedText;
+        if (trimmedText.includes('{')) {
+          const startIdx = trimmedText.indexOf('{');
+          const endIdx = trimmedText.lastIndexOf('}');
           if (startIdx >= 0 && endIdx > startIdx) {
-            jsonText = aiText.substring(startIdx, endIdx + 1);
+            jsonText = trimmedText.substring(startIdx, endIdx + 1);
           }
         }
         
@@ -247,6 +252,20 @@ Focus on actionable insights based on the abuse score, report count, network inf
           recommendations: ['Review the abuse reports for details', 'Consider blocking if risk level is high']
         };
       }
+    } else {
+      console.error('AI response did not contain a recognizable text field for model', model, response);
+      // Fallback to basic analysis if no text output was found
+      const eventsFallback = reports.length > 0 
+        ? `Reported ${totalReports} times for ${[...new Set(reports.flatMap(r => r.categories || []))].slice(0, 3).join(', ')}.`
+        : null;
+      
+      analysis = {
+        riskLevel: abuseScore > 75 ? 'critical' : abuseScore > 50 ? 'high' : abuseScore > 25 ? 'medium' : 'low',
+        trustScore: Math.max(0, 100 - abuseScore),
+        summary: `IP from ${countryCode} with ${abuseScore}% abuse confidence score and ${totalReports} reports.`,
+        eventsSummary: eventsFallback,
+        recommendations: ['Review the abuse reports for details', 'Consider blocking if risk level is high']
+      };
     }
 
     return {
