@@ -23,7 +23,7 @@
     <body>
         <div class="api-header">
             <div class="api-container">
-                <h1 class="api-title">🔍 Albatross API</h1>
+                <h1 class="api-title">🔌 Albatross API</h1>
                 <p class="api-description">Interactive IP Address Analysis & Reputation API</p>
             </div>
         </div>
@@ -117,6 +117,22 @@
 
                     <div class="parameter-group">
                         <div class="parameter-header">
+                            <span class="parameter-name">aimodel</span>
+                            <span class="parameter-optional">OPTIONAL</span>
+                        </div>
+                        <div class="parameter-description">
+                            Override the Cloudflare Workers AI model used for risk analysis. Default: @@cf/openai/gpt-oss-120b.
+                        </div>
+                        <select class="form-select" @bind="aiModel">
+                            <option value="">@@cf/openai/gpt-oss-120b (default)</option>
+                            <option value="@@cf/openai/gpt-oss-20b">@@cf/openai/gpt-oss-20b</option>
+                            <option value="@@cf/meta/llama-3.3-70b-instruct-fp8-fast">@@cf/meta/llama-3.3-70b-instruct-fp8-fast</option>
+                            <option value="@@cf/meta/llama-4-scout-17b-16e-instruct">@@cf/meta/llama-4-scout-17b-16e-instruct</option>
+                        </select>
+                    </div>
+
+                    <div class="parameter-group">
+                        <div class="parameter-header">
                             <span class="parameter-name">API Hostname</span>
                             <span class="parameter-optional">OPTIONAL</span>
                         </div>
@@ -194,9 +210,13 @@
                         <strong style="color: #9cdcfe;">With Cloud Provider Check:</strong>
                         <div class="example-box">GET /api?ipaddress=8.8.8.8&cloudprovider=all</div>
                     </div>
+                    <div style="margin-bottom: 1rem;">
+                        <strong style="color: #9cdcfe;">With AI Model Override:</strong>
+                        <div class="example-box">GET /api?ipaddress=8.8.8.8&aimodel=@@cf/openai/gpt-oss-20b</div>
+                    </div>
                     <div style="margin-bottom: 1.5rem;">
                         <strong style="color: #9cdcfe;">Full Parameters:</strong>
-                        <div class="example-box">GET /api?ipaddress=1.1.1.1&cloudprovider=azure&maxageindays=30&verbose=true&enableai=true</div>
+                        <div class="example-box">GET /api?ipaddress=1.1.1.1&cloudprovider=azure&maxageindays=30&verbose=true&enableai=true&aimodel=@@cf/openai/gpt-oss-120b</div>
                     </div>
                     <div style="padding-top: 1rem; border-top: 1px solid #3e3e42;">
                         <strong style="color: #9cdcfe;">📄 OpenAPI Specification:</strong>
@@ -260,6 +280,7 @@ else
     private int maxAgeInDays = 30;
     private string verbose = "true";
     private string enableAi = "true";
+    private string aiModel = "";
     private string apiHostname = "current";
     
     private bool isInteractiveMode = false;
@@ -320,6 +341,9 @@ else
             baseUri = $"https://{apiHostname}";
         }
         
+        // Enforce AbuseIPDB's supported maxAgeInDays range of 1-365
+        maxAgeInDays = Math.Clamp(maxAgeInDays, 1, 365);
+
         var queryParams = new List<string> { $"ipaddress={Uri.EscapeDataString(ipAddress)}" };
         
         if (!string.IsNullOrEmpty(cloudProvider))
@@ -333,6 +357,9 @@ else
         
         if (enableAi.ToLower() != "true")
             queryParams.Add($"enableai={enableAi.ToLower()}");
+        
+        if (!string.IsNullOrEmpty(aiModel))
+            queryParams.Add($"aimodel={Uri.EscapeDataString(aiModel)}");
         
         requestUrl = $"{baseUri}/api?{string.Join("&", queryParams)}";
 
@@ -363,7 +390,7 @@ else
             else
             {
                 // Use the service which goes through the default worker
-                reputationResults = await AbuseIPDBService.CheckIPAsync(actualIpAddress, maxAgeInDays, verboseBool, enableAiBool, cloudProviderValue);
+                reputationResults = await AbuseIPDBService.CheckIPAsync(actualIpAddress, maxAgeInDays, verboseBool, enableAiBool, cloudProviderValue, string.IsNullOrEmpty(aiModel) ? null : aiModel);
             }
 
             jsonOutput = BuildSuccessResponse(actualIpAddress, reputationResults, requestId, startTime);
@@ -401,6 +428,7 @@ else
             var verboseStr = query["verbose"] ?? "true";
             var enableAiStr = query["enableai"] ?? "true";
             var cloudProviderValue = query["cloudprovider"];
+            var aiModelValue = query["aimodel"];
             
             if (string.IsNullOrEmpty(queryIpAddress))
             {
@@ -412,6 +440,8 @@ else
             {
                 maxAge = 30;
             }
+            // Enforce AbuseIPDB's supported maxAgeInDays range of 1-365
+            maxAge = Math.Clamp(maxAge, 1, 365);
             bool verboseBool = verboseStr.ToLower() == "true";
             bool enableAiBool = enableAiStr.ToLower() == "true";
             
@@ -423,7 +453,7 @@ else
             
             string actualIpAddress = queryIpAddress.Contains(';') ? queryIpAddress.Split(';', 2)[0].Trim() : queryIpAddress.Trim();
             
-            var reputationResults = await AbuseIPDBService.CheckIPAsync(actualIpAddress, maxAge, verboseBool, enableAiBool, cloudProviderValue);
+            var reputationResults = await AbuseIPDBService.CheckIPAsync(actualIpAddress, maxAge, verboseBool, enableAiBool, cloudProviderValue, string.IsNullOrEmpty(aiModelValue) ? null : aiModelValue);
             
             jsonOutput = BuildSuccessResponse(actualIpAddress, reputationResults, requestId, startTime);
         }

@@ -435,8 +435,9 @@ namespace Albatross.Services
         /// <param name="verbose">Whether to include detailed report information</param>
         /// <param name="enableAI">Whether to enable AI reputation analysis (default true)</param>
         /// <param name="cloudProvider">Optional cloud provider to search: aws, azure, gcp, oracle, or all</param>
+        /// <param name="aiModel">Optional Workers AI model override (e.g., "@cf/openai/gpt-oss-120b"). Defaults to the worker's configured model when omitted</param>
         /// <returns>Complete AbuseIPDB information for the specified IP address</returns>
-        public async Task<AbuseIPDBApiResponse> CheckIPAsync(string ipAddress, int maxAgeInDays = 30, bool verbose = true, bool enableAI = true, string? cloudProvider = null)
+        public async Task<AbuseIPDBApiResponse> CheckIPAsync(string ipAddress, int maxAgeInDays = 30, bool verbose = true, bool enableAI = true, string? cloudProvider = null, string? aiModel = null)
         {
             // Parse the input to extract IP address and optionally maxAgeInDays
             string actualIpAddress;
@@ -462,6 +463,9 @@ namespace Albatross.Services
                 actualIpAddress = ipAddress.Trim();
             }
 
+            // Enforce AbuseIPDB's supported maxAgeInDays range of 1-365
+            actualMaxAgeInDays = Math.Clamp(actualMaxAgeInDays, 1, 365);
+
             Console.WriteLine($"Processing IP: {actualIpAddress}, MaxAge: {actualMaxAgeInDays} days");
 
             try
@@ -477,6 +481,12 @@ namespace Albatross.Services
                 if (!string.IsNullOrEmpty(cloudProvider))
                 {
                     requestUrl += $"&cloudprovider={cloudProvider.ToLower()}";
+                }
+
+                // Add aimodel override parameter if specified
+                if (!string.IsNullOrEmpty(aiModel))
+                {
+                    requestUrl += $"&aimodel={Uri.EscapeDataString(aiModel)}";
                 }
 
                 // Add timestamp

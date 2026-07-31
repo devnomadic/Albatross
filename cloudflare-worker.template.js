@@ -4,7 +4,7 @@
  * This worker provides comprehensive IP analysis by combining multiple data sources:
  * 1. AbuseIPDB API - IP abuse reputation checking
  * 2. Cloudflare Radar API - ASN and network information lookup
- * 3. Cloudflare Workers AI - AI-powered reputation analysis using Llama 3.1 70B
+ * 3. Cloudflare Workers AI - AI-powered reputation analysis (default: gpt-oss-120b, overridable via aimodel param)
  * 
  * Features:
  * - Protects API keys from client exposure
@@ -35,7 +35,7 @@
  *       "summary": "<AI-generated assessment>",
  *       "recommendations": ["<action 1>", "<action 2>"]
  *     },
- *     "model": "@cf/meta/llama-3.1-70b-instruct",
+ *     "model": "@cf/openai/gpt-oss-120b",
  *     "timestamp": "<ISO timestamp>"
  *   },
  *   "workerInfo": { ... metadata ... }
@@ -52,6 +52,15 @@ const ABUSEIPDB_API_URL = "https://api.abuseipdb.com/api/v2/check";
 // Cloudflare Radar API configuration
 const CLOUDFLARE_RADAR_API_URL = "https://api.cloudflare.com/client/v4/radar/entities/asns/ip";
 const CLOUDFLARE_API_TOKEN = "YOUR_CLOUDFLARE_API_TOKEN_WILL_BE_INJECTED_HERE";
+
+// Workers AI model configuration - default model plus allowed overrides via the 'aimodel' query parameter
+const DEFAULT_AI_MODEL = "@cf/openai/gpt-oss-120b";
+const ALLOWED_AI_MODELS = [
+  "@cf/openai/gpt-oss-120b",
+  "@cf/openai/gpt-oss-20b",
+  "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+  "@cf/meta/llama-4-scout-17b-16e-instruct"
+];
 
 // Authentication key - this will be replaced with generated key during build
 // If build constants are available, use them; otherwise fallback to default
@@ -118,9 +127,11 @@ export default {
  * @param {string} ipAddress - The IP address to analyze
  * @param {object} abuseData - AbuseIPDB data for context
  * @param {object} asnData - ASN data for context
+ * @param {string} [aiModel] - Workers AI model identifier to use (defaults to DEFAULT_AI_MODEL)
  * @returns {Promise<object>} AI reputation analysis
  */
-async function generateAIReputation(env, ipAddress, abuseData, asnData) {
+async function generateAIReputation(env, ipAddress, abuseData, asnData, aiModel) {
+  const model = aiModel && ALLOWED_AI_MODELS.includes(aiModel) ? aiModel : DEFAULT_AI_MODEL;
   try {
     // Check if AI binding is available
     if (!env || !env.AI) {
@@ -182,10 +193,10 @@ Provide a JSON response with the following structure:
 
 Focus on actionable insights based on the abuse score, report count, network information, and abuse event patterns. Keep summaries concise and professional.`;
 
-    console.log('Calling Workers AI with Llama 3.1 70B for IP reputation analysis...');
+    console.log('Calling Workers AI with model', model, 'for IP reputation analysis...');
 
-    // Call Cloudflare Workers AI using Llama 3.1 70B Instruct model
-    const response = await env.AI.run('@cf/meta/llama-3.1-70b-instruct', {
+    // Call Cloudflare Workers AI using the selected model
+    const response = await env.AI.run(model, {
       messages: [
         {
           role: 'system',
@@ -242,7 +253,7 @@ Focus on actionable insights based on the abuse score, report count, network inf
       success: true,
       error: null,
       analysis: analysis,
-      model: '@cf/meta/llama-3.1-70b-instruct',
+      model: model,
       timestamp: new Date().toISOString()
     };
 
@@ -412,10 +423,13 @@ async function handleCombinedRequest(request, env) {
   // Get URL parameters (use normalized lowercase URL for parsing)
   const url = new URL(isApiHostname ? request.url.toLowerCase() : normalizedUrl);
   const ipAddress = url.searchParams.get('ipaddress'); // lowercase parameter name
-  const maxAgeInDays = url.searchParams.get('maxageindays') || 30; // lowercase parameter name
+  const rawMaxAgeInDays = parseInt(url.searchParams.get('maxageindays'), 10);
+  // Enforce AbuseIPDB's supported maxAgeInDays range of 1-365 (default 30 when missing/invalid)
+  const maxAgeInDays = Number.isNaN(rawMaxAgeInDays) ? 30 : Math.min(365, Math.max(1, rawMaxAgeInDays));
   const verbose = url.searchParams.get('verbose') === 'true';
   const enableAI = url.searchParams.get('enableai') === 'true'; // AI toggle parameter
   const cloudProvider = url.searchParams.get('cloudprovider') || null; // Cloud provider search: aws, azure, gcp, oracle, all, or none
+  const aiModel = url.searchParams.get('aimodel') || null; // Optional Workers AI model override
 
   // Validate cloudProvider against allowed values if provided
   const allowedCloudProviders = ['none', 'all', 'azure', 'aws', 'gcp', 'oracle'];
@@ -434,9 +448,26 @@ async function handleCombinedRequest(request, env) {
       }
     );
   }
+
+  // Validate aiModel against the allow-list if provided
+  if (aiModel && !ALLOWED_AI_MODELS.includes(aiModel)) {
+    return new Response(
+      JSON.stringify({
+        error: `Invalid parameter: aimodel must be one of ${ALLOWED_AI_MODELS.join(', ')}`,
+        buildInfo: BUILD_INFO
+      }),
+      {
+        status: 400,
+        headers: {
+          'Content-Type': 'application/json',
+          ...corsHeaders(origin)
+        }
+      }
+    );
+  }
   
   // Debug: Log the parsed parameters
-  console.log('Parsed parameters:', { ipAddress, maxAgeInDays, verbose, enableAI, cloudProvider });
+  console.log('Parsed parameters:', { ipAddress, maxAgeInDays, verbose, enableAI, cloudProvider, aiModel });
   
   // Validate required parameters
   if (!ipAddress) {
@@ -547,7 +578,7 @@ async function handleCombinedRequest(request, env) {
     let aiReputation = null;
     if (enableAI) {
       console.log('Generating AI reputation analysis...');
-      aiReputation = await generateAIReputation(env, ipAddress, abuseIPDBData, radarData);
+      aiReputation = await generateAIReputation(env, ipAddress, abuseIPDBData, radarData, aiModel);
       console.log('AI reputation analysis result:', {
         success: aiReputation.success,
         error: aiReputation.error
