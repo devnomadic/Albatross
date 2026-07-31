@@ -287,26 +287,22 @@
             <h3>IP Reputation Results for @(abuseIpResult.Data?.IpAddress ?? ipAddress)</h3>
             @if (!string.IsNullOrEmpty(originCountryCode) || targetCountries.Any())
             {
-                <div class="card mb-3">
-                    <div class="card-header d-flex justify-content-between align-items-center" style="padding: 0.25rem 1rem !important; min-height: 32px !important; height: 32px !important; max-height: 32px !important; box-sizing: border-box !important; overflow: hidden !important;">
-                        <h5 style="margin: 0 !important; padding: 0 !important; font-size: 0.9rem !important; line-height: 1.1 !important; font-weight: 500 !important;">🌍 Threat Map: Origin & Reporter Locations</h5>
+                <div class="world-map-section mb-3 text-center">
+                    <h5 class="world-map-title">🌍 Threat Map: Origin &amp; Reporter Locations</h5>
+                    <div id="abuse-world-map" class="world-map-container mx-auto"></div>
+                    <div class="world-map-legend mt-3">
+                        <span><span class="legend-swatch legend-origin"></span>Reported abuser origin@(string.IsNullOrEmpty(originCountryName) ? "" : $": {originCountryName} ({originCountryCode})")</span>
+                        <span><span class="legend-swatch legend-target"></span>Reporter countries (darker = more reports filed)</span>
                     </div>
-                    <div class="card-body text-start">
-                        <div id="abuse-world-map" class="world-map-container"></div>
-                        <div class="world-map-legend mt-3">
-                            <span><span class="legend-swatch legend-origin"></span>Reported abuser origin@(string.IsNullOrEmpty(originCountryName) ? "" : $": {originCountryName} ({originCountryCode})")</span>
-                            <span><span class="legend-swatch legend-target"></span>Reporter countries (darker = more reports filed)</span>
-                        </div>
-                        @if (targetCountries.Any())
-                        {
-                            <ul class="target-country-list mt-2 mb-0">
-                                @foreach (var t in targetCountries.Take(10))
-                                {
-                                    <li>@t.Name (@t.Code): @t.Count report@(t.Count == 1 ? "" : "s") filed</li>
-                                }
-                            </ul>
-                        }
-                    </div>
+                    @if (targetCountries.Any())
+                    {
+                        <ul class="target-country-list mt-2 mb-0 list-unstyled d-inline-block text-start">
+                            @foreach (var t in targetCountries.Take(10))
+                            {
+                                <li>@t.Name (@t.Code): @t.Count report@(t.Count == 1 ? "" : "s") filed</li>
+                            }
+                        </ul>
+                    }
                 </div>
             }
             <div class="card">            

@@ -1272,20 +1272,37 @@ html body div.card div.card-header .btn {
 }
 
 /* World map threat visualization (abuser origin vs. reporter/target countries) */
+.world-map-section {
+    max-width: 900px;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+.world-map-title {
+    margin: 0 0 0.75rem 0 !important;
+    font-size: 0.95rem !important;
+    font-weight: 500 !important;
+    color: #212529;
+}
+
 .world-map-container {
     height: 420px;
     width: 100%;
+    max-width: 800px;
     background-color: #1e1e1e;
     border-radius: 4px;
+    margin-left: auto;
+    margin-right: auto;
 }
 
 .world-map-legend {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
+    justify-content: center;
     gap: 0.5rem 1.25rem;
     font-size: 0.85rem;
-    color: #d4d4d4;
+    color: #212529;
 }
 
 .legend-swatch {
@@ -1306,7 +1323,7 @@ html body div.card div.card-header .btn {
 }
 
 .target-country-list {
-    color: #d4d4d4;
+    color: #212529;
     font-size: 0.85rem;
 }
 
