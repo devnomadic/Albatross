@@ -284,7 +284,31 @@
     {
         <center>
         <div class="results card-container">
-            <h3>IP Reputation Results for @(abuseIpResult.Data?.IpAddress ?? ipAddress)</h3>        
+            <h3>IP Reputation Results for @(abuseIpResult.Data?.IpAddress ?? ipAddress)</h3>
+            @if (!string.IsNullOrEmpty(originCountryCode) || targetCountries.Any())
+            {
+                <div class="card mb-3">
+                    <div class="card-header d-flex justify-content-between align-items-center" style="padding: 0.25rem 1rem !important; min-height: 32px !important; height: 32px !important; max-height: 32px !important; box-sizing: border-box !important; overflow: hidden !important;">
+                        <h5 style="margin: 0 !important; padding: 0 !important; font-size: 0.9rem !important; line-height: 1.1 !important; font-weight: 500 !important;">🌍 Threat Map: Origin & Reporter Locations</h5>
+                    </div>
+                    <div class="card-body text-start">
+                        <div id="abuse-world-map" class="world-map-container"></div>
+                        <div class="world-map-legend mt-3">
+                            <span><span class="legend-swatch legend-origin"></span>Reported abuser origin@(string.IsNullOrEmpty(originCountryName) ? "" : $": {originCountryName} ({originCountryCode})")</span>
+                            <span><span class="legend-swatch legend-target"></span>Reporter countries (darker = more reports filed)</span>
+                        </div>
+                        @if (targetCountries.Any())
+                        {
+                            <ul class="target-country-list mt-2 mb-0">
+                                @foreach (var t in targetCountries.Take(10))
+                                {
+                                    <li>@t.Name (@t.Code): @t.Count report@(t.Count == 1 ? "" : "s") filed</li>
+                                }
+                            </ul>
+                        }
+                    </div>
+                </div>
+            }
             <div class="card">            
                 <div class="card-header d-flex justify-content-between align-items-center" style="padding: 0.25rem 1rem !important; min-height: 32px !important; height: 32px !important; max-height: 32px !important; box-sizing: border-box !important; overflow: hidden !important;">
                     <h5 style="margin: 0 !important; padding: 0 !important; font-size: 0.9rem !important; line-height: 1.1 !important; font-weight: 500 !important;">AbuseIPDB JSON Response</h5>
@@ -323,6 +347,11 @@
     private bool enableAI = true; // Default to AI enabled
     private string formattedJson = string.Empty;
     private Albatross.Services.AbuseIPDBApiResponse? abuseIpResult;
+    private string? originCountryCode;
+    private string? originCountryName;
+    private List<ReporterCountrySummary> targetCountries = new();
+
+    private sealed record ReporterCountrySummary(string Code, string Name, int Count);
 
     private static string GetPixelShadeClass(int value) => value switch
     {
@@ -462,6 +491,10 @@
         statusMessage = "Checking IP reputation...";
         abuseIpResult = null;
         formattedJson = string.Empty;
+        originCountryCode = null;
+        originCountryName = null;
+        targetCountries = new();
+        await JSRuntime.InvokeVoidAsync("AlbatrossWorldMap.destroy");
         StateHasChanged();
 
         try
@@ -474,6 +507,16 @@
             // Format the JSON for display
             var options = new JsonSerializerOptions { WriteIndented = true };
             formattedJson = JsonSerializer.Serialize(abuseIpResult, options);
+
+            // Build the abuser origin / reporter ("target") country data for the world map
+            originCountryCode = abuseIpResult.Data?.CountryCode;
+            originCountryName = abuseIpResult.Data?.CountryName;
+            targetCountries = (abuseIpResult.Data?.Reports ?? new List<Albatross.Services.AbuseReport>())
+                .Where(r => !string.IsNullOrWhiteSpace(r.ReporterCountryCode))
+                .GroupBy(r => r.ReporterCountryCode!.ToUpperInvariant())
+                .Select(g => new ReporterCountrySummary(g.Key, g.FirstOrDefault(r => !string.IsNullOrWhiteSpace(r.ReporterCountryName))?.ReporterCountryName ?? g.Key, g.Count()))
+                .OrderByDescending(t => t.Count)
+                .ToList();
             
             // Log the JSON to browser console
             await JSRuntime.InvokeVoidAsync("console.log", "Response JSON: " + formattedJson);
@@ -492,6 +535,7 @@
             // Apply syntax highlighting after the component has rendered
             await Task.Delay(50); // Small delay to ensure rendering completes
             await ApplyJsonHighlighting();
+            await RenderWorldMapAsync();
         }
         catch (Exception ex)
         {
@@ -501,7 +545,25 @@
         }        finally
         {
             isCheckingAbuse = false;
-        }}    private async Task ValidateAndSearch()
+        }}
+
+    private async Task RenderWorldMapAsync()
+    {
+        if (string.IsNullOrEmpty(originCountryCode) && targetCountries.Count == 0)
+        {
+            return;
+        }
+
+        try
+        {
+            var targetsForJs = targetCountries.Select(t => new { code = t.Code, name = t.Name, count = t.Count });
+            await JSRuntime.InvokeVoidAsync("AlbatrossWorldMap.render", "abuse-world-map", originCountryCode, originCountryName, targetsForJs);
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("console.error", "Error rendering world map: " + ex.Message);
+        }
+    }    private async Task ValidateAndSearch()
     {
         azureMatchedServices = null;
         awsMatchedServices = null;

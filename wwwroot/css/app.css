@@ -1271,3 +1271,46 @@ html body div.card div.card-header .btn {
     }
 }
 
+/* World map threat visualization (abuser origin vs. reporter/target countries) */
+.world-map-container {
+    height: 420px;
+    width: 100%;
+    background-color: #1e1e1e;
+    border-radius: 4px;
+}
+
+.world-map-legend {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem 1.25rem;
+    font-size: 0.85rem;
+    color: #d4d4d4;
+}
+
+.legend-swatch {
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    border-radius: 3px;
+    margin-right: 0.35rem;
+    vertical-align: middle;
+}
+
+.legend-swatch.legend-origin {
+    background-color: #e53935;
+}
+
+.legend-swatch.legend-target {
+    background: linear-gradient(90deg, #add8ff, #0d47a1);
+}
+
+.target-country-list {
+    color: #d4d4d4;
+    font-size: 0.85rem;
+}
+
+.target-country-list li {
+    padding: 0.15rem 0;
+}
+
