@@ -14,7 +14,7 @@ NC='\033[0m' # No Color
 
 # Configuration
 DOTNET_VERSION="8.0"
-NODE_VERSION="18"
+NODE_VERSION="22"
 
 echo -e "${BLUE}🚀 Albatross Local Deployment Helper${NC}"
 echo "=============================================="
@@ -54,10 +54,10 @@ fi
 
 if command_exists node; then
     NODE_VER=$(node --version | cut -c2- | cut -d. -f1)
-    if [[ "$NODE_VER" -ge "18" ]]; then
+    if [[ "$NODE_VER" -ge "$NODE_VERSION" ]]; then
         print_status "Node.js $NODE_VER is installed"
     else
-        print_warning "Node.js version is $NODE_VER, but 18+ is recommended"
+        print_warning "Node.js version is $NODE_VER, but ${NODE_VERSION}+ is required for Wrangler"
     fi
 else
     print_warning "Node.js is not installed. Install it for worker deployment"

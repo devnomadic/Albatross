@@ -94,7 +94,7 @@ If prerendering is working, you'll see the full app structure in the HTML source
 
 ### Prerequisites
 - .NET 8.0 SDK
-- Node.js 20.0.0 or higher (required for Cloudflare Wrangler 4)
+- Node.js 22.0.0 or higher (required for current Cloudflare Wrangler releases)
 - PowerShell (cross-platform)
 - AbuseIPDB API key
 - Cloudflare Workers account (for deployment)
