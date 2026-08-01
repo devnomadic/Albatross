@@ -343,41 +343,6 @@ function detectIpIntelligence(abuseData) {
   };
 }
 
-/**
- * Derive best-effort IP device/service type flags from AbuseIPDB data.
- * These are heuristics based on AbuseIPDB's usageType classification and
- * report categories - they are not authoritative real-time lookups.
- *
- * Notes on scope:
- * - is_tor is always false (a placeholder). Genuine Tor exit-node detection
- *   requires a live external exit-node list, which is not yet integrated.
- * - No C2 (command & control) flag is provided; that requires a real
- *   threat-intel feed (e.g. abuse.ch ThreatFox, AlienVault OTX) which this
- *   worker does not currently have access to.
- *
- * @param {object} abuseData - Parsed AbuseIPDB API response
- * @returns {object} Flags object: { is_mobile, is_vpn, is_tor, is_proxy, is_datacenter }
- */
-function detectIpIntelligence(abuseData) {
-  const usageType = (abuseData?.data?.usageType || '').toLowerCase();
-  const reports = abuseData?.data?.reports || [];
-  const categories = new Set(reports.flatMap(r => r.categories || []));
-
-  // AbuseIPDB category 13 = "VPN IP", category 9 = "Open Proxy"
-  const is_vpn = categories.has(13) || usageType.includes('vpn');
-  const is_proxy = categories.has(9) || usageType.includes('proxy');
-  const is_datacenter = /data center|datacenter|hosting|colocation/.test(usageType);
-  const is_mobile = usageType.includes('mobile');
-
-  return {
-    is_mobile,
-    is_vpn,
-    is_tor: false, // Placeholder - requires a live Tor exit-node list to detect accurately
-    is_proxy,
-    is_datacenter
-  };
-}
-
 async function handleCombinedRequest(request, env) {
 
   // Get the request origin
