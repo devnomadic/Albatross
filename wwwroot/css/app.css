@@ -368,6 +368,94 @@ pre {
     overflow-wrap: break-word;
 }
 
+/* Collapsible JSON tree viewer (IDE-style expand/shrink per node) */
+.json-tree-container {
+    font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+    font-size: 14px;
+    line-height: 1.5;
+    text-align: left;
+    box-sizing: border-box;
+    overflow-wrap: break-word;
+}
+
+.json-tree-root,
+.json-tree-children {
+    list-style: none;
+    margin: 0;
+    padding-left: 1.25rem;
+}
+
+.json-tree-root {
+    padding-left: 0;
+}
+
+.json-tree-node {
+    position: relative;
+}
+
+.json-tree-row {
+    cursor: default;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.json-tree-node:has(> .json-tree-children) > .json-tree-row {
+    cursor: pointer;
+}
+
+.json-toggle {
+    display: inline-block;
+    width: 1rem;
+    color: #91d7ff;
+    user-select: none;
+}
+
+.json-toggle-empty {
+    visibility: hidden;
+}
+
+.json-key {
+    color: #91d7ff;
+}
+
+.json-colon {
+    color: #d4d4d4;
+}
+
+.json-bracket {
+    color: #d4d4d4;
+}
+
+.json-string {
+    color: #b5cea8;
+}
+
+.json-number {
+    color: #b5cea8;
+}
+
+.json-boolean,
+.json-null {
+    color: #569cd6;
+}
+
+.json-summary {
+    display: none;
+    color: #808080;
+    font-style: italic;
+    margin: 0 0.35rem;
+}
+
+/* When a node is collapsed: hide its children/closing bracket, show the item-count summary */
+.json-tree-node.json-collapsed > .json-tree-children,
+.json-tree-node.json-collapsed > .json-bracket-close {
+    display: none;
+}
+
+.json-tree-node.json-collapsed > .json-tree-row > .json-summary {
+    display: inline;
+}
+
 /* Base footer icon styling - scaled up and better spacing */
 .footer img {
     width: 40px !important;

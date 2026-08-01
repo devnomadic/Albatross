@@ -10,35 +10,8 @@
 
 <!-- External CSS and JS references -->
 <link rel="stylesheet" href="css/json-formatter.css">
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.7.0/styles/vs2015.min.css">
+<script src="js/json-tree.js"></script>
 <script>
-    // Global flag to track highlight.js availability
-    window.hljsReady = false;
-    
-    // Load highlight.js scripts in proper order
-    (function() {
-        // First load the main highlight.js library
-        var hljs_script = document.createElement('script');
-        hljs_script.src = 'https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.7.0/highlight.min.js';
-        hljs_script.onload = function() {
-            // Then load the JSON language support
-            var json_script = document.createElement('script');
-            json_script.src = 'https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.7.0/languages/json.min.js';
-            json_script.onload = function() {
-                // Finally load our custom JSON highlighting
-                var custom_script = document.createElement('script');
-                custom_script.src = 'js/json-highlight.js';
-                custom_script.onload = function() {
-                    // Mark as ready once everything is loaded
-                    window.hljsReady = true;
-                    console.log('highlight.js and JSON support loaded successfully');
-                };
-                document.head.appendChild(custom_script);
-            };
-            document.head.appendChild(json_script);
-        };
-        document.head.appendChild(hljs_script);    })();
-    
     // Force compact card headers after page load
     window.addEventListener('DOMContentLoaded', function() {
         function forceCompactHeaders() {
@@ -327,7 +300,13 @@
                     <div class="d-flex align-items-center">
                         @if (showJson)
                         {
-                            <button class="btn btn-sm btn-outline-secondary json-toggle-btn" @onclick="ToggleJsonExpand" title="@(jsonExpanded ? "Shrink" : "Expand")">
+                            <button class="btn btn-sm btn-outline-secondary json-toggle-btn" @onclick="CollapseAllJsonNodes" title="Collapse all nodes">
+                                ▶ Collapse All
+                            </button>
+                            <button class="btn btn-sm btn-outline-secondary json-toggle-btn" @onclick="ExpandAllJsonNodes" title="Expand all nodes">
+                                ▼ Expand All
+                            </button>
+                            <button class="btn btn-sm btn-outline-secondary json-toggle-btn" @onclick="ToggleJsonExpand" title="@(jsonExpanded ? "Shrink viewer height" : "Expand viewer height")">
                                 @(jsonExpanded ? "⤡ Shrink" : "⤢ Expand")
                             </button>
                         }
@@ -339,7 +318,7 @@
                 @if (showJson)
                 {
                     <div class="card-body json-container @(jsonExpanded ? "expanded" : "")">                        
-                        <pre class="bg-dark text-light p-3 rounded json-output" id="jsonOutput">@formattedJson</pre>
+                        <div class="bg-dark text-light p-3 rounded json-tree-container" id="jsonTreeOutput"></div>
                     </div>
                 }
             </div>
@@ -507,30 +486,20 @@
     {
         if (!string.IsNullOrEmpty(formattedJson) && showJson)
         {
-            await ApplyJsonHighlighting();
+            await RenderJsonTreeAsync();
         }
     }
-      // Method to apply syntax highlighting to JSON
-    private async Task ApplyJsonHighlighting()
+
+    // Renders the collapsible JSON tree viewer (replaces the flat syntax-highlighted <pre> block)
+    private async Task RenderJsonTreeAsync()
     {
         try
         {
-            // Check if highlight.js is ready before trying to use it
-            bool isReady = await JSRuntime.InvokeAsync<bool>("eval", "window.hljsReady === true");
-            if (isReady)
-            {
-                await JSRuntime.InvokeVoidAsync("highlightJson");
-            }
-            else
-            {
-                // Retry after a short delay if not ready
-                await Task.Delay(100);
-                await ApplyJsonHighlighting();
-            }
+            await JSRuntime.InvokeVoidAsync("renderJsonTree", "jsonTreeOutput", formattedJson);
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Error highlighting JSON: {ex.Message}");
+            Console.WriteLine($"Error rendering JSON tree: {ex.Message}");
         }
     }
 
@@ -549,18 +518,28 @@
     {
         showJson = !showJson;
         
-        // When toggling to show the JSON, apply highlighting after render
+        // When toggling to show the JSON, render the tree after render
         if (showJson && !string.IsNullOrEmpty(formattedJson))
         {
             StateHasChanged();
             await Task.Delay(50); // Small delay to ensure rendering completes
-            await ApplyJsonHighlighting();
+            await RenderJsonTreeAsync();
         }
     }
 
     private void ToggleJsonExpand()
     {
         jsonExpanded = !jsonExpanded;
+    }
+
+    private async Task ExpandAllJsonNodes()
+    {
+        await JSRuntime.InvokeVoidAsync("jsonTreeSetAllCollapsed", "jsonTreeOutput", false);
+    }
+
+    private async Task CollapseAllJsonNodes()
+    {
+        await JSRuntime.InvokeVoidAsync("jsonTreeSetAllCollapsed", "jsonTreeOutput", true);
     }
 
     private async Task ValidateAndSearchAsync()
@@ -625,9 +604,9 @@
             // Force UI update
             StateHasChanged();
             
-            // Apply syntax highlighting after the component has rendered
+            // Render the collapsible JSON tree after the component has rendered
             await Task.Delay(50); // Small delay to ensure rendering completes
-            await ApplyJsonHighlighting();
+            await RenderJsonTreeAsync();
             await RenderWorldMapAsync();
         }
         catch (Exception ex)
