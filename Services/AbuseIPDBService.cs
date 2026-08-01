@@ -23,6 +23,9 @@ namespace Albatross.Services
         [JsonPropertyName("data")]
         public AbuseIPDBData? Data { get; set; }
 
+        [JsonPropertyName("ipIntelligence")]
+        public IpIntelligence? IpIntelligence { get; set; }
+
         [JsonPropertyName("asnInfo")]
         public AsnInfo? AsnInfo { get; set; }
 
@@ -34,6 +37,29 @@ namespace Albatross.Services
 
         [JsonPropertyName("workerInfo")]
         public WorkerInfo? WorkerInfo { get; set; }
+    }
+
+    /// <summary>
+    /// Best-effort IP device/service type flags derived from AbuseIPDB data.
+    /// Heuristic only - not an authoritative real-time lookup (e.g. is_tor is always
+    /// false pending a live Tor exit-node list integration).
+    /// </summary>
+    public class IpIntelligence
+    {
+        [JsonPropertyName("is_mobile")]
+        public bool IsMobile { get; set; }
+
+        [JsonPropertyName("is_vpn")]
+        public bool IsVpn { get; set; }
+
+        [JsonPropertyName("is_tor")]
+        public bool IsTor { get; set; }
+
+        [JsonPropertyName("is_proxy")]
+        public bool IsProxy { get; set; }
+
+        [JsonPropertyName("is_datacenter")]
+        public bool IsDatacenter { get; set; }
     }
 
     /// <summary>
@@ -74,8 +100,39 @@ namespace Albatross.Services
         [JsonPropertyName("eventsSummary")]
         public string? EventsSummary { get; set; }
 
+        [JsonPropertyName("asnReputation")]
+        public string? AsnReputation { get; set; }
+
+        [JsonPropertyName("intelligenceGuess")]
+        public IntelligenceGuess? IntelligenceGuess { get; set; }
+
         [JsonPropertyName("recommendations")]
         public List<string>? Recommendations { get; set; }
+    }
+
+    /// <summary>
+    /// AI-refined device/service type guess, informed by the heuristic IpIntelligence
+    /// flags plus the model's knowledge of ASNs/ISPs/hosting/VPN providers.
+    /// </summary>
+    public class IntelligenceGuess
+    {
+        [JsonPropertyName("is_mobile")]
+        public bool IsMobile { get; set; }
+
+        [JsonPropertyName("is_vpn")]
+        public bool IsVpn { get; set; }
+
+        [JsonPropertyName("is_tor")]
+        public bool IsTor { get; set; }
+
+        [JsonPropertyName("is_proxy")]
+        public bool IsProxy { get; set; }
+
+        [JsonPropertyName("is_datacenter")]
+        public bool IsDatacenter { get; set; }
+
+        [JsonPropertyName("notes")]
+        public string? Notes { get; set; }
     }
 
     /// <summary>

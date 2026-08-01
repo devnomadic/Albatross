@@ -336,9 +336,29 @@ code {
     max-width: 95vw;
     width: 95vw;
     overflow-x: auto;
+    overflow-y: auto;
+    max-height: 420px;
     box-sizing: border-box;
     margin: 0 auto;
     display: block;
+    transition: max-height 0.2s ease-in-out;
+    resize: vertical;
+}
+
+.json-container.expanded {
+    max-height: 85vh;
+}
+
+/* Expand/shrink control button next to the Show/Hide JSON toggle */
+.json-toggle-btn {
+    font-size: 0.75rem !important;
+    padding: 0.125rem 0.25rem !important;
+    margin: 0 0 0 0.25rem !important;
+    height: 24px !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    flex-shrink: 0 !important;
 }
 
 /* Ensure pre elements don't break layout */
