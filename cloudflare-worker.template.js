@@ -225,7 +225,7 @@ Focus on actionable insights based on the abuse score, report count, network inf
           content: prompt
         }
       ],
-      max_tokens: 500,
+      max_tokens: 900, // Increased to accommodate asnReputation + intelligenceGuess fields without truncating JSON
       temperature: 0.3, // Lower temperature for more consistent, factual responses
     });
 
