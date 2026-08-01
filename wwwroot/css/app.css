@@ -1479,3 +1479,84 @@ html body div.card div.card-header .btn {
     border-radius: 50%;
 }
 
+/* Shared row that places the attack category pie and trust score gauge side by side */
+.analytics-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    justify-content: center;
+    gap: 2rem;
+    max-width: 900px;
+    margin-left: auto;
+    margin-right: auto;
+    margin-bottom: 2rem;
+}
+
+.category-pie-section,
+.trust-gauge-section {
+    margin-bottom: 0; /* spacing now handled by .analytics-row gap */
+}
+
+/* AI trust score gauge (small semi-circular gauge next to the pie chart) */
+.trust-gauge-section {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    max-width: 200px;
+}
+
+.trust-gauge-wrapper {
+    position: relative;
+    width: 140px;
+    height: 72px;
+    overflow: hidden;
+}
+
+.trust-gauge-arc {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 140px;
+    height: 140px;
+    border-radius: 50%;
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.1);
+}
+
+.trust-gauge-arc::after {
+    content: "";
+    position: absolute;
+    top: 22px;
+    left: 22px;
+    width: 96px;
+    height: 96px;
+    border-radius: 50%;
+    background: #ffffff;
+}
+
+.trust-gauge-center {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    text-align: center;
+    color: #212529;
+    line-height: 1;
+}
+
+.trust-gauge-value {
+    font-size: 1.4rem;
+    font-weight: 700;
+}
+
+.trust-gauge-max {
+    font-size: 0.7rem;
+    color: #6c757d;
+}
+
+.trust-gauge-risklabel {
+    margin-top: 0.5rem;
+    font-size: 0.8rem;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+}
+

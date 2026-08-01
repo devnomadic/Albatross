@@ -277,20 +277,41 @@
                         </ul>
                     }
                 </div>
-                @if (attackCategories.Any())
+                @if (attackCategories.Any() || TrustScore.HasValue)
                 {
-                    <div class="category-pie-section mt-3">
-                        <h6 class="world-map-title" style="font-size:0.85rem;">📊 Reported Attack Category Mix</h6>
-                        <div class="category-pie-wrapper">
-                            <div class="category-pie-chart" style="background: conic-gradient(@GetCategoryPieGradient());"></div>
-                            <ul class="category-pie-legend list-unstyled mb-0 text-start">
-                                @{ var totalCategoryReports = attackCategories.Sum(c => c.Count); }
-                                @foreach (var (cat, idx) in attackCategories.Select((c, i) => (c, i)))
+                    <div class="analytics-row mt-3">
+                        @if (attackCategories.Any())
+                        {
+                            <div class="category-pie-section">
+                                <h6 class="world-map-title" style="font-size:0.85rem;">📊 Reported Attack Category Mix</h6>
+                                <div class="category-pie-wrapper">
+                                    <div class="category-pie-chart" style="background: conic-gradient(@GetCategoryPieGradient());"></div>
+                                    <ul class="category-pie-legend list-unstyled mb-0 text-start">
+                                        @{ var totalCategoryReports = attackCategories.Sum(c => c.Count); }
+                                        @foreach (var (cat, idx) in attackCategories.Select((c, i) => (c, i)))
+                                        {
+                                            <li><span class="legend-swatch legend-round" style="background-color:@GetCategoryColor(idx);"></span>@cat.Name: @cat.Count (@((cat.Count * 100.0 / totalCategoryReports).ToString("0.#"))%)</li>
+                                        }
+                                    </ul>
+                                </div>
+                            </div>
+                        }
+                        @if (TrustScore.HasValue)
+                        {
+                            <div class="trust-gauge-section">
+                                <h6 class="world-map-title" style="font-size:0.85rem;">🛡️ AI Trust Score</h6>
+                                <div class="trust-gauge-wrapper">
+                                    <div class="trust-gauge-arc" style="background: @GetTrustGaugeGradient(TrustScore.Value);"></div>
+                                    <div class="trust-gauge-center">
+                                        <span class="trust-gauge-value">@TrustScore</span><span class="trust-gauge-max">/100</span>
+                                    </div>
+                                </div>
+                                @if (!string.IsNullOrEmpty(abuseIpResult?.AIReputation?.Analysis?.RiskLevel))
                                 {
-                                    <li><span class="legend-swatch legend-round" style="background-color:@GetCategoryColor(idx);"></span>@cat.Name: @cat.Count (@((cat.Count * 100.0 / totalCategoryReports).ToString("0.#"))%)</li>
+                                    <div class="trust-gauge-risklabel" style="color:@GetTrustGaugeColor(TrustScore.Value);">@abuseIpResult!.AIReputation!.Analysis!.RiskLevel!.ToUpperInvariant() RISK</div>
                                 }
-                            </ul>
-                        </div>
+                            </div>
+                        }
                     </div>
                 }
             }
@@ -344,6 +365,7 @@
     private bool isCheckingAbuse = false;
     private bool showJson = true; // Default to showing JSON
     private bool jsonExpanded = false; // Default to collapsed (scrollable) JSON view
+    private bool jsonTreeNeedsRender = false; // Set when formattedJson changes or the panel is (re)shown; guards OnAfterRenderAsync so unrelated re-renders (e.g. Expand All/Collapse All clicks) don't rebuild the tree DOM and wipe out collapsed state
     private bool enableAI = true; // Default to AI enabled
     private string formattedJson = string.Empty;
     private Albatross.Services.AbuseIPDBApiResponse? abuseIpResult;
@@ -390,6 +412,26 @@
     };
 
     private static string GetCategoryColor(int index) => CategoryPieColors[index % CategoryPieColors.Length];
+
+    // AI-assessed trust score (0-100, higher is better), when AI analysis is available
+    private int? TrustScore => abuseIpResult?.AIReputation?.Success == true ? abuseIpResult.AIReputation.Analysis?.TrustScore : null;
+
+    private static string GetTrustGaugeColor(int score) => score switch
+    {
+        >= 75 => "#2fb344", // green - low risk
+        >= 50 => "#e2b93b", // amber - medium risk
+        >= 25 => "#fd7e14", // orange - high risk
+        _ => "#dc3545" // red - critical risk
+    };
+
+    private static string GetTrustGaugeGradient(int score)
+    {
+        double clamped = Math.Clamp(score, 0, 100);
+        double angle = clamped / 100.0 * 180.0;
+        string color = GetTrustGaugeColor(score);
+        string angleStr = angle.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
+        return $"conic-gradient(from -90deg, {color} 0deg {angleStr}deg, #3a3f4a {angleStr}deg 180deg, transparent 180deg 360deg)";
+    }
 
     private string GetCategoryPieGradient()
     {
@@ -484,8 +526,9 @@
     // Called after the component has rendered
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (!string.IsNullOrEmpty(formattedJson) && showJson)
+        if (jsonTreeNeedsRender && showJson && !string.IsNullOrEmpty(formattedJson))
         {
+            jsonTreeNeedsRender = false;
             await RenderJsonTreeAsync();
         }
     }
@@ -514,16 +557,14 @@
         statusMessage = enableAI ? "AI analysis enabled" : "AI analysis disabled";
     }
     
-    private async void ToggleJsonDisplay()
+    private void ToggleJsonDisplay()
     {
         showJson = !showJson;
         
-        // When toggling to show the JSON, render the tree after render
+        // The JSON tree container div is recreated each time the panel is shown, so flag a rebuild
         if (showJson && !string.IsNullOrEmpty(formattedJson))
         {
-            StateHasChanged();
-            await Task.Delay(50); // Small delay to ensure rendering completes
-            await RenderJsonTreeAsync();
+            jsonTreeNeedsRender = true;
         }
     }
 
@@ -600,13 +641,10 @@
             }
             
             statusMessage = "IP reputation check completed.";
+            jsonTreeNeedsRender = true;
             
-            // Force UI update
+            // Force UI update; OnAfterRenderAsync will (re)build the JSON tree once the DOM is ready
             StateHasChanged();
-            
-            // Render the collapsible JSON tree after the component has rendered
-            await Task.Delay(50); // Small delay to ensure rendering completes
-            await RenderJsonTreeAsync();
             await RenderWorldMapAsync();
         }
         catch (Exception ex)
@@ -614,6 +652,7 @@
             await JSRuntime.InvokeVoidAsync("console.error", "Error: " + ex.Message);
             statusMessage = $"Error checking IP reputation: {ex.Message}";
             formattedJson = $"Error: {ex.Message}";
+            jsonTreeNeedsRender = true;
         }        finally
         {
             isCheckingAbuse = false;
