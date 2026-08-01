@@ -156,6 +156,9 @@ async function generateAIReputation(env, ipAddress, abuseData, asnData, aiModel)
     const numDistinctUsers = abuseData?.data?.numDistinctUsers || 0;
     const reports = abuseData?.data?.reports || [];
 
+    // Heuristic device/service type flags (used as context for the AI to refine)
+    const heuristicFlags = detectIpIntelligence(abuseData);
+
     // Extract sample abuse event details
     let eventSummary = '';
     if (reports.length > 0) {
@@ -184,16 +187,29 @@ ASN: ${asnNumber} (${asnName})
 Abuse Confidence Score: ${abuseScore}% (0-100 scale, higher is worse)
 Total Abuse Reports: ${totalReports}${eventSummary}
 
+Preliminary automated device/service type flags (heuristic, may be incomplete or wrong):
+mobile=${heuristicFlags.is_mobile}, vpn=${heuristicFlags.is_vpn}, proxy=${heuristicFlags.is_proxy}, datacenter=${heuristicFlags.is_datacenter}
+(No automated signal exists yet for Tor exit-node detection.)
+
 Provide a JSON response with the following structure:
 {
   "riskLevel": "low|medium|high|critical",
   "trustScore": <number 0-100, higher is better>,
   "summary": "<2-3 sentence overall risk assessment>",
   "eventsSummary": "<2-3 sentence summary of abuse event patterns & targeted services or null if no events>",
+  "asnReputation": "<2-3 sentence assessment of the ASN/network operator's reputation, e.g. whether it is a well-known hosting/cloud provider, residential ISP, VPN/proxy network, or an ASN commonly associated with abuse based on the usage type and abuse data, or null if there is insufficient data>",
+  "intelligenceGuess": {
+    "is_mobile": <true|false>,
+    "is_vpn": <true|false>,
+    "is_tor": <true|false>,
+    "is_proxy": <true|false>,
+    "is_datacenter": <true|false>,
+    "notes": "<1 sentence explaining your reasoning, especially where you overrode a preliminary flag, or null if you agree with all preliminary flags>"
+  },
   "recommendations": ["<action 1>", "<action 2>"]
 }
 
-Focus on actionable insights based on the abuse score, report count, network information, and abuse event patterns. Keep summaries concise and professional.`;
+Focus on actionable insights based on the abuse score, report count, network information, ASN reputation, and abuse event patterns. For intelligenceGuess, use your knowledge of well-known ASNs, ISPs, hosting providers, and VPN/proxy services to confirm or correct the preliminary flags, and make your best-effort guess for is_tor since no automated signal exists for it. Keep summaries concise and professional.`;
 
     console.log('Calling Workers AI with model', model, 'for IP reputation analysis...');
 
@@ -251,6 +267,8 @@ Focus on actionable insights based on the abuse score, report count, network inf
           trustScore: Math.max(0, 100 - abuseScore),
           summary: `IP from ${countryCode} with ${abuseScore}% abuse confidence score and ${totalReports} reports.`,
           eventsSummary: eventsFallback,
+          asnReputation: asnName !== 'Unknown' ? `ASN ${asnNumber} (${asnName}), usage type: ${usageType}.` : null,
+          intelligenceGuess: { ...heuristicFlags, notes: 'AI response could not be parsed; showing heuristic-only flags.' },
           recommendations: ['Review the abuse reports for details', 'Consider blocking if risk level is high']
         };
       }
@@ -266,6 +284,8 @@ Focus on actionable insights based on the abuse score, report count, network inf
         trustScore: Math.max(0, 100 - abuseScore),
         summary: `IP from ${countryCode} with ${abuseScore}% abuse confidence score and ${totalReports} reports.`,
         eventsSummary: eventsFallback,
+        asnReputation: asnName !== 'Unknown' ? `ASN ${asnNumber} (${asnName}), usage type: ${usageType}.` : null,
+        intelligenceGuess: { ...heuristicFlags, notes: 'AI analysis unavailable; showing heuristic-only flags.' },
         recommendations: ['Review the abuse reports for details', 'Consider blocking if risk level is high']
       };
     }
@@ -286,6 +306,76 @@ Focus on actionable insights based on the abuse score, report count, network inf
       analysis: null
     };
   }
+}
+
+/**
+ * Derive best-effort IP device/service type flags from AbuseIPDB data.
+ * These are heuristics based on AbuseIPDB's usageType classification and
+ * report categories - they are not authoritative real-time lookups.
+ *
+ * Notes on scope:
+ * - is_tor is always false (a placeholder). Genuine Tor exit-node detection
+ *   requires a live external exit-node list, which is not yet integrated.
+ * - No C2 (command & control) flag is provided; that requires a real
+ *   threat-intel feed (e.g. abuse.ch ThreatFox, AlienVault OTX) which this
+ *   worker does not currently have access to.
+ *
+ * @param {object} abuseData - Parsed AbuseIPDB API response
+ * @returns {object} Flags object: { is_mobile, is_vpn, is_tor, is_proxy, is_datacenter }
+ */
+function detectIpIntelligence(abuseData) {
+  const usageType = (abuseData?.data?.usageType || '').toLowerCase();
+  const reports = abuseData?.data?.reports || [];
+  const categories = new Set(reports.flatMap(r => r.categories || []));
+
+  // AbuseIPDB category 13 = "VPN IP", category 9 = "Open Proxy"
+  const is_vpn = categories.has(13) || usageType.includes('vpn');
+  const is_proxy = categories.has(9) || usageType.includes('proxy');
+  const is_datacenter = /data center|datacenter|hosting|colocation/.test(usageType);
+  const is_mobile = usageType.includes('mobile');
+
+  return {
+    is_mobile,
+    is_vpn,
+    is_tor: false, // Placeholder - requires a live Tor exit-node list to detect accurately
+    is_proxy,
+    is_datacenter
+  };
+}
+
+/**
+ * Derive best-effort IP device/service type flags from AbuseIPDB data.
+ * These are heuristics based on AbuseIPDB's usageType classification and
+ * report categories - they are not authoritative real-time lookups.
+ *
+ * Notes on scope:
+ * - is_tor is always false (a placeholder). Genuine Tor exit-node detection
+ *   requires a live external exit-node list, which is not yet integrated.
+ * - No C2 (command & control) flag is provided; that requires a real
+ *   threat-intel feed (e.g. abuse.ch ThreatFox, AlienVault OTX) which this
+ *   worker does not currently have access to.
+ *
+ * @param {object} abuseData - Parsed AbuseIPDB API response
+ * @returns {object} Flags object: { is_mobile, is_vpn, is_tor, is_proxy, is_datacenter }
+ */
+function detectIpIntelligence(abuseData) {
+  const usageType = (abuseData?.data?.usageType || '').toLowerCase();
+  const reports = abuseData?.data?.reports || [];
+  const categories = new Set(reports.flatMap(r => r.categories || []));
+
+  // AbuseIPDB category 13 = "VPN IP", category 9 = "Open Proxy"
+  const is_vpn = categories.has(13) || usageType.includes('vpn');
+  const is_proxy = categories.has(9) || usageType.includes('proxy');
+  const is_datacenter = /data center|datacenter|hosting|colocation/.test(usageType);
+  const is_mobile = usageType.includes('mobile');
+
+  return {
+    is_mobile,
+    is_vpn,
+    is_tor: false, // Placeholder - requires a live Tor exit-node list to detect accurately
+    is_proxy,
+    is_datacenter
+  };
 }
 
 async function handleCombinedRequest(request, env) {
@@ -621,6 +711,9 @@ async function handleCombinedRequest(request, env) {
       
       // AbuseIPDB data (maintain original structure for compatibility)
       data: abuseIPDBData?.data || null,
+      
+      // Best-effort IP device/service type detection (heuristic, derived from AbuseIPDB data)
+      ipIntelligence: detectIpIntelligence(abuseIPDBData),
       
       // Add Cloudflare Radar ASN information
       asnInfo: {
