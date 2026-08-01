@@ -59,7 +59,9 @@ const ALLOWED_AI_MODELS = [
   "@cf/openai/gpt-oss-120b",
   "@cf/openai/gpt-oss-20b",
   "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
-  "@cf/meta/llama-4-scout-17b-16e-instruct"
+  "@cf/meta/llama-4-scout-17b-16e-instruct",
+  "@cf/moonshotai/kimi-k2.6",
+  "@cf/deepseek-ai/deepseek-r1-distill-qwen-32b"
 ];
 
 // Authentication key - this will be replaced with generated key during build
