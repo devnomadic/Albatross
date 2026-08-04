@@ -189,7 +189,7 @@ Total Abuse Reports: ${totalReports}${eventSummary}
 
 Preliminary automated device/service type flags (heuristic, may be incomplete or wrong):
 mobile=${heuristicFlags.is_mobile}, vpn=${heuristicFlags.is_vpn}, tor=${heuristicFlags.is_tor}, proxy=${heuristicFlags.is_proxy}, datacenter=${heuristicFlags.is_datacenter}, botnet/C2=${heuristicFlags.is_botnet}
-(is_tor is based only on reverse-DNS hostname patterns and will miss exit nodes with generic hostnames.)
+(is_tor is a direct regex match against this IP's own reverse-DNS hostname(s): ${JSON.stringify(abuseData?.data?.hostnames || [])}. A "true" here is high-confidence - only treat it as a false positive if the hostname clearly does not refer to Tor. It can still be a false negative for exit nodes with generic hostnames.)
 
 Provide a JSON response with the following structure:
 {
@@ -210,7 +210,7 @@ Provide a JSON response with the following structure:
   "recommendations": ["<action 1>", "<action 2>"]
 }
 
-Focus on actionable insights based on the abuse score, report count, network information, ASN reputation, and abuse event patterns. For intelligenceGuess, use your knowledge of well-known ASNs, ISPs, hosting providers, and VPN/proxy/Tor exit-node ranges to confirm or correct the preliminary flags (the is_tor flag only checked hostname patterns, so it may be a false negative), and refine is_botnet based on whether the abuse events/comments genuinely indicate compromised-host or bot-driven (as opposed to a single manual attacker) behavior. Keep summaries concise and professional.`;
+Focus on actionable insights based on the abuse score, report count, network information, ASN reputation, and abuse event patterns. For intelligenceGuess, use your knowledge of well-known ASNs, ISPs, hosting providers, and VPN/proxy/Tor exit-node ranges to confirm or correct the preliminary flags. Do not flip a preliminary is_tor=true to false unless the listed hostname(s) clearly do not indicate Tor - it is a direct hostname regex match and is rarely wrong in that direction; only its false-negative rate is high (exit nodes with generic hostnames won't be flagged). Refine is_botnet based on whether the abuse events/comments genuinely indicate compromised-host or bot-driven (as opposed to a single manual attacker) behavior. Keep summaries concise and professional.`;
 
     console.log('Calling Workers AI with model', model, 'for IP reputation analysis...');
 
