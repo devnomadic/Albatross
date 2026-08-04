@@ -188,8 +188,8 @@ Abuse Confidence Score: ${abuseScore}% (0-100 scale, higher is worse)
 Total Abuse Reports: ${totalReports}${eventSummary}
 
 Preliminary automated device/service type flags (heuristic, may be incomplete or wrong):
-mobile=${heuristicFlags.is_mobile}, vpn=${heuristicFlags.is_vpn}, proxy=${heuristicFlags.is_proxy}, datacenter=${heuristicFlags.is_datacenter}
-(No automated signal exists yet for Tor exit-node detection.)
+mobile=${heuristicFlags.is_mobile}, vpn=${heuristicFlags.is_vpn}, tor=${heuristicFlags.is_tor}, proxy=${heuristicFlags.is_proxy}, datacenter=${heuristicFlags.is_datacenter}, botnet/C2=${heuristicFlags.is_botnet}
+(is_tor is based only on reverse-DNS hostname patterns and will miss exit nodes with generic hostnames.)
 
 Provide a JSON response with the following structure:
 {
@@ -204,12 +204,13 @@ Provide a JSON response with the following structure:
     "is_tor": <true|false>,
     "is_proxy": <true|false>,
     "is_datacenter": <true|false>,
+    "is_botnet": <true|false>,
     "notes": "<1 sentence explaining your reasoning, especially where you overrode a preliminary flag, or null if you agree with all preliminary flags>"
   },
   "recommendations": ["<action 1>", "<action 2>"]
 }
 
-Focus on actionable insights based on the abuse score, report count, network information, ASN reputation, and abuse event patterns. For intelligenceGuess, use your knowledge of well-known ASNs, ISPs, hosting providers, and VPN/proxy services to confirm or correct the preliminary flags, and make your best-effort guess for is_tor since no automated signal exists for it. Keep summaries concise and professional.`;
+Focus on actionable insights based on the abuse score, report count, network information, ASN reputation, and abuse event patterns. For intelligenceGuess, use your knowledge of well-known ASNs, ISPs, hosting providers, and VPN/proxy/Tor exit-node ranges to confirm or correct the preliminary flags (the is_tor flag only checked hostname patterns, so it may be a false negative), and refine is_botnet based on whether the abuse events/comments genuinely indicate compromised-host or bot-driven (as opposed to a single manual attacker) behavior. Keep summaries concise and professional.`;
 
     console.log('Calling Workers AI with model', model, 'for IP reputation analysis...');
 
@@ -314,32 +315,59 @@ Focus on actionable insights based on the abuse score, report count, network inf
  * report categories - they are not authoritative real-time lookups.
  *
  * Notes on scope:
- * - is_tor is always false (a placeholder). Genuine Tor exit-node detection
- *   requires a live external exit-node list, which is not yet integrated.
- * - No C2 (command & control) flag is provided; that requires a real
- *   threat-intel feed (e.g. abuse.ch ThreatFox, AlienVault OTX) which this
- *   worker does not currently have access to.
+ * - is_tor is a best-effort heuristic based on reverse-DNS hostname patterns
+ *   (e.g. "tor-exit", "torproject") - it will miss Tor exit nodes whose
+ *   hostname doesn't advertise itself as such; no live exit-node list is used.
+ * - is_botnet is a best-effort heuristic (see below) based only on AbuseIPDB
+ *   report categories/comments - it is not a real threat-intel feed lookup
+ *   (e.g. abuse.ch ThreatFox, AlienVault OTX), so it can miss active C2 hosts
+ *   that haven't yet been reported to AbuseIPDB, or over-flag noisy scanners.
  *
  * @param {object} abuseData - Parsed AbuseIPDB API response
- * @returns {object} Flags object: { is_mobile, is_vpn, is_tor, is_proxy, is_datacenter }
+ * @returns {object} Flags object: { is_mobile, is_vpn, is_tor, is_proxy, is_datacenter, is_botnet }
  */
 function detectIpIntelligence(abuseData) {
   const usageType = (abuseData?.data?.usageType || '').toLowerCase();
   const reports = abuseData?.data?.reports || [];
   const categories = new Set(reports.flatMap(r => r.categories || []));
+  const comments = reports.map(r => r.comment || '');
+  const numDistinctUsers = abuseData?.data?.numDistinctUsers || 0;
+  const hostnames = (abuseData?.data?.hostnames || []).join(' ').toLowerCase();
 
   // AbuseIPDB category 13 = "VPN IP", category 9 = "Open Proxy"
   const is_vpn = categories.has(13) || usageType.includes('vpn');
   const is_proxy = categories.has(9) || usageType.includes('proxy');
   const is_datacenter = /data center|datacenter|hosting|colocation/.test(usageType);
   const is_mobile = usageType.includes('mobile');
+  const TOR_HOSTNAME_REGEX = /tor-?exit|tor-?relay|torservers|torproject|\btor\b/i;
+  const is_tor = TOR_HOSTNAME_REGEX.test(hostnames);
+
+  // Botnet / C2 heuristic, based only on AbuseIPDB categories, comments & report volume:
+  // - Category 20 = "Exploited Host" is AbuseIPDB's own signal that the host is known compromised
+  // - Categories 4 (DDoS Attack), 14 (Port Scan), 18 (Brute-Force), 22 (SSH), 23 (IoT Targeted) are
+  //   typical of scripted/automated attack tooling; 3+ of these together suggests bot-driven traffic
+  //   rather than a single manual actor
+  // - Report comments mentioning known botnet/malware/C2 terminology are a direct signal
+  // - Volume: a high number of distinct reporters (numDistinctUsers) indicates broad, indiscriminate
+  //   scanning/attack activity typical of a bot rather than one attacker targeting a specific victim.
+  //   When combined with 2+ automated-attack categories, this lowers the bar from 3+ categories alone,
+  //   since widespread reporting adds independent corroborating evidence of automated behavior.
+  const hasExploitedHostCategory = categories.has(20);
+  const AUTOMATED_ATTACK_CATEGORIES = [4, 14, 18, 22, 23];
+  const automatedAttackCategoryCount = AUTOMATED_ATTACK_CATEGORIES.filter(c => categories.has(c)).length;
+  const BOTNET_KEYWORD_REGEX = /\b(botnet|mirai|zombie|c2|c&c|command[- ]and[- ]control|malware|trojan)\b/i;
+  const hasBotnetKeyword = comments.some(c => BOTNET_KEYWORD_REGEX.test(c));
+  const HIGH_VOLUME_DISTINCT_USERS_THRESHOLD = 5;
+  const hasHighVolumeWithAttackPattern = automatedAttackCategoryCount >= 2 && numDistinctUsers >= HIGH_VOLUME_DISTINCT_USERS_THRESHOLD;
+  const is_botnet = hasExploitedHostCategory || hasBotnetKeyword || automatedAttackCategoryCount >= 3 || hasHighVolumeWithAttackPattern;
 
   return {
     is_mobile,
     is_vpn,
-    is_tor: false, // Placeholder - requires a live Tor exit-node list to detect accurately
+    is_tor,
     is_proxy,
-    is_datacenter
+    is_datacenter,
+    is_botnet
   };
 }
 

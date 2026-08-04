@@ -42,7 +42,8 @@ namespace Albatross.Services
     /// <summary>
     /// Best-effort IP device/service type flags derived from AbuseIPDB data.
     /// Heuristic only - not an authoritative real-time lookup (e.g. is_tor is always
-    /// false pending a live Tor exit-node list integration).
+    /// false pending a live Tor exit-node list integration, and is_botnet is based only
+    /// on AbuseIPDB report categories/comments rather than a real threat-intel feed).
     /// </summary>
     public class IpIntelligence
     {
@@ -60,6 +61,9 @@ namespace Albatross.Services
 
         [JsonPropertyName("is_datacenter")]
         public bool IsDatacenter { get; set; }
+
+        [JsonPropertyName("is_botnet")]
+        public bool IsBotnet { get; set; }
     }
 
     /// <summary>
@@ -130,6 +134,9 @@ namespace Albatross.Services
 
         [JsonPropertyName("is_datacenter")]
         public bool IsDatacenter { get; set; }
+
+        [JsonPropertyName("is_botnet")]
+        public bool IsBotnet { get; set; }
 
         [JsonPropertyName("notes")]
         public string? Notes { get; set; }
