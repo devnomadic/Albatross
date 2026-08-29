@@ -7,37 +7,37 @@
   <!-- Main Application Page -->
   <url>
     <loc>https://albatross.devnomadic.com/</loc>
-    <lastmod>2026-08-04</lastmod>
+    <lastmod>2026-08-29</lastmod>
     <changefreq>weekly</changefreq>
     <priority>1.0</priority>
   </url>
   <url>
     <loc>https://albatross.devnomadic.com/ip-manifests/aws.json</loc>
-    <lastmod>2026-08-04</lastmod>
+    <lastmod>2026-08-29</lastmod>
     <changefreq>daily</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://albatross.devnomadic.com/ip-manifests/azure.json</loc>
-    <lastmod>2026-08-04</lastmod>
+    <lastmod>2026-08-29</lastmod>
     <changefreq>daily</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://albatross.devnomadic.com/ip-manifests/gcp.json</loc>
-    <lastmod>2026-08-04</lastmod>
+    <lastmod>2026-08-29</lastmod>
     <changefreq>daily</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://albatross.devnomadic.com/ip-manifests/oracle.json</loc>
-    <lastmod>2026-08-04</lastmod>
+    <lastmod>2026-08-29</lastmod>
     <changefreq>daily</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://albatross.devnomadic.com/robots.txt</loc>
-    <lastmod>2026-08-04</lastmod>
+    <lastmod>2026-08-29</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.3</priority>
   </url>

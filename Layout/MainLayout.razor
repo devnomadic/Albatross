@@ -1,8 +1,13 @@
 ﻿@inherits LayoutComponentBase
 @using System.Reflection
 @using Generated
+@inject IJSRuntime JSRuntime
 
 <div class="page">
+
+    <button type="button" class="theme-toggle-switch" role="switch" aria-checked="@(isDarkTheme ? "true" : "false")" @onclick="ToggleTheme" title="@(isDarkTheme ? "Switch to light theme" : "Switch to dark theme")">
+        <span class="theme-toggle-thumb">@(isDarkTheme ? "🌙" : "☀️")</span>
+    </button>
 
     <!--
     <div class="sidebar">
@@ -54,7 +59,8 @@
 
 @code {
     string BuildInfo = string.Empty;
-    
+    bool isDarkTheme;
+
     protected override void OnInitialized()
     {
         Assembly assembly = typeof(Program).Assembly;
@@ -69,5 +75,21 @@
             : BuildConstants.BuildId;
         
         BuildInfo = $"{title}";
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            var currentTheme = await JSRuntime.InvokeAsync<string>("albatrossTheme.getTheme");
+            isDarkTheme = currentTheme == "dark";
+            StateHasChanged();
+        }
+    }
+
+    async Task ToggleTheme()
+    {
+        isDarkTheme = !isDarkTheme;
+        await JSRuntime.InvokeVoidAsync("albatrossTheme.setTheme", isDarkTheme ? "dark" : "light");
     }
 }

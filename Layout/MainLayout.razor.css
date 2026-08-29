@@ -63,10 +63,10 @@ main {
     left: 0;
     bottom: 0;
     width: 100%;
-    background-color: #f8f9fa;
-    color: black;
+    background-color: var(--alb-footer-bg);
+    color: var(--alb-footer-text);
     padding: 15px;
-    border-top: 1px solid #dee2e6;
+    border-top: 1px solid var(--alb-border);
     margin-top: auto;
     display: flex !important;
     justify-content: space-between;
@@ -106,7 +106,7 @@ main {
 
 .build-number {
     font-size: 0.8rem;
-    color: #666;
+    color: var(--alb-text-muted);
     font-family: monospace;
 }
 
@@ -116,19 +116,19 @@ main {
 
 /* Style the build link */
 .build-number a {
-    color: #666;
+    color: var(--alb-text-muted);
     text-decoration: underline;
     font-size: 0.7rem;
     font-family: monospace;
 }
 
 .build-number a:hover {
-    color: #333;
+    color: var(--alb-text);
     text-decoration: underline;
 }
 
 .build-number a:visited {
-    color: #666;
+    color: var(--alb-text-muted);
 }
 
 .cloud-logos {
@@ -178,19 +178,19 @@ main {
     }
       /* Mobile style for build link */
     .build-number a {
-        color: #666;
+        color: var(--alb-text-muted);
         text-decoration: underline;
         font-size: 0.6rem;
         font-family: monospace;
     }
     
     .build-number a:hover {
-        color: #333;
+        color: var(--alb-text);
         text-decoration: underline;
     }
     
     .build-number a:visited {
-        color: #666;
+        color: var(--alb-text-muted);
     }
     
     .build-value {

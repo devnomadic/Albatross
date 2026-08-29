@@ -1,10 +1,143 @@
+/* Theme variables - light (default) values, overridden under html[data-theme="dark"] */
+:root {
+    --alb-bg: #ffffff;
+    --alb-text: #212529;
+    --alb-text-muted: #6c757d;
+    --alb-border: #dee2e6;
+    --alb-card-bg: #ffffff;
+    --alb-card-header-bg: rgba(0, 0, 0, 0.03);
+    --alb-link: #0071c1;
+    --alb-code: #c02d76;
+    --alb-input-bg: #ffffff;
+    --alb-footer-bg: #f8f9fa;
+    --alb-footer-text: #000000;
+    --alb-service-match-bg: #f8f9fa;
+    --alb-service-match-hover-bg: #e9ecef;
+}
+
+html[data-theme="dark"] {
+    --alb-bg: #14171c;
+    --alb-text: #e6e6e6;
+    --alb-text-muted: #9aa4af;
+    --alb-border: #30363d;
+    --alb-card-bg: #1c2128;
+    --alb-card-header-bg: #22272e;
+    --alb-link: #6cb2ff;
+    --alb-code: #ff7fc0;
+    --alb-input-bg: #1c2128;
+    --alb-footer-bg: #1c2128;
+    --alb-footer-text: #e6e6e6;
+    --alb-service-match-bg: #1c2128;
+    --alb-service-match-hover-bg: #262c34;
+}
+
+/* Dark theme overrides for Bootstrap defaults and custom components */
+html[data-theme="dark"] .card {
+    background-color: var(--alb-card-bg);
+    color: var(--alb-text);
+    border-color: var(--alb-border);
+}
+
+html[data-theme="dark"] .card-header {
+    background-color: var(--alb-card-header-bg);
+    border-color: var(--alb-border);
+    color: var(--alb-text);
+}
+
+html[data-theme="dark"] .form-control,
+html[data-theme="dark"] .ip-input {
+    background-color: var(--alb-input-bg);
+    color: var(--alb-text);
+    border-color: var(--alb-border);
+}
+
+html[data-theme="dark"] .form-control:focus {
+    background-color: var(--alb-input-bg);
+    color: var(--alb-text);
+}
+
+html[data-theme="dark"] .btn-close {
+    filter: invert(1) grayscale(100%) brightness(200%);
+}
+
+html[data-theme="dark"] hr {
+    border-color: var(--alb-border);
+}
+
+html[data-theme="dark"] .service-match {
+    background: var(--alb-service-match-bg);
+    border-color: var(--alb-border);
+}
+
+html[data-theme="dark"] .service-match:hover {
+    background: var(--alb-service-match-hover-bg);
+}
+
+html[data-theme="dark"] .service-match strong {
+    color: var(--alb-text);
+}
+
+html[data-theme="dark"] .world-map-title,
+html[data-theme="dark"] .world-map-legend,
+html[data-theme="dark"] .target-country-list,
+html[data-theme="dark"] .category-pie-legend,
+html[data-theme="dark"] .trust-gauge-center {
+    color: var(--alb-text);
+}
+
+html[data-theme="dark"] .trust-gauge-max {
+    color: var(--alb-text-muted);
+}
+
+html[data-theme="dark"] .trust-gauge-arc::after {
+    background: var(--alb-bg);
+}
+
+/* Header ASCII-art logos are black-on-transparent PNGs; invert so they read as
+   light text instead of a black box (transparency is unaffected by invert).
+   hue-rotate(180deg) cancels out the color shift invert would otherwise cause,
+   so the christmas variant's colored ornaments keep roughly their original hue. */
+html[data-theme="dark"] .header-ascii-logo {
+    filter: invert(1) hue-rotate(180deg);
+}
+
+/* Pixel-art albatross has an opaque white background, so it can't just be inverted
+   (that would give pure black, not the theme's dark bg) - recolor it to match instead. */
+html[data-theme="dark"] .pixel-matrix__grid {
+    background: var(--alb-bg);
+}
+
+html[data-theme="dark"] .pixel-matrix__pixel--empty {
+    background-color: var(--alb-bg);
+}
+
+html[data-theme="dark"] .pixel-matrix__pixel--edge {
+    background-color: #3a3f47;
+}
+
+html[data-theme="dark"] .pixel-matrix__pixel--mid {
+    background-color: #7d8590;
+}
+
+html[data-theme="dark"] .pixel-matrix__pixel--dark {
+    background-color: #c9d1d9;
+}
+
+html[data-theme="dark"] .pixel-matrix__pixel--core {
+    background-color: #f0f3f6;
+}
+
 html, body {
     font-family: 'Quantico', 'Helvetica Neue', Helvetica, Arial, sans-serif;
     height: 100%;
     margin: 0;
     padding: 0;
     overflow-x: hidden; /* Prevent horizontal scroll */
+    background-color: var(--alb-bg);
+    color: var(--alb-text);
+    transition: background-color 0.15s ease-in-out, color 0.15s ease-in-out;
 }
+
 
 #app {
     min-height: 100vh;
@@ -41,7 +174,7 @@ h1:focus {
 }
 
 a, .btn-link {
-    color: #0071c1;
+    color: var(--alb-link);
 }
 
 .btn-primary {
@@ -247,7 +380,46 @@ a, .btn-link {
     }
 
 code {
-    color: #c02d76;
+    color: var(--alb-code);
+}
+
+/* Fixed theme toggle switch, available on every page */
+.theme-toggle-switch {
+    position: fixed;
+    top: 0.75rem;
+    right: 1rem;
+    z-index: 1050;
+    width: 52px;
+    height: 28px;
+    padding: 3px;
+    border: 1px solid var(--alb-border);
+    border-radius: 999px;
+    background-color: var(--alb-card-bg);
+    cursor: pointer;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+    transition: background-color 0.15s ease-in-out;
+}
+
+.theme-toggle-switch:hover {
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
+}
+
+.theme-toggle-thumb {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background-color: var(--alb-bg);
+    font-size: 0.85rem;
+    line-height: 1;
+    transition: transform 0.2s ease-in-out;
+    transform: translateX(0);
+}
+
+.theme-toggle-switch[aria-checked="true"] .theme-toggle-thumb {
+    transform: translateX(24px);
 }
 
 /* Description panel styles */
@@ -306,11 +478,11 @@ code {
     font-family: 'Quantico', monospace;
     font-size: 0.8rem;
     padding: 8px 12px;
-    border: 2px solid #dee2e6;
+    border: 2px solid var(--alb-border);
     border-radius: 4px;
     margin-right: 10px;
     margin-bottom: 20px;
-    transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+    transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out, background-color 0.15s ease-in-out, color 0.15s ease-in-out;
     text-align: center;
 }
 
@@ -321,7 +493,7 @@ code {
 }
 
 .ip-input::placeholder {
-    color: #6c757d;
+    color: var(--alb-text-muted);
     opacity: 1;
     text-align: center;
 }
@@ -1136,8 +1308,8 @@ html body div.card div.card-header .btn {
 }
 
 .service-match {
-    background: #f8f9fa;
-    border: 1px solid #dee2e6;
+    background: var(--alb-service-match-bg);
+    border: 1px solid var(--alb-border);
     border-radius: 0.375rem;
     padding: 12px;
     margin-bottom: 8px;
@@ -1148,7 +1320,7 @@ html body div.card div.card-header .btn {
 }
 
 .service-match:hover {
-    background: #e9ecef;
+    background: var(--alb-service-match-hover-bg);
     border-color: #adb5bd;
     transform: translateY(-1px);
     box-shadow: 0 2px 4px rgba(0,0,0,0.1);
