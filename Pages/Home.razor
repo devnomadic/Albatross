@@ -10,35 +10,8 @@
 
 <!-- External CSS and JS references -->
 <link rel="stylesheet" href="css/json-formatter.css">
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.7.0/styles/vs2015.min.css">
+<script src="js/json-tree.js"></script>
 <script>
-    // Global flag to track highlight.js availability
-    window.hljsReady = false;
-    
-    // Load highlight.js scripts in proper order
-    (function() {
-        // First load the main highlight.js library
-        var hljs_script = document.createElement('script');
-        hljs_script.src = 'https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.7.0/highlight.min.js';
-        hljs_script.onload = function() {
-            // Then load the JSON language support
-            var json_script = document.createElement('script');
-            json_script.src = 'https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.7.0/languages/json.min.js';
-            json_script.onload = function() {
-                // Finally load our custom JSON highlighting
-                var custom_script = document.createElement('script');
-                custom_script.src = 'js/json-highlight.js';
-                custom_script.onload = function() {
-                    // Mark as ready once everything is loaded
-                    window.hljsReady = true;
-                    console.log('highlight.js and JSON support loaded successfully');
-                };
-                document.head.appendChild(custom_script);
-            };
-            document.head.appendChild(json_script);
-        };
-        document.head.appendChild(hljs_script);    })();
-    
     // Force compact card headers after page load
     window.addEventListener('DOMContentLoaded', function() {
         function forceCompactHeaders() {
@@ -111,8 +84,8 @@
     var currentMonth = DateTime.Now.Month;
     var logoPath = currentMonth == 12 ? "/images/ascii-text-art-christmas.png" : "/images/ascii-text-art.png";
 }
-<img src="@logoPath" alt="CloudIPSearch" width="38%" style="padding-bottom: 5px;" border="0"/> <br>
-<img src="/images/ascii-text-art-albatross.png" alt="ascii-text-art-albatross" width="15%" border="0" /> <br><br>
+<img src="@logoPath" alt="CloudIPSearch" width="38%" style="padding-bottom: 5px;" border="0" class="header-ascii-logo"/> <br>
+<img src="/images/ascii-text-art-albatross.png" alt="ascii-text-art-albatross" width="15%" border="0" class="header-ascii-logo" /> <br><br>
 <div class="ascii-art-pixel-matrix" role="img" aria-label="ASCII art pixel matrix">
     <div class="pixel-matrix__grid">
 @foreach (var row in AsciiArtPixelMatrix)
@@ -284,18 +257,92 @@
     {
         <center>
         <div class="results card-container">
-            <h3>IP Reputation Results for @(abuseIpResult.Data?.IpAddress ?? ipAddress)</h3>        
+            <h3>IP Reputation Results for @(abuseIpResult.Data?.IpAddress ?? ipAddress)</h3>
+            @if (showSummary && (!string.IsNullOrEmpty(originCountryCode) || targetCountries.Any()))
+            {
+                <div class="world-map-section mb-3 text-center">
+                    <h5 class="world-map-title">🌍 Threat Map: Origin &amp; Reporter Locations</h5>
+                    <div id="abuse-world-map" class="world-map-container mx-auto"></div>
+                    <div class="world-map-legend mt-3">
+                        <span><span class="legend-swatch legend-origin"></span>Reported abuser origin@(string.IsNullOrEmpty(originCountryName) ? "" : $": {originCountryName} ({originCountryCode})")</span>
+                        <span><span class="legend-swatch legend-target"></span>Reporter countries (darker = more reports filed)</span>
+                    </div>
+                    @if (targetCountries.Any())
+                    {
+                        <ul class="target-country-list mt-2 mb-0 list-unstyled d-inline-block text-start">
+                            @foreach (var t in targetCountries.Take(10))
+                            {
+                                <li>@t.Name (@t.Code): @t.Count report@(t.Count == 1 ? "" : "s") filed</li>
+                            }
+                        </ul>
+                    }
+                </div>
+                @if (attackCategories.Any() || TrustScore.HasValue)
+                {
+                    <div class="analytics-row mt-3">
+                        @if (attackCategories.Any())
+                        {
+                            <div class="category-pie-section">
+                                <h6 class="world-map-title" style="font-size:0.85rem;">📊 Reported Attack Category Mix</h6>
+                                <div class="category-pie-wrapper">
+                                    <div class="category-pie-chart" style="background: conic-gradient(@GetCategoryPieGradient());"></div>
+                                    <ul class="category-pie-legend list-unstyled mb-0 text-start">
+                                        @{ var totalCategoryReports = attackCategories.Sum(c => c.Count); }
+                                        @foreach (var (cat, idx) in attackCategories.Select((c, i) => (c, i)))
+                                        {
+                                            <li><span class="legend-swatch legend-round" style="background-color:@GetCategoryColor(idx);"></span>@cat.Name: @cat.Count (@((cat.Count * 100.0 / totalCategoryReports).ToString("0.#"))%)</li>
+                                        }
+                                    </ul>
+                                </div>
+                            </div>
+                        }
+                        @if (TrustScore.HasValue)
+                        {
+                            <div class="trust-gauge-section">
+                                <h6 class="world-map-title" style="font-size:0.85rem;">🛡️ AI Trust Score</h6>
+                                <div class="trust-gauge-wrapper">
+                                    <div class="trust-gauge-arc" style="background: @GetTrustGaugeGradient(TrustScore.Value);"></div>
+                                    <div class="trust-gauge-center">
+                                        <span class="trust-gauge-value">@TrustScore</span><span class="trust-gauge-max">/100</span>
+                                    </div>
+                                </div>
+                                @if (!string.IsNullOrEmpty(abuseIpResult?.AIReputation?.Analysis?.RiskLevel))
+                                {
+                                    <div class="trust-gauge-risklabel" style="color:@GetTrustGaugeColor(TrustScore.Value);">@abuseIpResult!.AIReputation!.Analysis!.RiskLevel!.ToUpperInvariant() RISK</div>
+                                }
+                            </div>
+                        }
+                    </div>
+                }
+            }
             <div class="card">            
                 <div class="card-header d-flex justify-content-between align-items-center" style="padding: 0.25rem 1rem !important; min-height: 32px !important; height: 32px !important; max-height: 32px !important; box-sizing: border-box !important; overflow: hidden !important;">
                     <h5 style="margin: 0 !important; padding: 0 !important; font-size: 0.9rem !important; line-height: 1.1 !important; font-weight: 500 !important;">AbuseIPDB JSON Response</h5>
-                    <button class="btn btn-sm btn-outline-secondary" @onclick="ToggleJsonDisplay" style="font-size: 0.75rem !important; padding: 0.125rem 0.25rem !important; margin: 0 !important; height: 24px !important; display: flex !important; align-items: center !important; justify-content: center !important; flex-shrink: 0 !important;">
-                        @(showJson ? "Hide JSON" : "Show JSON")
-                    </button>
+                    <div class="d-flex align-items-center">
+                        <button class="btn btn-sm btn-outline-secondary json-toggle-btn" @onclick="ToggleSummaryDisplay" title="@(showSummary ? "Hide the map/analytics summary above" : "Show the map/analytics summary above")">
+                            @(showSummary ? "▲ Hide Summary" : "▼ Show Summary")
+                        </button>
+                        @if (showJson)
+                        {
+                            <button class="btn btn-sm btn-outline-secondary json-toggle-btn" @onclick="CollapseAllJsonNodes" title="Collapse all nodes">
+                                ▶ Collapse All
+                            </button>
+                            <button class="btn btn-sm btn-outline-secondary json-toggle-btn" @onclick="ExpandAllJsonNodes" title="Expand all nodes">
+                                ▼ Expand All
+                            </button>
+                            <button class="btn btn-sm btn-outline-secondary json-toggle-btn" @onclick="ToggleJsonExpand" title="@(jsonExpanded ? "Shrink viewer height" : "Expand viewer height")">
+                                @(jsonExpanded ? "⤡ Shrink" : "⤢ Expand")
+                            </button>
+                        }
+                        <button class="btn btn-sm btn-outline-secondary json-toggle-btn" @onclick="ToggleJsonDisplay">
+                            @(showJson ? "Hide JSON" : "Show JSON")
+                        </button>
+                    </div>
                 </div>
                 @if (showJson)
                 {
-                    <div class="card-body json-container">                        
-                        <pre class="bg-dark text-light p-3 rounded json-output" id="jsonOutput">@formattedJson</pre>
+                    <div class="card-body json-container @(jsonExpanded ? "expanded" : "") @(!showSummary ? "no-summary" : "")">                        
+                        <div class="json-tree-panel p-3 rounded json-tree-container" id="jsonTreeOutput"></div>
                     </div>
                 }
             </div>
@@ -320,9 +367,97 @@
     private bool showDescription = false;
     private bool isCheckingAbuse = false;
     private bool showJson = true; // Default to showing JSON
+    private bool showSummary = true; // Default to showing the map/analytics summary above the JSON card
+    private bool jsonExpanded = false; // Default to collapsed (scrollable) JSON view
+    private bool jsonTreeNeedsRender = false; // Set when formattedJson changes or the panel is (re)shown; guards OnAfterRenderAsync so unrelated re-renders (e.g. Expand All/Collapse All clicks) don't rebuild the tree DOM and wipe out collapsed state
+    private bool worldMapNeedsRender = false; // Set when the summary section is re-shown, since the map's container div is destroyed/recreated by the @if block
     private bool enableAI = true; // Default to AI enabled
     private string formattedJson = string.Empty;
     private Albatross.Services.AbuseIPDBApiResponse? abuseIpResult;
+    private string? originCountryCode;
+    private string? originCountryName;
+    private List<ReporterCountrySummary> targetCountries = new();
+    private List<CategorySummary> attackCategories = new();
+
+    private sealed record ReporterCountrySummary(string Code, string Name, int Count);
+    private sealed record CategorySummary(int Id, string Name, int Count);
+
+    private static readonly Dictionary<int, string> AbuseCategoryNames = new()
+    {
+        [1] = "DNS Compromise",
+        [2] = "DNS Poisoning",
+        [3] = "Fraud Orders",
+        [4] = "DDoS Attack",
+        [5] = "FTP Brute-Force",
+        [6] = "Ping of Death",
+        [7] = "Phishing",
+        [8] = "Fraud VoIP",
+        [9] = "Open Proxy",
+        [10] = "Web Spam",
+        [11] = "Email Spam",
+        [12] = "Blog Spam",
+        [13] = "VPN IP",
+        [14] = "Port Scan",
+        [15] = "Hacking",
+        [16] = "SQL Injection",
+        [17] = "Spoofing",
+        [18] = "Brute-Force",
+        [19] = "Bad Web Bot",
+        [20] = "Exploited Host",
+        [21] = "Web App Attack",
+        [22] = "SSH",
+        [23] = "IoT Targeted"
+    };
+
+    private static readonly string[] CategoryPieColors = new[]
+    {
+        "#e53935", "#1e88e5", "#43a047", "#fdd835", "#8e24aa", "#fb8c00",
+        "#00acc1", "#d81b60", "#3949ab", "#7cb342", "#c0ca33", "#6d4c41",
+        "#546e7a"
+    };
+
+    private static string GetCategoryColor(int index) => CategoryPieColors[index % CategoryPieColors.Length];
+
+    // AI-assessed trust score (0-100, higher is better), when AI analysis is available
+    private int? TrustScore => abuseIpResult?.AIReputation?.Success == true ? abuseIpResult.AIReputation.Analysis?.TrustScore : null;
+
+    private static string GetTrustGaugeColor(int score) => score switch
+    {
+        >= 75 => "#2fb344", // green - low risk
+        >= 50 => "#e2b93b", // amber - medium risk
+        >= 25 => "#fd7e14", // orange - high risk
+        _ => "#dc3545" // red - critical risk
+    };
+
+    private static string GetTrustGaugeGradient(int score)
+    {
+        double clamped = Math.Clamp(score, 0, 100);
+        double angle = clamped / 100.0 * 180.0;
+        string color = GetTrustGaugeColor(score);
+        string angleStr = angle.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
+        return $"conic-gradient(from -90deg, {color} 0deg {angleStr}deg, #3a3f4a {angleStr}deg 180deg, transparent 180deg 360deg)";
+    }
+
+    private string GetCategoryPieGradient()
+    {
+        var total = attackCategories.Sum(c => c.Count);
+        if (total == 0)
+        {
+            return "#3a3f4a 0deg 360deg";
+        }
+
+        var segments = new List<string>();
+        double cumulative = 0;
+        for (int i = 0; i < attackCategories.Count; i++)
+        {
+            double start = cumulative / total * 360;
+            cumulative += attackCategories[i].Count;
+            double end = cumulative / total * 360;
+            segments.Add($"{GetCategoryColor(i)} {start.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)}deg {end.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)}deg");
+        }
+
+        return string.Join(", ", segments);
+    }
 
     private static string GetPixelShadeClass(int value) => value switch
     {
@@ -396,32 +531,29 @@
     // Called after the component has rendered
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (!string.IsNullOrEmpty(formattedJson) && showJson)
+        if (jsonTreeNeedsRender && showJson && !string.IsNullOrEmpty(formattedJson))
         {
-            await ApplyJsonHighlighting();
+            jsonTreeNeedsRender = false;
+            await RenderJsonTreeAsync();
+        }
+
+        if (worldMapNeedsRender && showSummary)
+        {
+            worldMapNeedsRender = false;
+            await RenderWorldMapAsync();
         }
     }
-      // Method to apply syntax highlighting to JSON
-    private async Task ApplyJsonHighlighting()
+
+    // Renders the collapsible JSON tree viewer (replaces the flat syntax-highlighted <pre> block)
+    private async Task RenderJsonTreeAsync()
     {
         try
         {
-            // Check if highlight.js is ready before trying to use it
-            bool isReady = await JSRuntime.InvokeAsync<bool>("eval", "window.hljsReady === true");
-            if (isReady)
-            {
-                await JSRuntime.InvokeVoidAsync("highlightJson");
-            }
-            else
-            {
-                // Retry after a short delay if not ready
-                await Task.Delay(100);
-                await ApplyJsonHighlighting();
-            }
+            await JSRuntime.InvokeVoidAsync("renderJsonTree", "jsonTreeOutput", formattedJson);
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Error highlighting JSON: {ex.Message}");
+            Console.WriteLine($"Error rendering JSON tree: {ex.Message}");
         }
     }
 
@@ -436,17 +568,41 @@
         statusMessage = enableAI ? "AI analysis enabled" : "AI analysis disabled";
     }
     
-    private async void ToggleJsonDisplay()
+    private void ToggleJsonDisplay()
     {
         showJson = !showJson;
         
-        // When toggling to show the JSON, apply highlighting after render
+        // The JSON tree container div is recreated each time the panel is shown, so flag a rebuild
         if (showJson && !string.IsNullOrEmpty(formattedJson))
         {
-            StateHasChanged();
-            await Task.Delay(50); // Small delay to ensure rendering completes
-            await ApplyJsonHighlighting();
+            jsonTreeNeedsRender = true;
         }
+    }
+
+    private void ToggleJsonExpand()
+    {
+        jsonExpanded = !jsonExpanded;
+    }
+
+    private void ToggleSummaryDisplay()
+    {
+        showSummary = !showSummary;
+
+        // The map container div is destroyed when hidden and recreated when shown again, so it needs a fresh render
+        if (showSummary && (!string.IsNullOrEmpty(originCountryCode) || targetCountries.Any()))
+        {
+            worldMapNeedsRender = true;
+        }
+    }
+
+    private async Task ExpandAllJsonNodes()
+    {
+        await JSRuntime.InvokeVoidAsync("jsonTreeSetAllCollapsed", "jsonTreeOutput", false);
+    }
+
+    private async Task CollapseAllJsonNodes()
+    {
+        await JSRuntime.InvokeVoidAsync("jsonTreeSetAllCollapsed", "jsonTreeOutput", true);
     }
 
     private async Task ValidateAndSearchAsync()
@@ -462,6 +618,11 @@
         statusMessage = "Checking IP reputation...";
         abuseIpResult = null;
         formattedJson = string.Empty;
+        originCountryCode = null;
+        originCountryName = null;
+        targetCountries = new();
+        attackCategories = new();
+        await JSRuntime.InvokeVoidAsync("AlbatrossWorldMap.destroy");
         StateHasChanged();
 
         try
@@ -474,6 +635,23 @@
             // Format the JSON for display
             var options = new JsonSerializerOptions { WriteIndented = true };
             formattedJson = JsonSerializer.Serialize(abuseIpResult, options);
+
+            // Build the abuser origin / reporter ("target") country data for the world map
+            originCountryCode = abuseIpResult.Data?.CountryCode;
+            originCountryName = abuseIpResult.Data?.CountryName;
+            targetCountries = (abuseIpResult.Data?.Reports ?? new List<Albatross.Services.AbuseReport>())
+                .Where(r => !string.IsNullOrWhiteSpace(r.ReporterCountryCode))
+                .GroupBy(r => r.ReporterCountryCode!.ToUpperInvariant())
+                .Select(g => new ReporterCountrySummary(g.Key, g.FirstOrDefault(r => !string.IsNullOrWhiteSpace(r.ReporterCountryName))?.ReporterCountryName ?? g.Key, g.Count()))
+                .OrderByDescending(t => t.Count)
+                .ToList();
+
+            attackCategories = (abuseIpResult.Data?.Reports ?? new List<Albatross.Services.AbuseReport>())
+                .SelectMany(r => r.Categories ?? new List<int>())
+                .GroupBy(c => c)
+                .Select(g => new CategorySummary(g.Key, AbuseCategoryNames.TryGetValue(g.Key, out var name) ? name : $"Category {g.Key}", g.Count()))
+                .OrderByDescending(c => c.Count)
+                .ToList();
             
             // Log the JSON to browser console
             await JSRuntime.InvokeVoidAsync("console.log", "Response JSON: " + formattedJson);
@@ -485,23 +663,40 @@
             }
             
             statusMessage = "IP reputation check completed.";
+            jsonTreeNeedsRender = true;
             
-            // Force UI update
+            // Force UI update; OnAfterRenderAsync will (re)build the JSON tree once the DOM is ready
             StateHasChanged();
-            
-            // Apply syntax highlighting after the component has rendered
-            await Task.Delay(50); // Small delay to ensure rendering completes
-            await ApplyJsonHighlighting();
+            await RenderWorldMapAsync();
         }
         catch (Exception ex)
         {
             await JSRuntime.InvokeVoidAsync("console.error", "Error: " + ex.Message);
             statusMessage = $"Error checking IP reputation: {ex.Message}";
             formattedJson = $"Error: {ex.Message}";
+            jsonTreeNeedsRender = true;
         }        finally
         {
             isCheckingAbuse = false;
-        }}    private async Task ValidateAndSearch()
+        }}
+
+    private async Task RenderWorldMapAsync()
+    {
+        if (string.IsNullOrEmpty(originCountryCode) && targetCountries.Count == 0)
+        {
+            return;
+        }
+
+        try
+        {
+            var targetsForJs = targetCountries.Select(t => new { code = t.Code, name = t.Name, count = t.Count });
+            await JSRuntime.InvokeVoidAsync("AlbatrossWorldMap.render", "abuse-world-map", originCountryCode, originCountryName, targetsForJs);
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("console.error", "Error rendering world map: " + ex.Message);
+        }
+    }    private async Task ValidateAndSearch()
     {
         azureMatchedServices = null;
         awsMatchedServices = null;

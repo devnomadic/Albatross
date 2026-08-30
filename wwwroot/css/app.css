@@ -1,10 +1,159 @@
+/* Theme variables - light (default) values, overridden under html[data-theme="dark"] */
+:root {
+    --alb-bg: #ffffff;
+    --alb-text: #212529;
+    --alb-text-muted: #6c757d;
+    --alb-border: #dee2e6;
+    --alb-card-bg: #ffffff;
+    --alb-card-header-bg: rgba(0, 0, 0, 0.03);
+    --alb-link: #0071c1;
+    --alb-code: #c02d76;
+    --alb-input-bg: #ffffff;
+    --alb-footer-bg: #f8f9fa;
+    --alb-footer-text: #000000;
+    --alb-service-match-bg: #f8f9fa;
+    --alb-service-match-hover-bg: #e9ecef;
+    --alb-json-bg: #f6f8fa;
+    --alb-json-text: #24292f;
+    --alb-json-key: #005cc5;
+    --alb-json-string: #032f62;
+    --alb-json-number: #032f62;
+    --alb-json-boolean: #d73a49;
+    --alb-json-punctuation: #57606a;
+    --alb-json-summary: #6e7781;
+}
+
+html[data-theme="dark"] {
+    --alb-bg: #14171c;
+    --alb-text: #e6e6e6;
+    --alb-text-muted: #9aa4af;
+    --alb-border: #30363d;
+    --alb-card-bg: #1c2128;
+    --alb-card-header-bg: #22272e;
+    --alb-link: #6cb2ff;
+    --alb-code: #ff7fc0;
+    --alb-input-bg: #1c2128;
+    --alb-footer-bg: #1c2128;
+    --alb-footer-text: #e6e6e6;
+    --alb-service-match-bg: #1c2128;
+    --alb-service-match-hover-bg: #262c34;
+    --alb-json-bg: #0d1117;
+    --alb-json-text: #e6e6e6;
+    --alb-json-key: #91d7ff;
+    --alb-json-string: #b5cea8;
+    --alb-json-number: #b5cea8;
+    --alb-json-boolean: #569cd6;
+    --alb-json-punctuation: #d4d4d4;
+    --alb-json-summary: #808080;
+}
+
+/* Dark theme overrides for Bootstrap defaults and custom components */
+html[data-theme="dark"] .card {
+    background-color: var(--alb-card-bg);
+    color: var(--alb-text);
+    border-color: var(--alb-border);
+}
+
+html[data-theme="dark"] .card-header {
+    background-color: var(--alb-card-header-bg);
+    border-color: var(--alb-border);
+    color: var(--alb-text);
+}
+
+html[data-theme="dark"] .form-control,
+html[data-theme="dark"] .ip-input {
+    background-color: var(--alb-input-bg);
+    color: var(--alb-text);
+    border-color: var(--alb-border);
+}
+
+html[data-theme="dark"] .form-control:focus {
+    background-color: var(--alb-input-bg);
+    color: var(--alb-text);
+}
+
+html[data-theme="dark"] .btn-close {
+    filter: invert(1) grayscale(100%) brightness(200%);
+}
+
+html[data-theme="dark"] hr {
+    border-color: var(--alb-border);
+}
+
+html[data-theme="dark"] .service-match {
+    background: var(--alb-service-match-bg);
+    border-color: var(--alb-border);
+}
+
+html[data-theme="dark"] .service-match:hover {
+    background: var(--alb-service-match-hover-bg);
+}
+
+html[data-theme="dark"] .service-match strong {
+    color: var(--alb-text);
+}
+
+html[data-theme="dark"] .world-map-title,
+html[data-theme="dark"] .world-map-legend,
+html[data-theme="dark"] .target-country-list,
+html[data-theme="dark"] .category-pie-legend,
+html[data-theme="dark"] .trust-gauge-center {
+    color: var(--alb-text);
+}
+
+html[data-theme="dark"] .trust-gauge-max {
+    color: var(--alb-text-muted);
+}
+
+html[data-theme="dark"] .trust-gauge-arc::after {
+    background: var(--alb-bg);
+}
+
+/* Header ASCII-art logos are black-on-transparent PNGs; invert so they read as
+   light text instead of a black box (transparency is unaffected by invert).
+   hue-rotate(180deg) cancels out the color shift invert would otherwise cause,
+   so the christmas variant's colored ornaments keep roughly their original hue. */
+html[data-theme="dark"] .header-ascii-logo {
+    filter: invert(1) hue-rotate(180deg);
+}
+
+/* Pixel-art albatross has an opaque white background, so it can't just be inverted
+   (that would give pure black, not the theme's dark bg) - recolor it to match instead. */
+html[data-theme="dark"] .pixel-matrix__grid {
+    background: var(--alb-bg);
+}
+
+html[data-theme="dark"] .pixel-matrix__pixel--empty {
+    background-color: var(--alb-bg);
+}
+
+html[data-theme="dark"] .pixel-matrix__pixel--edge {
+    background-color: #3a3f47;
+}
+
+html[data-theme="dark"] .pixel-matrix__pixel--mid {
+    background-color: #7d8590;
+}
+
+html[data-theme="dark"] .pixel-matrix__pixel--dark {
+    background-color: #c9d1d9;
+}
+
+html[data-theme="dark"] .pixel-matrix__pixel--core {
+    background-color: #f0f3f6;
+}
+
 html, body {
     font-family: 'Quantico', 'Helvetica Neue', Helvetica, Arial, sans-serif;
     height: 100%;
     margin: 0;
     padding: 0;
     overflow-x: hidden; /* Prevent horizontal scroll */
+    background-color: var(--alb-bg);
+    color: var(--alb-text);
+    transition: background-color 0.15s ease-in-out, color 0.15s ease-in-out;
 }
+
 
 #app {
     min-height: 100vh;
@@ -41,7 +190,7 @@ h1:focus {
 }
 
 a, .btn-link {
-    color: #0071c1;
+    color: var(--alb-link);
 }
 
 .btn-primary {
@@ -247,7 +396,46 @@ a, .btn-link {
     }
 
 code {
-    color: #c02d76;
+    color: var(--alb-code);
+}
+
+/* Fixed theme toggle switch, available on every page */
+.theme-toggle-switch {
+    position: fixed;
+    top: 0.75rem;
+    right: 1rem;
+    z-index: 1050;
+    width: 52px;
+    height: 28px;
+    padding: 3px;
+    border: 1px solid var(--alb-border);
+    border-radius: 999px;
+    background-color: var(--alb-card-bg);
+    cursor: pointer;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+    transition: background-color 0.15s ease-in-out;
+}
+
+.theme-toggle-switch:hover {
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
+}
+
+.theme-toggle-thumb {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background-color: var(--alb-bg);
+    font-size: 0.85rem;
+    line-height: 1;
+    transition: transform 0.2s ease-in-out;
+    transform: translateX(0);
+}
+
+.theme-toggle-switch[aria-checked="true"] .theme-toggle-thumb {
+    transform: translateX(24px);
 }
 
 /* Description panel styles */
@@ -306,11 +494,11 @@ code {
     font-family: 'Quantico', monospace;
     font-size: 0.8rem;
     padding: 8px 12px;
-    border: 2px solid #dee2e6;
+    border: 2px solid var(--alb-border);
     border-radius: 4px;
     margin-right: 10px;
     margin-bottom: 20px;
-    transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+    transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out, background-color 0.15s ease-in-out, color 0.15s ease-in-out;
     text-align: center;
 }
 
@@ -321,7 +509,7 @@ code {
 }
 
 .ip-input::placeholder {
-    color: #6c757d;
+    color: var(--alb-text-muted);
     opacity: 1;
     text-align: center;
 }
@@ -336,9 +524,40 @@ code {
     max-width: 95vw;
     width: 95vw;
     overflow-x: auto;
+    overflow-y: auto;
+    max-height: 420px;
     box-sizing: border-box;
     margin: 0 auto;
     display: block;
+    transition: max-height 0.2s ease-in-out;
+    resize: vertical;
+}
+
+.json-container.expanded {
+    max-height: 85vh;
+}
+
+/* Reclaim the vertical space freed up when the map/analytics summary above is hidden.
+   Keep the same bottom buffer proportion as the summary-shown states (100vh - 85vh = 15vh)
+   so the panel never grows past the visible viewport. */
+.json-container.no-summary {
+    max-height: 75vh;
+}
+
+.json-container.no-summary.expanded {
+    max-height: 85vh;
+}
+
+/* Expand/shrink control button next to the Show/Hide JSON toggle */
+.json-toggle-btn {
+    font-size: 0.75rem !important;
+    padding: 0.125rem 0.25rem !important;
+    margin: 0 0 0 0.25rem !important;
+    height: 24px !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    flex-shrink: 0 !important;
 }
 
 /* Ensure pre elements don't break layout */
@@ -346,6 +565,100 @@ pre {
     max-width: 100%;
     box-sizing: border-box;
     overflow-wrap: break-word;
+}
+
+/* Collapsible JSON tree viewer (IDE-style expand/shrink per node) */
+.json-tree-panel {
+    background-color: var(--alb-json-bg);
+    color: var(--alb-json-text);
+    transition: background-color 0.15s ease-in-out, color 0.15s ease-in-out;
+}
+
+.json-tree-container {
+    font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+    font-size: 14px;
+    line-height: 1.5;
+    text-align: left;
+    box-sizing: border-box;
+    overflow-wrap: break-word;
+}
+
+.json-tree-root,
+.json-tree-children {
+    list-style: none;
+    margin: 0;
+    padding-left: 1.25rem;
+}
+
+.json-tree-root {
+    padding-left: 0;
+}
+
+.json-tree-node {
+    position: relative;
+}
+
+.json-tree-row {
+    cursor: default;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.json-tree-node:has(> .json-tree-children) > .json-tree-row {
+    cursor: pointer;
+}
+
+.json-toggle {
+    display: inline-block;
+    width: 1rem;
+    color: var(--alb-json-key);
+    user-select: none;
+}
+
+.json-toggle-empty {
+    visibility: hidden;
+}
+
+.json-key {
+    color: var(--alb-json-key);
+}
+
+.json-colon {
+    color: var(--alb-json-punctuation);
+}
+
+.json-bracket {
+    color: var(--alb-json-punctuation);
+}
+
+.json-string {
+    color: var(--alb-json-string);
+}
+
+.json-number {
+    color: var(--alb-json-number);
+}
+
+.json-boolean,
+.json-null {
+    color: var(--alb-json-boolean);
+}
+
+.json-summary {
+    display: none;
+    color: var(--alb-json-summary);
+    font-style: italic;
+    margin: 0 0.35rem;
+}
+
+/* When a node is collapsed: hide its children/closing bracket, show the item-count summary */
+.json-tree-node.json-collapsed > .json-tree-children,
+.json-tree-node.json-collapsed > .json-bracket-close {
+    display: none;
+}
+
+.json-tree-node.json-collapsed > .json-tree-row > .json-summary {
+    display: inline;
 }
 
 /* Base footer icon styling - scaled up and better spacing */
@@ -1028,8 +1341,8 @@ html body div.card div.card-header .btn {
 }
 
 .service-match {
-    background: #f8f9fa;
-    border: 1px solid #dee2e6;
+    background: var(--alb-service-match-bg);
+    border: 1px solid var(--alb-border);
     border-radius: 0.375rem;
     padding: 12px;
     margin-bottom: 8px;
@@ -1040,7 +1353,7 @@ html body div.card div.card-header .btn {
 }
 
 .service-match:hover {
-    background: #e9ecef;
+    background: var(--alb-service-match-hover-bg);
     border-color: #adb5bd;
     transform: translateY(-1px);
     box-shadow: 0 2px 4px rgba(0,0,0,0.1);
@@ -1269,5 +1582,184 @@ html body div.card div.card-header .btn {
     .ascii-art-pixel-matrix {
         width: 90%;
     }
+}
+
+/* World map threat visualization (abuser origin vs. reporter/target countries) */
+.world-map-section {
+    max-width: 900px;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+.world-map-title {
+    margin: 0 0 0.75rem 0 !important;
+    font-size: 0.95rem !important;
+    font-weight: 500 !important;
+    color: #212529;
+}
+
+.world-map-container {
+    height: 420px;
+    width: 100%;
+    max-width: 800px;
+    background-color: #1e1e1e;
+    border-radius: 4px;
+    margin-left: auto;
+    margin-right: auto;
+    --jvm-zoom-btn-bg-color: #6c757d;
+    --jvm-zoom-btn-color: #ffffff;
+}
+
+.world-map-legend {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem 1.25rem;
+    font-size: 0.85rem;
+    color: #212529;
+}
+
+.legend-swatch {
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    border-radius: 3px;
+    margin-right: 0.35rem;
+    vertical-align: middle;
+}
+
+.legend-swatch.legend-origin {
+    background-color: #e53935;
+}
+
+.legend-swatch.legend-target {
+    background: linear-gradient(90deg, #add8ff, #0d47a1);
+}
+
+.target-country-list {
+    color: #212529;
+    font-size: 0.85rem;
+}
+
+.target-country-list li {
+    padding: 0.15rem 0;
+}
+
+/* Attack category pie chart (reported abuse categories mix) */
+.category-pie-section {
+    max-width: 700px;
+}
+
+.category-pie-wrapper {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: 1.5rem;
+}
+
+.category-pie-chart {
+    width: 160px;
+    height: 160px;
+    min-width: 160px;
+    border-radius: 50%;
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.1);
+}
+
+.category-pie-legend {
+    color: #212529;
+    font-size: 0.85rem;
+    max-width: 420px;
+}
+
+.category-pie-legend li {
+    padding: 0.15rem 0;
+}
+
+.legend-swatch.legend-round {
+    border-radius: 50%;
+}
+
+/* Shared row that places the attack category pie and trust score gauge side by side */
+.analytics-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: 2.5rem;
+    max-width: 900px;
+    margin-left: auto;
+    margin-right: auto;
+    margin-bottom: 2rem;
+}
+
+.category-pie-section,
+.trust-gauge-section {
+    margin-bottom: 0; /* spacing now handled by .analytics-row gap */
+}
+
+/* AI trust score gauge (small semi-circular gauge next to the pie chart) */
+.trust-gauge-section {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    max-width: 200px;
+    padding-left: 0.5rem;
+}
+
+.trust-gauge-wrapper {
+    position: relative;
+    width: 140px;
+    height: 72px;
+    overflow: hidden;
+}
+
+.trust-gauge-arc {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 140px;
+    height: 140px;
+    border-radius: 50%;
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.1);
+}
+
+.trust-gauge-arc::after {
+    content: "";
+    position: absolute;
+    top: 22px;
+    left: 22px;
+    width: 96px;
+    height: 96px;
+    border-radius: 50%;
+    background: #ffffff;
+}
+
+.trust-gauge-center {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    text-align: center;
+    color: #212529;
+    line-height: 1;
+}
+
+.trust-gauge-value {
+    font-size: 1.4rem;
+    font-weight: 700;
+}
+
+.trust-gauge-max {
+    font-size: 0.7rem;
+    color: #6c757d;
+}
+
+.trust-gauge-risklabel {
+    margin-top: 0.5rem;
+    font-size: 0.8rem;
+    font-weight: 600;
+    letter-spacing: 0.03em;
 }
 

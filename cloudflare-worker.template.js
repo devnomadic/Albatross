@@ -4,7 +4,7 @@
  * This worker provides comprehensive IP analysis by combining multiple data sources:
  * 1. AbuseIPDB API - IP abuse reputation checking
  * 2. Cloudflare Radar API - ASN and network information lookup
- * 3. Cloudflare Workers AI - AI-powered reputation analysis using Llama 3.1 70B
+ * 3. Cloudflare Workers AI - AI-powered reputation analysis (default: gpt-oss-120b, overridable via aimodel param)
  * 
  * Features:
  * - Protects API keys from client exposure
@@ -35,7 +35,7 @@
  *       "summary": "<AI-generated assessment>",
  *       "recommendations": ["<action 1>", "<action 2>"]
  *     },
- *     "model": "@cf/meta/llama-3.1-70b-instruct",
+ *     "model": "@cf/openai/gpt-oss-120b",
  *     "timestamp": "<ISO timestamp>"
  *   },
  *   "workerInfo": { ... metadata ... }
@@ -52,6 +52,17 @@ const ABUSEIPDB_API_URL = "https://api.abuseipdb.com/api/v2/check";
 // Cloudflare Radar API configuration
 const CLOUDFLARE_RADAR_API_URL = "https://api.cloudflare.com/client/v4/radar/entities/asns/ip";
 const CLOUDFLARE_API_TOKEN = "YOUR_CLOUDFLARE_API_TOKEN_WILL_BE_INJECTED_HERE";
+
+// Workers AI model configuration - default model plus allowed overrides via the 'aimodel' query parameter
+const DEFAULT_AI_MODEL = "@cf/openai/gpt-oss-120b";
+const ALLOWED_AI_MODELS = [
+  "@cf/openai/gpt-oss-120b",
+  "@cf/openai/gpt-oss-20b",
+  "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+  "@cf/meta/llama-4-scout-17b-16e-instruct",
+  "@cf/moonshotai/kimi-k2.6",
+  "@cf/deepseek-ai/deepseek-r1-distill-qwen-32b"
+];
 
 // Authentication key - this will be replaced with generated key during build
 // If build constants are available, use them; otherwise fallback to default
@@ -118,9 +129,11 @@ export default {
  * @param {string} ipAddress - The IP address to analyze
  * @param {object} abuseData - AbuseIPDB data for context
  * @param {object} asnData - ASN data for context
+ * @param {string} [aiModel] - Workers AI model identifier to use (defaults to DEFAULT_AI_MODEL)
  * @returns {Promise<object>} AI reputation analysis
  */
-async function generateAIReputation(env, ipAddress, abuseData, asnData) {
+async function generateAIReputation(env, ipAddress, abuseData, asnData, aiModel) {
+  const model = aiModel && ALLOWED_AI_MODELS.includes(aiModel) ? aiModel : DEFAULT_AI_MODEL;
   try {
     // Check if AI binding is available
     if (!env || !env.AI) {
@@ -142,6 +155,9 @@ async function generateAIReputation(env, ipAddress, abuseData, asnData) {
     const asnNumber = asnData?.result?.[0]?.asn?.asn || 'Unknown';
     const numDistinctUsers = abuseData?.data?.numDistinctUsers || 0;
     const reports = abuseData?.data?.reports || [];
+
+    // Heuristic device/service type flags (used as context for the AI to refine)
+    const heuristicFlags = detectIpIntelligence(abuseData);
 
     // Extract sample abuse event details
     let eventSummary = '';
@@ -171,21 +187,35 @@ ASN: ${asnNumber} (${asnName})
 Abuse Confidence Score: ${abuseScore}% (0-100 scale, higher is worse)
 Total Abuse Reports: ${totalReports}${eventSummary}
 
+Preliminary automated device/service type flags (heuristic, may be incomplete or wrong):
+mobile=${heuristicFlags.is_mobile}, vpn=${heuristicFlags.is_vpn}, tor=${heuristicFlags.is_tor}, proxy=${heuristicFlags.is_proxy}, datacenter=${heuristicFlags.is_datacenter}, botnet/C2=${heuristicFlags.is_botnet}
+(is_tor is a direct regex match against this IP's own reverse-DNS hostname(s): ${JSON.stringify(abuseData?.data?.hostnames || [])}. A "true" here is high-confidence - only treat it as a false positive if the hostname clearly does not refer to Tor. It can still be a false negative for exit nodes with generic hostnames.)
+
 Provide a JSON response with the following structure:
 {
   "riskLevel": "low|medium|high|critical",
   "trustScore": <number 0-100, higher is better>,
   "summary": "<2-3 sentence overall risk assessment>",
   "eventsSummary": "<2-3 sentence summary of abuse event patterns & targeted services or null if no events>",
+  "asnReputation": "<2-3 sentence assessment of the ASN/network operator's reputation, e.g. whether it is a well-known hosting/cloud provider, residential ISP, VPN/proxy network, or an ASN commonly associated with abuse based on the usage type and abuse data, or null if there is insufficient data>",
+  "intelligenceGuess": {
+    "is_mobile": <true|false>,
+    "is_vpn": <true|false>,
+    "is_tor": <true|false>,
+    "is_proxy": <true|false>,
+    "is_datacenter": <true|false>,
+    "is_botnet": <true|false>,
+    "notes": "<1 sentence explaining your reasoning, especially where you overrode a preliminary flag, or null if you agree with all preliminary flags>"
+  },
   "recommendations": ["<action 1>", "<action 2>"]
 }
 
-Focus on actionable insights based on the abuse score, report count, network information, and abuse event patterns. Keep summaries concise and professional.`;
+Focus on actionable insights based on the abuse score, report count, network information, ASN reputation, and abuse event patterns. For intelligenceGuess, use your knowledge of well-known ASNs, ISPs, hosting providers, and VPN/proxy/Tor exit-node ranges to confirm or correct the preliminary flags. Do not flip a preliminary is_tor=true to false unless the listed hostname(s) clearly do not indicate Tor - it is a direct hostname regex match and is rarely wrong in that direction; only its false-negative rate is high (exit nodes with generic hostnames won't be flagged). Refine is_botnet based on whether the abuse events/comments genuinely indicate compromised-host or bot-driven (as opposed to a single manual attacker) behavior. Keep summaries concise and professional.`;
 
-    console.log('Calling Workers AI with Llama 3.1 70B for IP reputation analysis...');
+    console.log('Calling Workers AI with model', model, 'for IP reputation analysis...');
 
-    // Call Cloudflare Workers AI using Llama 3.1 70B Instruct model
-    const response = await env.AI.run('@cf/meta/llama-3.1-70b-instruct', {
+    // Call Cloudflare Workers AI using the selected model
+    const response = await env.AI.run(model, {
       messages: [
         {
           role: 'system',
@@ -196,26 +226,31 @@ Focus on actionable insights based on the abuse score, report count, network inf
           content: prompt
         }
       ],
-      max_tokens: 500,
+      max_tokens: 900, // Increased to accommodate asnReputation + intelligenceGuess fields without truncating JSON
       temperature: 0.3, // Lower temperature for more consistent, factual responses
     });
 
     console.log('AI response received:', response);
 
     // Parse the AI response
+    // Different model families use different response shapes:
+    // - Llama-style models return { response: "<text>" }
+    // - OpenAI-compatible models (e.g. gpt-oss-*) return { choices: [{ message: { content: "<text>" } }] }
+    const aiText = response?.response ?? response?.choices?.[0]?.message?.content ?? null;
+
     let analysis = null;
-    if (response && response.response) {
+    if (aiText) {
       try {
-        // The response.response contains the AI's text output
-        const aiText = response.response.trim();
+        // The extracted text contains the AI's raw output
+        const trimmedText = aiText.trim();
         
         // Try to extract JSON from the response (handle cases where AI might add extra text)
-        let jsonText = aiText;
-        if (aiText.includes('{')) {
-          const startIdx = aiText.indexOf('{');
-          const endIdx = aiText.lastIndexOf('}');
+        let jsonText = trimmedText;
+        if (trimmedText.includes('{')) {
+          const startIdx = trimmedText.indexOf('{');
+          const endIdx = trimmedText.lastIndexOf('}');
           if (startIdx >= 0 && endIdx > startIdx) {
-            jsonText = aiText.substring(startIdx, endIdx + 1);
+            jsonText = trimmedText.substring(startIdx, endIdx + 1);
           }
         }
         
@@ -233,16 +268,34 @@ Focus on actionable insights based on the abuse score, report count, network inf
           trustScore: Math.max(0, 100 - abuseScore),
           summary: `IP from ${countryCode} with ${abuseScore}% abuse confidence score and ${totalReports} reports.`,
           eventsSummary: eventsFallback,
+          asnReputation: asnName !== 'Unknown' ? `ASN ${asnNumber} (${asnName}), usage type: ${usageType}.` : null,
+          intelligenceGuess: { ...heuristicFlags, notes: 'AI response could not be parsed; showing heuristic-only flags.' },
           recommendations: ['Review the abuse reports for details', 'Consider blocking if risk level is high']
         };
       }
+    } else {
+      console.error('AI response did not contain a recognizable text field for model', model, response);
+      // Fallback to basic analysis if no text output was found
+      const eventsFallback = reports.length > 0 
+        ? `Reported ${totalReports} times for ${[...new Set(reports.flatMap(r => r.categories || []))].slice(0, 3).join(', ')}.`
+        : null;
+      
+      analysis = {
+        riskLevel: abuseScore > 75 ? 'critical' : abuseScore > 50 ? 'high' : abuseScore > 25 ? 'medium' : 'low',
+        trustScore: Math.max(0, 100 - abuseScore),
+        summary: `IP from ${countryCode} with ${abuseScore}% abuse confidence score and ${totalReports} reports.`,
+        eventsSummary: eventsFallback,
+        asnReputation: asnName !== 'Unknown' ? `ASN ${asnNumber} (${asnName}), usage type: ${usageType}.` : null,
+        intelligenceGuess: { ...heuristicFlags, notes: 'AI analysis unavailable; showing heuristic-only flags.' },
+        recommendations: ['Review the abuse reports for details', 'Consider blocking if risk level is high']
+      };
     }
 
     return {
       success: true,
       error: null,
       analysis: analysis,
-      model: '@cf/meta/llama-3.1-70b-instruct',
+      model: model,
       timestamp: new Date().toISOString()
     };
 
@@ -254,6 +307,68 @@ Focus on actionable insights based on the abuse score, report count, network inf
       analysis: null
     };
   }
+}
+
+/**
+ * Derive best-effort IP device/service type flags from AbuseIPDB data.
+ * These are heuristics based on AbuseIPDB's usageType classification and
+ * report categories - they are not authoritative real-time lookups.
+ *
+ * Notes on scope:
+ * - is_tor is a best-effort heuristic based on reverse-DNS hostname patterns
+ *   (e.g. "tor-exit", "torproject") - it will miss Tor exit nodes whose
+ *   hostname doesn't advertise itself as such; no live exit-node list is used.
+ * - is_botnet is a best-effort heuristic (see below) based only on AbuseIPDB
+ *   report categories/comments - it is not a real threat-intel feed lookup
+ *   (e.g. abuse.ch ThreatFox, AlienVault OTX), so it can miss active C2 hosts
+ *   that haven't yet been reported to AbuseIPDB, or over-flag noisy scanners.
+ *
+ * @param {object} abuseData - Parsed AbuseIPDB API response
+ * @returns {object} Flags object: { is_mobile, is_vpn, is_tor, is_proxy, is_datacenter, is_botnet }
+ */
+function detectIpIntelligence(abuseData) {
+  const usageType = (abuseData?.data?.usageType || '').toLowerCase();
+  const reports = abuseData?.data?.reports || [];
+  const categories = new Set(reports.flatMap(r => r.categories || []));
+  const comments = reports.map(r => r.comment || '');
+  const numDistinctUsers = abuseData?.data?.numDistinctUsers || 0;
+  const hostnames = (abuseData?.data?.hostnames || []).join(' ').toLowerCase();
+
+  // AbuseIPDB category 13 = "VPN IP", category 9 = "Open Proxy"
+  const is_vpn = categories.has(13) || usageType.includes('vpn');
+  const is_proxy = categories.has(9) || usageType.includes('proxy');
+  const is_datacenter = /data center|datacenter|hosting|colocation/.test(usageType);
+  const is_mobile = usageType.includes('mobile');
+  const TOR_HOSTNAME_REGEX = /tor-?exit|tor-?relay|torservers|torproject|\btor\b/i;
+  const is_tor = TOR_HOSTNAME_REGEX.test(hostnames);
+
+  // Botnet / C2 heuristic, based only on AbuseIPDB categories, comments & report volume:
+  // - Category 20 = "Exploited Host" is AbuseIPDB's own signal that the host is known compromised
+  // - Categories 4 (DDoS Attack), 14 (Port Scan), 18 (Brute-Force), 22 (SSH), 23 (IoT Targeted) are
+  //   typical of scripted/automated attack tooling; 3+ of these together suggests bot-driven traffic
+  //   rather than a single manual actor
+  // - Report comments mentioning known botnet/malware/C2 terminology are a direct signal
+  // - Volume: a high number of distinct reporters (numDistinctUsers) indicates broad, indiscriminate
+  //   scanning/attack activity typical of a bot rather than one attacker targeting a specific victim.
+  //   When combined with 2+ automated-attack categories, this lowers the bar from 3+ categories alone,
+  //   since widespread reporting adds independent corroborating evidence of automated behavior.
+  const hasExploitedHostCategory = categories.has(20);
+  const AUTOMATED_ATTACK_CATEGORIES = [4, 14, 18, 22, 23];
+  const automatedAttackCategoryCount = AUTOMATED_ATTACK_CATEGORIES.filter(c => categories.has(c)).length;
+  const BOTNET_KEYWORD_REGEX = /\b(botnet|mirai|zombie|c2|c&c|command[- ]and[- ]control|malware|trojan)\b/i;
+  const hasBotnetKeyword = comments.some(c => BOTNET_KEYWORD_REGEX.test(c));
+  const HIGH_VOLUME_DISTINCT_USERS_THRESHOLD = 5;
+  const hasHighVolumeWithAttackPattern = automatedAttackCategoryCount >= 2 && numDistinctUsers >= HIGH_VOLUME_DISTINCT_USERS_THRESHOLD;
+  const is_botnet = hasExploitedHostCategory || hasBotnetKeyword || automatedAttackCategoryCount >= 3 || hasHighVolumeWithAttackPattern;
+
+  return {
+    is_mobile,
+    is_vpn,
+    is_tor,
+    is_proxy,
+    is_datacenter,
+    is_botnet
+  };
 }
 
 async function handleCombinedRequest(request, env) {
@@ -412,10 +527,13 @@ async function handleCombinedRequest(request, env) {
   // Get URL parameters (use normalized lowercase URL for parsing)
   const url = new URL(isApiHostname ? request.url.toLowerCase() : normalizedUrl);
   const ipAddress = url.searchParams.get('ipaddress'); // lowercase parameter name
-  const maxAgeInDays = url.searchParams.get('maxageindays') || 30; // lowercase parameter name
+  const rawMaxAgeInDays = parseInt(url.searchParams.get('maxageindays'), 10);
+  // Enforce AbuseIPDB's supported maxAgeInDays range of 1-365 (default 30 when missing/invalid)
+  const maxAgeInDays = Number.isNaN(rawMaxAgeInDays) ? 30 : Math.min(365, Math.max(1, rawMaxAgeInDays));
   const verbose = url.searchParams.get('verbose') === 'true';
   const enableAI = url.searchParams.get('enableai') === 'true'; // AI toggle parameter
   const cloudProvider = url.searchParams.get('cloudprovider') || null; // Cloud provider search: aws, azure, gcp, oracle, all, or none
+  const aiModel = url.searchParams.get('aimodel') || null; // Optional Workers AI model override
 
   // Validate cloudProvider against allowed values if provided
   const allowedCloudProviders = ['none', 'all', 'azure', 'aws', 'gcp', 'oracle'];
@@ -434,9 +552,26 @@ async function handleCombinedRequest(request, env) {
       }
     );
   }
+
+  // Validate aiModel against the allow-list if provided
+  if (aiModel && !ALLOWED_AI_MODELS.includes(aiModel)) {
+    return new Response(
+      JSON.stringify({
+        error: `Invalid parameter: aimodel must be one of ${ALLOWED_AI_MODELS.join(', ')}`,
+        buildInfo: BUILD_INFO
+      }),
+      {
+        status: 400,
+        headers: {
+          'Content-Type': 'application/json',
+          ...corsHeaders(origin)
+        }
+      }
+    );
+  }
   
   // Debug: Log the parsed parameters
-  console.log('Parsed parameters:', { ipAddress, maxAgeInDays, verbose, enableAI, cloudProvider });
+  console.log('Parsed parameters:', { ipAddress, maxAgeInDays, verbose, enableAI, cloudProvider, aiModel });
   
   // Validate required parameters
   if (!ipAddress) {
@@ -547,7 +682,7 @@ async function handleCombinedRequest(request, env) {
     let aiReputation = null;
     if (enableAI) {
       console.log('Generating AI reputation analysis...');
-      aiReputation = await generateAIReputation(env, ipAddress, abuseIPDBData, radarData);
+      aiReputation = await generateAIReputation(env, ipAddress, abuseIPDBData, radarData, aiModel);
       console.log('AI reputation analysis result:', {
         success: aiReputation.success,
         error: aiReputation.error
@@ -569,6 +704,9 @@ async function handleCombinedRequest(request, env) {
       
       // AbuseIPDB data (maintain original structure for compatibility)
       data: abuseIPDBData?.data || null,
+      
+      // Best-effort IP device/service type detection (heuristic, derived from AbuseIPDB data)
+      ipIntelligence: detectIpIntelligence(abuseIPDBData),
       
       // Add Cloudflare Radar ASN information
       asnInfo: {

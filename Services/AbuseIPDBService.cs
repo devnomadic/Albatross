@@ -23,6 +23,9 @@ namespace Albatross.Services
         [JsonPropertyName("data")]
         public AbuseIPDBData? Data { get; set; }
 
+        [JsonPropertyName("ipIntelligence")]
+        public IpIntelligence? IpIntelligence { get; set; }
+
         [JsonPropertyName("asnInfo")]
         public AsnInfo? AsnInfo { get; set; }
 
@@ -34,6 +37,33 @@ namespace Albatross.Services
 
         [JsonPropertyName("workerInfo")]
         public WorkerInfo? WorkerInfo { get; set; }
+    }
+
+    /// <summary>
+    /// Best-effort IP device/service type flags derived from AbuseIPDB data.
+    /// Heuristic only - not an authoritative real-time lookup (e.g. is_tor is always
+    /// false pending a live Tor exit-node list integration, and is_botnet is based only
+    /// on AbuseIPDB report categories/comments rather than a real threat-intel feed).
+    /// </summary>
+    public class IpIntelligence
+    {
+        [JsonPropertyName("is_mobile")]
+        public bool IsMobile { get; set; }
+
+        [JsonPropertyName("is_vpn")]
+        public bool IsVpn { get; set; }
+
+        [JsonPropertyName("is_tor")]
+        public bool IsTor { get; set; }
+
+        [JsonPropertyName("is_proxy")]
+        public bool IsProxy { get; set; }
+
+        [JsonPropertyName("is_datacenter")]
+        public bool IsDatacenter { get; set; }
+
+        [JsonPropertyName("is_botnet")]
+        public bool IsBotnet { get; set; }
     }
 
     /// <summary>
@@ -74,8 +104,42 @@ namespace Albatross.Services
         [JsonPropertyName("eventsSummary")]
         public string? EventsSummary { get; set; }
 
+        [JsonPropertyName("asnReputation")]
+        public string? AsnReputation { get; set; }
+
+        [JsonPropertyName("intelligenceGuess")]
+        public IntelligenceGuess? IntelligenceGuess { get; set; }
+
         [JsonPropertyName("recommendations")]
         public List<string>? Recommendations { get; set; }
+    }
+
+    /// <summary>
+    /// AI-refined device/service type guess, informed by the heuristic IpIntelligence
+    /// flags plus the model's knowledge of ASNs/ISPs/hosting/VPN providers.
+    /// </summary>
+    public class IntelligenceGuess
+    {
+        [JsonPropertyName("is_mobile")]
+        public bool IsMobile { get; set; }
+
+        [JsonPropertyName("is_vpn")]
+        public bool IsVpn { get; set; }
+
+        [JsonPropertyName("is_tor")]
+        public bool IsTor { get; set; }
+
+        [JsonPropertyName("is_proxy")]
+        public bool IsProxy { get; set; }
+
+        [JsonPropertyName("is_datacenter")]
+        public bool IsDatacenter { get; set; }
+
+        [JsonPropertyName("is_botnet")]
+        public bool IsBotnet { get; set; }
+
+        [JsonPropertyName("notes")]
+        public string? Notes { get; set; }
     }
 
     /// <summary>
@@ -435,8 +499,9 @@ namespace Albatross.Services
         /// <param name="verbose">Whether to include detailed report information</param>
         /// <param name="enableAI">Whether to enable AI reputation analysis (default true)</param>
         /// <param name="cloudProvider">Optional cloud provider to search: aws, azure, gcp, oracle, or all</param>
+        /// <param name="aiModel">Optional Workers AI model override (e.g., "@cf/openai/gpt-oss-120b"). Defaults to the worker's configured model when omitted</param>
         /// <returns>Complete AbuseIPDB information for the specified IP address</returns>
-        public async Task<AbuseIPDBApiResponse> CheckIPAsync(string ipAddress, int maxAgeInDays = 30, bool verbose = true, bool enableAI = true, string? cloudProvider = null)
+        public async Task<AbuseIPDBApiResponse> CheckIPAsync(string ipAddress, int maxAgeInDays = 30, bool verbose = true, bool enableAI = true, string? cloudProvider = null, string? aiModel = null)
         {
             // Parse the input to extract IP address and optionally maxAgeInDays
             string actualIpAddress;
@@ -462,6 +527,9 @@ namespace Albatross.Services
                 actualIpAddress = ipAddress.Trim();
             }
 
+            // Enforce AbuseIPDB's supported maxAgeInDays range of 1-365
+            actualMaxAgeInDays = Math.Clamp(actualMaxAgeInDays, 1, 365);
+
             Console.WriteLine($"Processing IP: {actualIpAddress}, MaxAge: {actualMaxAgeInDays} days");
 
             try
@@ -477,6 +545,12 @@ namespace Albatross.Services
                 if (!string.IsNullOrEmpty(cloudProvider))
                 {
                     requestUrl += $"&cloudprovider={cloudProvider.ToLower()}";
+                }
+
+                // Add aimodel override parameter if specified
+                if (!string.IsNullOrEmpty(aiModel))
+                {
+                    requestUrl += $"&aimodel={Uri.EscapeDataString(aiModel)}";
                 }
 
                 // Add timestamp
