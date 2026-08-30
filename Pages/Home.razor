@@ -258,7 +258,7 @@
         <center>
         <div class="results card-container">
             <h3>IP Reputation Results for @(abuseIpResult.Data?.IpAddress ?? ipAddress)</h3>
-            @if (!string.IsNullOrEmpty(originCountryCode) || targetCountries.Any())
+            @if (showSummary && (!string.IsNullOrEmpty(originCountryCode) || targetCountries.Any()))
             {
                 <div class="world-map-section mb-3 text-center">
                     <h5 class="world-map-title">🌍 Threat Map: Origin &amp; Reporter Locations</h5>
@@ -319,6 +319,9 @@
                 <div class="card-header d-flex justify-content-between align-items-center" style="padding: 0.25rem 1rem !important; min-height: 32px !important; height: 32px !important; max-height: 32px !important; box-sizing: border-box !important; overflow: hidden !important;">
                     <h5 style="margin: 0 !important; padding: 0 !important; font-size: 0.9rem !important; line-height: 1.1 !important; font-weight: 500 !important;">AbuseIPDB JSON Response</h5>
                     <div class="d-flex align-items-center">
+                        <button class="btn btn-sm btn-outline-secondary json-toggle-btn" @onclick="ToggleSummaryDisplay" title="@(showSummary ? "Hide the map/analytics summary above" : "Show the map/analytics summary above")">
+                            @(showSummary ? "▲ Hide Summary" : "▼ Show Summary")
+                        </button>
                         @if (showJson)
                         {
                             <button class="btn btn-sm btn-outline-secondary json-toggle-btn" @onclick="CollapseAllJsonNodes" title="Collapse all nodes">
@@ -339,7 +342,7 @@
                 @if (showJson)
                 {
                     <div class="card-body json-container @(jsonExpanded ? "expanded" : "")">                        
-                        <div class="bg-dark text-light p-3 rounded json-tree-container" id="jsonTreeOutput"></div>
+                        <div class="json-tree-panel p-3 rounded json-tree-container" id="jsonTreeOutput"></div>
                     </div>
                 }
             </div>
@@ -364,6 +367,7 @@
     private bool showDescription = false;
     private bool isCheckingAbuse = false;
     private bool showJson = true; // Default to showing JSON
+    private bool showSummary = true; // Default to showing the map/analytics summary above the JSON card
     private bool jsonExpanded = false; // Default to collapsed (scrollable) JSON view
     private bool jsonTreeNeedsRender = false; // Set when formattedJson changes or the panel is (re)shown; guards OnAfterRenderAsync so unrelated re-renders (e.g. Expand All/Collapse All clicks) don't rebuild the tree DOM and wipe out collapsed state
     private bool enableAI = true; // Default to AI enabled
@@ -571,6 +575,11 @@
     private void ToggleJsonExpand()
     {
         jsonExpanded = !jsonExpanded;
+    }
+
+    private void ToggleSummaryDisplay()
+    {
+        showSummary = !showSummary;
     }
 
     private async Task ExpandAllJsonNodes()

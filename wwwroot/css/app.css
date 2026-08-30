@@ -13,6 +13,14 @@
     --alb-footer-text: #000000;
     --alb-service-match-bg: #f8f9fa;
     --alb-service-match-hover-bg: #e9ecef;
+    --alb-json-bg: #f6f8fa;
+    --alb-json-text: #24292f;
+    --alb-json-key: #005cc5;
+    --alb-json-string: #032f62;
+    --alb-json-number: #032f62;
+    --alb-json-boolean: #d73a49;
+    --alb-json-punctuation: #57606a;
+    --alb-json-summary: #6e7781;
 }
 
 html[data-theme="dark"] {
@@ -29,6 +37,14 @@ html[data-theme="dark"] {
     --alb-footer-text: #e6e6e6;
     --alb-service-match-bg: #1c2128;
     --alb-service-match-hover-bg: #262c34;
+    --alb-json-bg: #0d1117;
+    --alb-json-text: #e6e6e6;
+    --alb-json-key: #91d7ff;
+    --alb-json-string: #b5cea8;
+    --alb-json-number: #b5cea8;
+    --alb-json-boolean: #569cd6;
+    --alb-json-punctuation: #d4d4d4;
+    --alb-json-summary: #808080;
 }
 
 /* Dark theme overrides for Bootstrap defaults and custom components */
@@ -541,6 +557,12 @@ pre {
 }
 
 /* Collapsible JSON tree viewer (IDE-style expand/shrink per node) */
+.json-tree-panel {
+    background-color: var(--alb-json-bg);
+    color: var(--alb-json-text);
+    transition: background-color 0.15s ease-in-out, color 0.15s ease-in-out;
+}
+
 .json-tree-container {
     font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
     font-size: 14px;
@@ -578,7 +600,7 @@ pre {
 .json-toggle {
     display: inline-block;
     width: 1rem;
-    color: #91d7ff;
+    color: var(--alb-json-key);
     user-select: none;
 }
 
@@ -587,33 +609,33 @@ pre {
 }
 
 .json-key {
-    color: #91d7ff;
+    color: var(--alb-json-key);
 }
 
 .json-colon {
-    color: #d4d4d4;
+    color: var(--alb-json-punctuation);
 }
 
 .json-bracket {
-    color: #d4d4d4;
+    color: var(--alb-json-punctuation);
 }
 
 .json-string {
-    color: #b5cea8;
+    color: var(--alb-json-string);
 }
 
 .json-number {
-    color: #b5cea8;
+    color: var(--alb-json-number);
 }
 
 .json-boolean,
 .json-null {
-    color: #569cd6;
+    color: var(--alb-json-boolean);
 }
 
 .json-summary {
     display: none;
-    color: #808080;
+    color: var(--alb-json-summary);
     font-style: italic;
     margin: 0 0.35rem;
 }
