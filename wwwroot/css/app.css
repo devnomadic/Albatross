@@ -537,6 +537,15 @@ code {
     max-height: 85vh;
 }
 
+/* Reclaim the vertical space freed up when the map/analytics summary above is hidden */
+.json-container.no-summary {
+    max-height: 75vh;
+}
+
+.json-container.no-summary.expanded {
+    max-height: 92vh;
+}
+
 /* Expand/shrink control button next to the Show/Hide JSON toggle */
 .json-toggle-btn {
     font-size: 0.75rem !important;

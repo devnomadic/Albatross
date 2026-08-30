@@ -341,7 +341,7 @@
                 </div>
                 @if (showJson)
                 {
-                    <div class="card-body json-container @(jsonExpanded ? "expanded" : "")">                        
+                    <div class="card-body json-container @(jsonExpanded ? "expanded" : "") @(!showSummary ? "no-summary" : "")">                        
                         <div class="json-tree-panel p-3 rounded json-tree-container" id="jsonTreeOutput"></div>
                     </div>
                 }
@@ -370,6 +370,7 @@
     private bool showSummary = true; // Default to showing the map/analytics summary above the JSON card
     private bool jsonExpanded = false; // Default to collapsed (scrollable) JSON view
     private bool jsonTreeNeedsRender = false; // Set when formattedJson changes or the panel is (re)shown; guards OnAfterRenderAsync so unrelated re-renders (e.g. Expand All/Collapse All clicks) don't rebuild the tree DOM and wipe out collapsed state
+    private bool worldMapNeedsRender = false; // Set when the summary section is re-shown, since the map's container div is destroyed/recreated by the @if block
     private bool enableAI = true; // Default to AI enabled
     private string formattedJson = string.Empty;
     private Albatross.Services.AbuseIPDBApiResponse? abuseIpResult;
@@ -535,6 +536,12 @@
             jsonTreeNeedsRender = false;
             await RenderJsonTreeAsync();
         }
+
+        if (worldMapNeedsRender && showSummary)
+        {
+            worldMapNeedsRender = false;
+            await RenderWorldMapAsync();
+        }
     }
 
     // Renders the collapsible JSON tree viewer (replaces the flat syntax-highlighted <pre> block)
@@ -580,6 +587,12 @@
     private void ToggleSummaryDisplay()
     {
         showSummary = !showSummary;
+
+        // The map container div is destroyed when hidden and recreated when shown again, so it needs a fresh render
+        if (showSummary && (!string.IsNullOrEmpty(originCountryCode) || targetCountries.Any()))
+        {
+            worldMapNeedsRender = true;
+        }
     }
 
     private async Task ExpandAllJsonNodes()
