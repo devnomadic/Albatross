@@ -614,5 +614,78 @@ namespace Albatross.Services
                 throw new Exception($"Unexpected error checking IP: {ex.Message}", ex);
             }
         }
+
+        /// <summary>
+        /// Runs a passive security scan of a URL through the Cloudflare Worker.
+        /// The URL is sent base64url-encoded in the <c>url</c> parameter. The HMAC is computed over the
+        /// lowercased request URL (matching the worker's validation), but the request itself is sent with
+        /// the original casing because base64 is case-sensitive.
+        /// </summary>
+        /// <param name="url">Absolute http(s) URL to scan</param>
+        /// <param name="enableAI">Include a Workers AI assessment</param>
+        /// <param name="screenshot">Capture a screenshot via Cloudflare Browser Rendering</param>
+        public async Task<UrlScanResult> ScanUrlAsync(string url, bool enableAI = true, bool screenshot = true)
+        {
+            if (!UrlScanInput.TryValidate(url, out var normalizedUrl, out var validationError))
+            {
+                throw new ArgumentException(validationError, nameof(url));
+            }
+
+            var encodedUrl = UrlScanInput.ToBase64Url(normalizedUrl);
+            var requestUrl = $"{_cloudflareWorkerUrl}?url={encodedUrl}" +
+                             $"&enableAI={enableAI.ToString().ToLower()}" +
+                             $"&screenshot={screenshot.ToString().ToLower()}" +
+                             $"&timestamp={GetTimestamp()}";
+
+            Console.WriteLine($"Scanning URL: {normalizedUrl} (base64url: {encodedUrl})");
+
+            try
+            {
+                var request = new HttpRequestMessage(HttpMethod.Get, requestUrl);
+                if (!string.IsNullOrEmpty(_authKey) && !string.IsNullOrEmpty(_cloudflareWorkerUrl))
+                {
+                    request.Headers.Add("Worker-Token", GenerateHmacToken(requestUrl.ToLower()));
+                }
+
+                var response = await _httpClient.SendAsync(request);
+                var jsonString = await response.Content.ReadAsStringAsync();
+
+                UrlScanResponse? result = null;
+                if (!string.IsNullOrWhiteSpace(jsonString))
+                {
+                    try
+                    {
+                        result = JsonSerializer.Deserialize<UrlScanResponse>(jsonString, _jsonOptions);
+                    }
+                    catch (JsonException) when (!response.IsSuccessStatusCode)
+                    {
+                        // Non-JSON error body; fall through to the status code error below
+                    }
+                }
+
+                if (!response.IsSuccessStatusCode || result == null)
+                {
+                    var reason = result?.Error ?? $"HTTP {(int)response.StatusCode} {response.ReasonPhrase}";
+                    throw new Exception(reason);
+                }
+
+                if (!string.IsNullOrEmpty(result.Error))
+                {
+                    throw new Exception(result.Error);
+                }
+
+                return new UrlScanResult { Response = result, RawJson = jsonString };
+            }
+            catch (JsonException ex)
+            {
+                Console.WriteLine($"JSON parsing error: {ex.Message}");
+                throw new Exception($"Error parsing URL scan response: {ex.Message}", ex);
+            }
+            catch (HttpRequestException ex)
+            {
+                Console.WriteLine($"HTTP request error: {ex.Message}");
+                throw new Exception($"Error scanning URL: {ex.Message}", ex);
+            }
+        }
     }
 }

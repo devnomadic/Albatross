@@ -4,6 +4,8 @@
 @inject Albatross.Services.AbuseIPDBService AbuseIPDBService
 @using System.Text.Json
 @using System.Linq
+@using System.Text.Json.Nodes
+@using Albatross.Services
 @inject IJSRuntime JSRuntime
 
 <PageTitle>Albatross - Cloud IP Analysis & Reputation Checker</PageTitle>
@@ -99,12 +101,16 @@
 </div>
 <br><br>
 
-<input @bind="ipAddress" placeholder="Enter public IPv4/IPv6 address (optionally: ip;maxDays)" class="ip-input form-control" />
-<button class="btn btn-primary" @onclick="ValidateAndSearchAsync" disabled="@isSearching">Search</button>
+<input @bind="ipAddress" @bind:event="oninput" @onkeydown="OnInputKeyDown" type="text" inputmode="url" autocomplete="off" spellcheck="false" maxlength="2048"
+       placeholder="Enter a public IPv4/IPv6 address (ip;maxDays) or a URL (https://example.com/path)" class="ip-input form-control" />
+<button class="btn btn-primary" @onclick="ValidateAndSearchAsync" disabled="@(isSearching || isScanningUrl)">Search</button>
+<button class="btn btn-danger" @onclick="ScanUrlAsync" disabled="@(isScanningUrl || isCheckingAbuse || isSearching)" style="margin-left: 10px;" title="Passive security scan of a URL: redirects, HTTP/TLS versions, certificate, domain age, IPs, CDN, technologies and a screenshot">
+    <span class="oi oi-globe"></span> Scan URL
+</button>
 <button class="btn btn-info" @onclick="ToggleDescription" style="margin-left: 10px;">
     <span class="oi oi-info"></span> About
 </button>
-<button class="btn btn-warning" @onclick="CheckAbuseIPDBAsync" disabled="@isCheckingAbuse" style="margin-left: 10px;">
+<button class="btn btn-warning" @onclick="CheckAbuseIPDBAsync" disabled="@(isCheckingAbuse || isScanningUrl)" style="margin-left: 10px;">
     <span class="oi oi-shield"></span> Check IP Reputation
 </button>
 <button class="btn @(enableAI ? "btn-success" : "btn-secondary")" @onclick="ToggleAI" style="margin-left: 10px;" title="@(enableAI ? "AI Analysis Enabled" : "AI Analysis Disabled")">
@@ -141,7 +147,11 @@
                     <li><code>8.8.8.8</code> - Standard IP lookup (30 days of abuse reports)</li>
                     <li><code>8.8.8.8;60</code> - Custom report age (60 days of history)</li>
                     <li><code>2001:4860:4860::8888</code> - IPv6 addresses supported</li>
+                    <li><code>https://example.com/login</code> - URL security scan (press <strong>Scan URL</strong>, or Search with a URL)</li>
                 </ul>
+
+                <h6>🌐 <strong>URL Scanning:</strong></h6>
+                <p>Enter a full <code>http://</code> or <code>https://</code> URL. It is sent to the worker base64url-encoded, and the worker runs a passive scan: redirect chain, HTTP/1.1, HTTP/2 and HTTP/3 support, TLS 1.0-1.3 support and certificate details, domain registration age (RDAP), DNS (SPF, DMARC, CAA, DNSSEC), hosting IPs and ASNs, CDN detection, frameworks and libraries with known-vulnerable versions flagged, security headers and cookie flags, and a screenshot of the rendered page. Private, loopback and internal targets are blocked.</p>
 
                 <h6>🤖 <strong>AI Reputation Analysis:</strong></h6>
                 <p>Automatically analyzes IP reputation data using Cloudflare Workers AI with Llama 3.1 70B Instruct model. Provides risk level assessment (low/medium/high/critical), trust score (0-100), summary of abuse event patterns, and security recommendations based on real-time threat intelligence.</p>
@@ -159,7 +169,7 @@
 }
 
 <!-- Fixed container for search results to prevent layout shifting -->
-<div class="search-results-container @(HasSearchResults() || abuseIpResult != null ? "has-results" : "") @(isSearching || isCheckingAbuse ? "searching" : "")">    @if (isSearching && !isCheckingAbuse)
+<div class="search-results-container @(HasSearchResults() || abuseIpResult != null || urlScanResult != null ? "has-results" : "") @(isSearching || isCheckingAbuse || isScanningUrl ? "searching" : "")">    @if (isSearching && !isCheckingAbuse)
     {
         <div class="spinner-container">
             <div class="loading-bars">
@@ -315,37 +325,305 @@
                     </div>
                 }
             }
-            <div class="card">            
-                <div class="card-header d-flex justify-content-between align-items-center" style="padding: 0.25rem 1rem !important; min-height: 32px !important; height: 32px !important; max-height: 32px !important; box-sizing: border-box !important; overflow: hidden !important;">
-                    <h5 style="margin: 0 !important; padding: 0 !important; font-size: 0.9rem !important; line-height: 1.1 !important; font-weight: 500 !important;">AbuseIPDB JSON Response</h5>
-                    <div class="d-flex align-items-center">
-                        <button class="btn btn-sm btn-outline-secondary json-toggle-btn" @onclick="ToggleSummaryDisplay" title="@(showSummary ? "Hide the map/analytics summary above" : "Show the map/analytics summary above")">
-                            @(showSummary ? "▲ Hide Summary" : "▼ Show Summary")
-                        </button>
-                        @if (showJson)
+            @JsonCard("AbuseIPDB JSON Response")
+        </div>
+        </center>
+    }
+
+    @if (isScanningUrl)
+    {
+        <div class="spinner-container">
+            <div class="loading-bars abuse-check">
+                <div class="bar1"></div>
+                <div class="bar2"></div>
+                <div class="bar3"></div>
+                <div class="bar4"></div>
+                <div class="bar5"></div>
+            </div>
+            <small class="text-muted">Scanning URL (DNS, TLS, redirects, technologies, screenshot)... this can take up to 30 seconds</small>
+        </div>
+    }
+
+    @if (urlScanResult != null)
+    {
+        var scan = urlScanResult.Response;
+        <center>
+        <div class="results card-container">
+            <h3 class="url-scan-heading">URL Scan Results for <span class="url-scan-target">@(scan.Summary?.FinalUrl ?? scan.Target?.Url)</span></h3>
+            @if (showSummary)
+            {
+                <div class="url-scan">
+                    <div class="url-scan-top">
+                        <div class="url-scan-card url-scan-screenshot">
+                            <div class="url-scan-card-title">📸 Screenshot</div>
+                            @if (scan.Screenshot?.Success == true && !string.IsNullOrEmpty(scan.Screenshot.Image))
+                            {
+                                <a href="@scan.Screenshot.Image" target="_blank" rel="noopener" title="Open full-size screenshot">
+                                    <img src="@scan.Screenshot.Image" alt="Screenshot of @(scan.Summary?.FinalUrl)" loading="lazy" />
+                                </a>
+                                <div class="url-scan-muted">Rendered at @(scan.Screenshot.Width)×@(scan.Screenshot.Height) · @(scan.Screenshot.RequestCount ?? 0) network requests@(string.IsNullOrEmpty(scan.Screenshot.NavigationWarning) ? "" : " · page did not fully settle")</div>
+                            }
+                            else
+                            {
+                                <div class="url-scan-placeholder">@(scan.Screenshot?.Error ?? "No screenshot available")</div>
+                            }
+                        </div>
+
+                        <div class="url-scan-card url-scan-overview">
+                            <div class="url-scan-card-title">🛡️ Security Overview</div>
+                            @if (scan.Summary?.SecurityScore is int score)
+                            {
+                                <div class="trust-gauge-section url-scan-gauge">
+                                    <div class="trust-gauge-wrapper">
+                                        <div class="trust-gauge-arc" style="background: @GetTrustGaugeGradient(score);"></div>
+                                        <div class="trust-gauge-center">
+                                            <span class="trust-gauge-value">@score</span><span class="trust-gauge-max">/100</span>
+                                        </div>
+                                    </div>
+                                    <div class="trust-gauge-risklabel" style="color:@GetTrustGaugeColor(score);">@((scan.Summary.RiskLevel ?? "unknown").ToUpperInvariant()) RISK</div>
+                                </div>
+                            }
+                            <div class="url-scan-counts">
+                                @foreach (var sev in SeverityOrder)
+                                {
+                                    var count = scan.Summary?.FindingCounts != null && scan.Summary.FindingCounts.TryGetValue(sev, out var c) ? c : 0;
+                                    <span class="sev-badge sev-@sev @(count == 0 ? "sev-zero" : "")">@count @sev</span>
+                                }
+                            </div>
+                            <dl class="url-scan-kv">
+                                <dt>Status</dt><dd>@(scan.Summary?.StatusCode?.ToString() ?? "n/a") @(scan.Summary?.FetchError)</dd>
+                                <dt>Title</dt><dd>@(scan.Summary?.Title ?? "n/a")</dd>
+                                <dt>Input</dt><dd>@(scan.Input?.Encoding) → @(scan.Input?.Url)</dd>
+                                <dt>Scan time</dt><dd>@(scan.Summary?.DurationMs is long ms ? $"{ms / 1000.0:0.0}s" : "n/a")</dd>
+                            </dl>
+                            @if (scan.AiAssessment?.Success == true && scan.AiAssessment.Analysis != null)
+                            {
+                                var ai = scan.AiAssessment.Analysis;
+                                <div class="url-scan-ai">
+                                    <div class="url-scan-subtitle">🤖 AI Assessment @(UrlScanAiAnalysis.AsText(ai.PhishingLikelihood) is string ph ? $"· phishing likelihood: {ph}" : "")</div>
+                                    <p>@UrlScanAiAnalysis.AsText(ai.Summary)</p>
+                                    @{ var risks = UrlScanAiAnalysis.AsList(ai.KeyRisks); var recs = UrlScanAiAnalysis.AsList(ai.Recommendations); }
+                                    @if (risks.Any())
+                                    {
+                                        <div class="url-scan-muted">Key risks</div>
+                                        <ul>@foreach (var r in risks) { <li>@r</li> }</ul>
+                                    }
+                                    @if (recs.Any())
+                                    {
+                                        <div class="url-scan-muted">Recommendations</div>
+                                        <ul>@foreach (var r in recs) { <li>@r</li> }</ul>
+                                    }
+                                </div>
+                            }
+                            else if (enableAI && !string.IsNullOrEmpty(scan.AiAssessment?.Error))
+                            {
+                                <div class="url-scan-muted">AI assessment unavailable: @scan.AiAssessment!.Error</div>
+                            }
+                        </div>
+                    </div>
+
+                    <div class="url-scan-grid">
+                        <div class="url-scan-card">
+                            <div class="url-scan-card-title">🔐 Connection &amp; TLS</div>
+                            <div class="url-scan-subtitle">HTTP versions</div>
+                            <div class="chip-row">
+                                @foreach (var v in scan.Http?.Versions ?? new Dictionary<string, bool?>())
+                                {
+                                    <span class="chip @(v.Value == true ? "chip-good" : v.Value == false ? "chip-off" : "chip-unknown")" title="@(v.Value == null ? "Not determined" : v.Value == true ? "Supported" : "Not supported")">@FormatHttpVersion(v.Key)</span>
+                                }
+                            </div>
+                            <div class="url-scan-subtitle">TLS versions</div>
+                            @if (scan.Tls?.Probed == true && scan.Tls.Versions != null)
+                            {
+                                <div class="chip-row">
+                                    @foreach (var key in new[] { "tls1_3", "tls1_2", "tls1_1", "tls1_0" })
+                                    {
+                                        var supported = scan.Tls.Versions.TryGetValue(key, out var sup) && sup;
+                                        var legacy = key is "tls1_0" or "tls1_1";
+                                        <span class="chip @(supported ? (legacy ? "chip-bad" : "chip-good") : "chip-off")">@FormatTlsVersion(key) @(supported ? "✓" : "✗")</span>
+                                    }
+                                </div>
+                                <dl class="url-scan-kv">
+                                    <dt>Cipher</dt><dd>@(scan.Tls.PreferredCipher ?? "n/a")</dd>
+                                    @if (!string.IsNullOrEmpty(scan.Tls.Alpn)) { <dt>ALPN</dt><dd>@scan.Tls.Alpn</dd> }
+                                </dl>
+                            }
+                            else
+                            {
+                                <div class="url-scan-muted">@(scan.Tls?.Error ?? "TLS not probed")</div>
+                            }
+                            <dl class="url-scan-kv">
+                                <dt>HTTP→HTTPS</dt>
+                                <dd>@(scan.Http?.HttpsEnforcement?.Checked == true ? (scan.Http.HttpsEnforcement.Enforced == true ? "✓ redirected" : $"✗ not enforced ({scan.Http.HttpsEnforcement.StatusCode})") : "not checked")</dd>
+                            </dl>
+                        </div>
+
+                        <div class="url-scan-card">
+                            <div class="url-scan-card-title">📜 Certificate</div>
+                            @if (scan.Tls?.Certificate is { Error: null } cert)
+                            {
+                                <dl class="url-scan-kv">
+                                    <dt>Subject</dt><dd>@(cert.Subject?.GetValueOrDefault("CN") ?? cert.SubjectString)</dd>
+                                    <dt>Issuer</dt><dd>@(cert.Issuer?.GetValueOrDefault("O") ?? cert.Issuer?.GetValueOrDefault("CN") ?? cert.IssuerString)</dd>
+                                    <dt>Valid to</dt><dd class="@(cert.Expired || cert.DaysRemaining < 14 ? "text-danger" : "")">@FormatDate(cert.ValidTo) (@(cert.Expired ? "expired" : $"{cert.DaysRemaining} days left"))</dd>
+                                    <dt>Key</dt><dd>@cert.KeyAlgorithm @(cert.KeySize.HasValue ? $"{cert.KeySize}-bit" : "")</dd>
+                                    <dt>Signature</dt><dd>@cert.SignatureAlgorithm</dd>
+                                    <dt>Hostname</dt><dd>@(cert.HostnameMatch == true ? "✓ matches" : cert.HostnameMatch == false ? "✗ mismatch" : "n/a")@(cert.SelfSigned ? " · self-signed" : "")</dd>
+                                    <dt>Chain</dt><dd>@(cert.ChainLength ?? 1) certificate(s)</dd>
+                                    @if (cert.SubjectAltNames?.Any() == true)
+                                    {
+                                        <dt>SANs</dt><dd>@string.Join(", ", cert.SubjectAltNames.Take(6))@(cert.SubjectAltNames.Count > 6 ? $" +{cert.SubjectAltNames.Count - 6} more" : "")</dd>
+                                    }
+                                </dl>
+                            }
+                            else
+                            {
+                                <div class="url-scan-muted">@(scan.Tls?.Certificate?.Error ?? scan.Tls?.CertificateNote ?? scan.Tls?.Error ?? "No certificate information")</div>
+                            }
+                        </div>
+
+                        <div class="url-scan-card">
+                            <div class="url-scan-card-title">🏷️ Domain</div>
+                            @{ var reg = scan.Domain?.Registration; var dns = scan.Domain?.Dns; }
+                            <dl class="url-scan-kv">
+                                <dt>Domain</dt><dd>@(scan.Domain?.Name ?? scan.Target?.Hostname)</dd>
+                                @if (reg?.Success == true)
+                                {
+                                    <dt>Registered</dt><dd class="@(reg.AgeDays < 180 ? "text-danger" : "")">@FormatDate(reg.Created) (@FormatAge(reg.AgeDays))</dd>
+                                    <dt>Expires</dt><dd>@FormatDate(reg.Expires)</dd>
+                                    <dt>Registrar</dt><dd>@(reg.Registrar ?? "n/a")</dd>
+                                }
+                                else
+                                {
+                                    <dt>Registration</dt><dd>@(reg?.Error ?? "n/a")</dd>
+                                }
+                                @if (dns != null && !dns.Skipped)
+                                {
+                                    <dt>DNSSEC</dt><dd>@(dns.Dnssec == true ? "✓ validated" : "✗ not validated")</dd>
+                                    <dt>SPF</dt><dd>@(string.IsNullOrEmpty(dns.Spf) ? "✗ none" : "✓ " + Truncate(dns.Spf, 60))</dd>
+                                    <dt>DMARC</dt><dd>@(string.IsNullOrEmpty(dns.Dmarc) ? "✗ none" : "✓ " + Truncate(dns.Dmarc, 60))</dd>
+                                    <dt>CAA</dt><dd>@(dns.Caa?.Any() == true ? string.Join(", ", dns.Caa.Take(3)) : "none")</dd>
+                                    @if (dns.Cname?.Any() == true) { <dt>CNAME</dt><dd>@string.Join(" → ", dns.Cname)</dd> }
+                                }
+                            </dl>
+                        </div>
+
+                        <div class="url-scan-card">
+                            <div class="url-scan-card-title">🌍 Hosting &amp; CDN</div>
+                            <div class="chip-row">
+                                @if (scan.Network?.Cdn?.Detected == true)
+                                {
+                                    @foreach (var p in scan.Network.Cdn.Providers ?? new())
+                                    {
+                                        <span class="chip chip-info" title="@string.Join("\n", p.Evidence ?? new())">@p.Name</span>
+                                    }
+                                    @if (!string.IsNullOrEmpty(scan.Network.Cdn.CacheStatus)) { <span class="chip chip-unknown">cache: @scan.Network.Cdn.CacheStatus</span> }
+                                }
+                                else
+                                {
+                                    <span class="chip chip-unknown">No CDN detected</span>
+                                }
+                            </div>
+                            <table class="url-scan-table">
+                                <thead><tr><th>IP</th><th>ASN</th><th>Abuse</th></tr></thead>
+                                <tbody>
+                                    @foreach (var ip in scan.Network?.Ips ?? new())
+                                    {
+                                        <tr>
+                                            <td><code>@ip.Ip</code>@(string.IsNullOrEmpty(ip.Country) ? "" : $" ({ip.Country})")</td>
+                                            <td>@(ip.Asn.HasValue ? $"AS{ip.Asn} {ip.AsnName}" : ip.Isp ?? "n/a")</td>
+                                            <td>@(ip.AbuseConfidenceScore.HasValue ? $"{ip.AbuseConfidenceScore}%" : "-")</td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <div class="url-scan-card">
+                            <div class="url-scan-card-title">↪️ Redirect Chain (@(scan.Redirects?.Count ?? 0) hop@((scan.Redirects?.Count ?? 0) == 1 ? "" : "s"))</div>
+                            <ol class="url-scan-redirects">
+                                @foreach (var hop in scan.Redirects?.Chain ?? new())
+                                {
+                                    <li>
+                                        <span class="chip @(hop.StatusCode >= 400 ? "chip-bad" : hop.StatusCode >= 300 ? "chip-info" : "chip-good")">@hop.StatusCode</span>
+                                        <span class="url-scan-url">@hop.Url</span>
+                                        @if (hop.HttpsDowngrade == true) { <span class="chip chip-bad">HTTPS→HTTP</span> }
+                                        @if (hop.CrossDomain == true) { <span class="chip chip-warn">cross-domain</span> }
+                                    </li>
+                                }
+                            </ol>
+                            @if (!string.IsNullOrEmpty(scan.Redirects?.Error)) { <div class="text-danger small">@scan.Redirects!.Error</div> }
+                        </div>
+
+                        <div class="url-scan-card">
+                            <div class="url-scan-card-title">🧾 Security Headers</div>
+                            <table class="url-scan-table">
+                                <tbody>
+                                    @foreach (var h in scan.Http?.SecurityHeaders ?? new())
+                                    {
+                                        <tr title="@(h.Value ?? h.Note)">
+                                            <td>@h.Name</td>
+                                            <td><span class="chip @HeaderStatusClass(h.Status)">@h.Status</span></td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                            @{ var badCookies = scan.Http?.Cookies?.Where(c => c.Issues?.Any() == true).ToList() ?? new(); }
+                            @if (badCookies.Any())
+                            {
+                                <div class="url-scan-muted">Cookies missing flags: @string.Join("; ", badCookies.Take(4).Select(c => $"{c.Name} ({string.Join(", ", c.Issues!)})"))</div>
+                            }
+                        </div>
+                    </div>
+
+                    <div class="url-scan-card url-scan-wide">
+                        <div class="url-scan-card-title">🧩 Frameworks &amp; Dependencies (@(scan.Technologies?.Count ?? 0))</div>
+                        @if (scan.Technologies?.Any() == true)
                         {
-                            <button class="btn btn-sm btn-outline-secondary json-toggle-btn" @onclick="CollapseAllJsonNodes" title="Collapse all nodes">
-                                ▶ Collapse All
-                            </button>
-                            <button class="btn btn-sm btn-outline-secondary json-toggle-btn" @onclick="ExpandAllJsonNodes" title="Expand all nodes">
-                                ▼ Expand All
-                            </button>
-                            <button class="btn btn-sm btn-outline-secondary json-toggle-btn" @onclick="ToggleJsonExpand" title="@(jsonExpanded ? "Shrink viewer height" : "Expand viewer height")">
-                                @(jsonExpanded ? "⤡ Shrink" : "⤢ Expand")
-                            </button>
+                            <table class="url-scan-table">
+                                <thead><tr><th>Technology</th><th>Version</th><th>Category</th><th>Detected via</th><th>Known issues</th></tr></thead>
+                                <tbody>
+                                    @foreach (var t in scan.Technologies)
+                                    {
+                                        <tr class="@(t.Vulnerabilities?.Any() == true ? "row-vuln" : "")">
+                                            <td title="@string.Join("\n", t.Evidence ?? new())"><strong>@t.Name</strong></td>
+                                            <td>@(t.Version ?? "-")</td>
+                                            <td>@t.Category</td>
+                                            <td>@string.Join(", ", t.Sources ?? new())</td>
+                                            <td>
+                                                @foreach (var v in t.Vulnerabilities ?? new())
+                                                {
+                                                    <div><span class="sev-badge sev-@v.Severity">@v.Severity</span> @v.Note @(v.Advisories?.Any() == true ? $"({string.Join(", ", v.Advisories)})" : "")</div>
+                                                }
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
                         }
-                        <button class="btn btn-sm btn-outline-secondary json-toggle-btn" @onclick="ToggleJsonDisplay">
-                            @(showJson ? "Hide JSON" : "Show JSON")
-                        </button>
+                        else
+                        {
+                            <div class="url-scan-muted">No technologies fingerprinted.</div>
+                        }
+                    </div>
+
+                    <div class="url-scan-card url-scan-wide">
+                        <div class="url-scan-card-title">🚩 Findings (@(scan.Findings?.Count ?? 0))</div>
+                        <ul class="url-scan-findings">
+                            @foreach (var f in scan.Findings ?? new())
+                            {
+                                <li>
+                                    <span class="sev-badge sev-@f.Severity">@f.Severity</span>
+                                    <span class="url-scan-finding-cat">@f.Category</span>
+                                    <strong>@f.Title</strong>
+                                    @if (!string.IsNullOrEmpty(f.Detail)) { <div class="url-scan-muted">@f.Detail</div> }
+                                </li>
+                            }
+                        </ul>
                     </div>
                 </div>
-                @if (showJson)
-                {
-                    <div class="card-body json-container @(jsonExpanded ? "expanded" : "") @(!showSummary ? "no-summary" : "")">                        
-                        <div class="json-tree-panel p-3 rounded json-tree-container" id="jsonTreeOutput"></div>
-                    </div>
-                }
-            </div>
+            }
+            @JsonCard("URL Scan JSON Response")
         </div>
         </center>
     }
@@ -372,6 +650,9 @@
     private bool jsonTreeNeedsRender = false; // Set when formattedJson changes or the panel is (re)shown; guards OnAfterRenderAsync so unrelated re-renders (e.g. Expand All/Collapse All clicks) don't rebuild the tree DOM and wipe out collapsed state
     private bool worldMapNeedsRender = false; // Set when the summary section is re-shown, since the map's container div is destroyed/recreated by the @if block
     private bool enableAI = true; // Default to AI enabled
+    private bool isScanningUrl = false;
+    private Albatross.Services.UrlScanResult? urlScanResult;
+    private static readonly string[] SeverityOrder = { "critical", "high", "medium", "low", "info" };
     private string formattedJson = string.Empty;
     private Albatross.Services.AbuseIPDBApiResponse? abuseIpResult;
     private string? originCountryCode;
@@ -607,9 +888,179 @@
 
     private async Task ValidateAndSearchAsync()
     {
+        if (UrlScanInput.LooksLikeUrl(ipAddress))
+        {
+            await ScanUrlAsync();
+            return;
+        }
         await ValidateAndSearch();
-    }    private async Task CheckAbuseIPDBAsync()
+    }
+
+    // Enter key: URL input runs a URL scan, IP input runs the cloud range search
+    private async Task OnInputKeyDown(KeyboardEventArgs e)
     {
+        if (e.Key == "Enter" && !isSearching && !isScanningUrl && !isCheckingAbuse)
+        {
+            await ValidateAndSearchAsync();
+        }
+    }
+
+    /// <summary>
+    /// Runs a URL security scan through the worker and renders the results
+    /// </summary>
+    private async Task ScanUrlAsync()
+    {
+        if (!UrlScanInput.TryValidate(ipAddress, out var normalizedUrl, out var validationError))
+        {
+            statusMessage = validationError;
+            return;
+        }
+
+        isScanningUrl = true;
+        statusMessage = $"Scanning {normalizedUrl}...";
+        urlScanResult = null;
+        ClearIpResults();
+        formattedJson = string.Empty;
+        await JSRuntime.InvokeVoidAsync("AlbatrossWorldMap.destroy");
+        StateHasChanged();
+
+        try
+        {
+            urlScanResult = await AbuseIPDBService.ScanUrlAsync(normalizedUrl, enableAI);
+            formattedJson = BuildUrlScanJsonForDisplay(urlScanResult.RawJson);
+
+            var counts = urlScanResult.Response.Summary?.FindingCounts;
+            var total = counts?.Values.Sum() ?? 0;
+            statusMessage = $"URL scan completed: {total} finding(s), risk level {urlScanResult.Response.Summary?.RiskLevel ?? "unknown"}.";
+            jsonTreeNeedsRender = true;
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("console.error", "URL scan error: " + ex.Message);
+            statusMessage = $"Error scanning URL: {ex.Message}";
+        }
+        finally
+        {
+            isScanningUrl = false;
+            StateHasChanged();
+        }
+    }
+
+    // Pretty-print the scan JSON for the tree viewer, replacing the (large) base64 screenshot with a placeholder
+    private static string BuildUrlScanJsonForDisplay(string rawJson)
+    {
+        try
+        {
+            var node = JsonNode.Parse(rawJson);
+            if (node?["screenshot"]?["image"] is JsonValue image && image.TryGetValue<string>(out var dataUrl))
+            {
+                node["screenshot"]!["image"] = $"[data:image/jpeg;base64 omitted - {dataUrl.Length / 1024} KB, shown above]";
+            }
+            return node?.ToJsonString(new JsonSerializerOptions { WriteIndented = true }) ?? rawJson;
+        }
+        catch (JsonException)
+        {
+            return rawJson;
+        }
+    }
+
+    private void ClearIpResults()
+    {
+        abuseIpResult = null;
+        azureMatchedServices = null;
+        awsMatchedServices = null;
+        gcpMatchedServices = null;
+        oracleMatchedServices = null;
+        originCountryCode = null;
+        originCountryName = null;
+        targetCountries = new();
+        attackCategories = new();
+    }
+
+    private static string FormatHttpVersion(string key) => key switch
+    {
+        "http/1.1" => "HTTP/1.1",
+        "h2" => "HTTP/2",
+        "h3" => "HTTP/3",
+        _ => key
+    };
+
+    private static string FormatTlsVersion(string key) => key switch
+    {
+        "tls1_3" => "TLS 1.3",
+        "tls1_2" => "TLS 1.2",
+        "tls1_1" => "TLS 1.1",
+        "tls1_0" => "TLS 1.0",
+        _ => key
+    };
+
+    private static string HeaderStatusClass(string? status) => status switch
+    {
+        "good" => "chip-good",
+        "weak" => "chip-warn",
+        "missing" => "chip-bad",
+        _ => "chip-unknown"
+    };
+
+    private static string FormatDate(string? iso) =>
+        DateTime.TryParse(iso, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.AdjustToUniversal, out var d)
+            ? d.ToString("yyyy-MM-dd")
+            : iso ?? "n/a";
+
+    private static string FormatAge(int? days) => days switch
+    {
+        null => "age unknown",
+        < 60 => $"{days} days old",
+        < 730 => $"{days / 30} months old",
+        _ => $"{days / 365.25:0.#} years old"
+    };
+
+    private static string Truncate(string value, int max) => value.Length <= max ? value : value[..max] + "…";
+
+    // Shared JSON viewer card used by both the IP reputation and URL scan results
+    private RenderFragment JsonCard(string title) => __builder =>
+    {
+            <div class="card">            
+                <div class="card-header d-flex justify-content-between align-items-center" style="padding: 0.25rem 1rem !important; min-height: 32px !important; height: 32px !important; max-height: 32px !important; box-sizing: border-box !important; overflow: hidden !important;">
+                    <h5 style="margin: 0 !important; padding: 0 !important; font-size: 0.9rem !important; line-height: 1.1 !important; font-weight: 500 !important;">@title</h5>
+                    <div class="d-flex align-items-center">
+                        <button class="btn btn-sm btn-outline-secondary json-toggle-btn" @onclick="ToggleSummaryDisplay" title="@(showSummary ? "Hide the summary above" : "Show the summary above")">
+                            @(showSummary ? "▲ Hide Summary" : "▼ Show Summary")
+                        </button>
+                        @if (showJson)
+                        {
+                            <button class="btn btn-sm btn-outline-secondary json-toggle-btn" @onclick="CollapseAllJsonNodes" title="Collapse all nodes">
+                                ▶ Collapse All
+                            </button>
+                            <button class="btn btn-sm btn-outline-secondary json-toggle-btn" @onclick="ExpandAllJsonNodes" title="Expand all nodes">
+                                ▼ Expand All
+                            </button>
+                            <button class="btn btn-sm btn-outline-secondary json-toggle-btn" @onclick="ToggleJsonExpand" title="@(jsonExpanded ? "Shrink viewer height" : "Expand viewer height")">
+                                @(jsonExpanded ? "⤡ Shrink" : "⤢ Expand")
+                            </button>
+                        }
+                        <button class="btn btn-sm btn-outline-secondary json-toggle-btn" @onclick="ToggleJsonDisplay">
+                            @(showJson ? "Hide JSON" : "Show JSON")
+                        </button>
+                    </div>
+                </div>
+                @if (showJson)
+                {
+                    <div class="card-body json-container @(jsonExpanded ? "expanded" : "") @(!showSummary ? "no-summary" : "")">                        
+                        <div class="json-tree-panel p-3 rounded json-tree-container" id="jsonTreeOutput"></div>
+                    </div>
+                }
+            </div>
+    };
+
+    private async Task CheckAbuseIPDBAsync()
+    {
+        if (UrlScanInput.LooksLikeUrl(ipAddress))
+        {
+            await ScanUrlAsync();
+            return;
+        }
+
         if (!IsValidIPAddress(ipAddress))
         {
             statusMessage = "Invalid IP address. Please enter a valid public routable IPv4 or IPv6 address (private/reserved ranges are not allowed).";
@@ -617,6 +1068,7 @@
         }        isCheckingAbuse = true;
         statusMessage = "Checking IP reputation...";
         abuseIpResult = null;
+        urlScanResult = null;
         formattedJson = string.Empty;
         originCountryCode = null;
         originCountryName = null;
@@ -701,7 +1153,8 @@
         azureMatchedServices = null;
         awsMatchedServices = null;
         gcpMatchedServices = null;
-        oracleMatchedServices = null;        
+        oracleMatchedServices = null;
+        urlScanResult = null;
         if (!IsValidIPAddress(ipAddress))
         {
             statusMessage = "Invalid IP address. Please enter a valid public routable IPv4 or IPv6 address (private/reserved ranges are not allowed).";

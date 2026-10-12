@@ -5,7 +5,11 @@
  * 1. AbuseIPDB API - IP abuse reputation checking
  * 2. Cloudflare Radar API - ASN and network information lookup
  * 3. Cloudflare Workers AI - AI-powered reputation analysis (default: gpt-oss-120b, overridable via aimodel param)
- * 
+ * 4. URL scanning (worker/url-scanner.js) - triggered when a `url` parameter (plain, base64, base64url,
+ *    hex or percent-encoded) is supplied, or when `ipaddress` contains an encoded URL. Reports redirects,
+ *    HTTP/TLS versions, certificate, domain age (RDAP), DNS, IPs/ASN, CDN, technologies + known-vulnerable
+ *    versions, security headers and a Browser Rendering screenshot.
+ *
  * Features:
  * - Protects API keys from client exposure
  * - Handles CORS for browser requests
@@ -41,6 +45,11 @@
  *   "workerInfo": { ... metadata ... }
  * }
  */
+
+// Raw TCP sockets (TLS version probing) and Browser Rendering (URL screenshots)
+import { connect } from 'cloudflare:sockets';
+import puppeteer from '@cloudflare/puppeteer';
+import { extractScanTarget, runUrlScan } from './worker/url-scanner.js';
 
 // Import build-time generated constants (will be injected during build)
 // __BUILD_CONSTANTS_INJECTION_POINT__
@@ -524,6 +533,14 @@ async function handleCombinedRequest(request, env) {
     }
   }
 
+  // URL scan detection: the target is read from the ORIGINAL request URL because the
+  // lowercased URL used for HMAC would corrupt base64-encoded values. The HMAC above still
+  // covers the full query string (case-insensitively), so the target is authenticated.
+  const scanTarget = extractScanTarget(requestUrl);
+  if (scanTarget) {
+    return handleUrlScanRequest(request, env, scanTarget, origin);
+  }
+
   // Get URL parameters (use normalized lowercase URL for parsing)
   const url = new URL(isApiHostname ? request.url.toLowerCase() : normalizedUrl);
   const ipAddress = url.searchParams.get('ipaddress'); // lowercase parameter name
@@ -783,6 +800,78 @@ async function handleCombinedRequest(request, env) {
         }
       }
     );
+  }
+}
+
+/**
+ * Handle a URL scan request (separate from the IP analysis flow).
+ * Authentication / origin checks have already been performed by handleCombinedRequest.
+ *
+ * Query parameters (names are case-insensitive, values are case-preserved):
+ *   url | scanurl | target  - target URL; plain, percent-encoded, base64, base64url or hex
+ *   enableai                - "true" to include an AI assessment
+ *   aimodel                 - optional Workers AI model override (must be in ALLOWED_AI_MODELS)
+ *   screenshot              - "false" to skip the Browser Rendering screenshot
+ */
+async function handleUrlScanRequest(request, env, scanTarget, origin) {
+  const params = new URL(request.url.toLowerCase()).searchParams;
+  const enableAI = params.get('enableai') === 'true';
+  const aiModel = params.get('aimodel') || null;
+  const screenshot = params.get('screenshot') !== 'false';
+
+  const jsonResponse = (status, body) => new Response(JSON.stringify(body), {
+    status,
+    headers: {
+      'Content-Type': 'application/json',
+      ...corsHeaders(origin)
+    }
+  });
+
+  if (aiModel && !ALLOWED_AI_MODELS.includes(aiModel)) {
+    return jsonResponse(400, {
+      error: `Invalid parameter: aimodel must be one of ${ALLOWED_AI_MODELS.join(', ')}`,
+      buildInfo: BUILD_INFO
+    });
+  }
+
+  console.log('URL scan requested:', { param: scanTarget.param, length: scanTarget.raw.length, enableAI, screenshot });
+
+  try {
+    const { status, body } = await runUrlScan(scanTarget.raw, {
+      env,
+      connect,
+      puppeteer,
+      enableAI,
+      aiModel: aiModel || DEFAULT_AI_MODEL,
+      screenshot,
+      radarApiUrl: CLOUDFLARE_RADAR_API_URL,
+      radarToken: CLOUDFLARE_API_TOKEN,
+      abuseApiUrl: ABUSEIPDB_API_URL,
+      abuseApiKey: ABUSEIPDB_API_KEY
+    });
+
+    body.workerInfo = {
+      buildInfo: BUILD_INFO,
+      timestamp: new Date().toISOString(),
+      requestId: generateRequestId(),
+      sources: {
+        scan: status === 200 ? 'success' : 'error',
+        tls: body.tls ? (body.tls.probed ? 'success' : 'unavailable') : 'not-run',
+        rdap: body.domain?.registration ? (body.domain.registration.success ? 'success' : 'error') : 'not-run',
+        screenshot: !screenshot ? 'disabled' : body.screenshot ? (body.screenshot.success ? 'success' : 'error') : 'not-run',
+        ai: enableAI ? (body.aiAssessment?.success ? 'success' : 'error') : 'disabled'
+      }
+    };
+
+    return jsonResponse(status, body);
+  } catch (error) {
+    console.error('URL scan error:', error);
+    return jsonResponse(500, {
+      scanType: 'url',
+      error: 'Internal server error during URL scan',
+      details: error.message,
+      buildInfo: BUILD_INFO
+    });
   }
 }
 

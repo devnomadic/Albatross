@@ -11,6 +11,10 @@ enabled = true
 [ai]
 binding = "AI"
 
+# Browser Rendering binding (URL scan screenshots via @cloudflare/puppeteer)
+[browser]
+binding = "BROWSER"
+
 # Production environment (default)
 [env.production]
 name = "abuseipdb"
@@ -25,6 +29,9 @@ ENVIRONMENT = "production"
 [env.production.ai]
 binding = "AI"
 
+[env.production.browser]
+binding = "BROWSER"
+
 # Preview environment
 [env.preview]
 name = "abuseipdb-preview"
@@ -38,6 +45,9 @@ ENVIRONMENT = "preview"
 
 [env.preview.ai]
 binding = "AI"
+
+[env.preview.browser]
+binding = "BROWSER"
 
 # Environment variables (these will be set via GitHub Actions secrets)
 # [vars]

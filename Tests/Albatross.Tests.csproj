@@ -22,4 +22,9 @@
     <Using Include="Xunit" />
   </ItemGroup>
 
+  <!-- Compile the real URL scan input helper (no dependency on the Blazor project) -->
+  <ItemGroup>
+    <Compile Include="../Services/UrlScanInput.cs" Link="Shared/UrlScanInput.cs" />
+  </ItemGroup>
+
 </Project>

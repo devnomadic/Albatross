@@ -3,7 +3,7 @@
   "info": {
     "title": "Albatross IP Analysis API",
     "version": "1.0.0",
-    "description": "Comprehensive IP address analysis including cloud provider detection, abuse reputation checking via AbuseIPDB, ASN information from Cloudflare Radar, and AI-powered risk assessment.",
+    "description": "Comprehensive IP address analysis including cloud provider detection, abuse reputation checking via AbuseIPDB, ASN information from Cloudflare Radar, and AI-powered risk assessment. Also supports passive URL security scanning (pass a base64url-encoded URL in the 'url' parameter).",
     "contact": {
       "name": "Albatross API Support",
       "url": "https://albatross.devnomadic.com"
@@ -27,10 +27,34 @@
         "operationId": "analyzeIP",
         "parameters": [
           {
+            "name": "url",
+            "in": "query",
+            "required": false,
+            "description": "Target URL for a passive security scan. Accepts base64url (preferred), base64, hex, percent-encoded or plain http(s) URLs. When present, the response is a URL scan report instead of IP analysis. Private, loopback and internal targets are rejected.",
+            "schema": {
+              "type": "string",
+              "example": "aHR0cHM6Ly9leGFtcGxlLmNvbS8"
+            }
+          },
+          {
+            "name": "screenshot",
+            "in": "query",
+            "required": false,
+            "description": "URL scans only: set to 'false' to skip the Browser Rendering screenshot.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "true",
+                "false"
+              ],
+              "default": "true"
+            }
+          },
+          {
             "name": "ipaddress",
             "in": "query",
-            "required": true,
-            "description": "The IPv4 or IPv6 address to analyze. Must be a valid public routable IP address.",
+            "required": false,
+            "description": "The IPv4 or IPv6 address to analyze. Must be a valid public routable IP address. Required unless 'url' is supplied. An encoded http(s) URL supplied here is auto-detected and scanned as a URL.",
             "schema": {
               "type": "string",
               "example": "8.8.8.8"
@@ -43,7 +67,13 @@
             "description": "Filter cloud provider matches. Options: all, azure, aws, gcp, oracle. Omit this parameter to disable cloud provider manifest search.",
             "schema": {
               "type": "string",
-              "enum": ["all", "azure", "aws", "gcp", "oracle"]
+              "enum": [
+                "all",
+                "azure",
+                "aws",
+                "gcp",
+                "oracle"
+              ]
             }
           },
           {
@@ -103,7 +133,14 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/SuccessResponse"
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/SuccessResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/UrlScanResponse"
+                    }
+                  ]
                 }
               }
             }
@@ -189,19 +226,32 @@
                 "properties": {
                   "cloudSearch": {
                     "type": "string",
-                    "enum": ["success", "not-requested"]
+                    "enum": [
+                      "success",
+                      "not-requested"
+                    ]
                   },
                   "abuseipdb": {
                     "type": "string",
-                    "enum": ["success", "error"]
+                    "enum": [
+                      "success",
+                      "error"
+                    ]
                   },
                   "radar": {
                     "type": "string",
-                    "enum": ["success", "error"]
+                    "enum": [
+                      "success",
+                      "error"
+                    ]
                   },
                   "ai": {
                     "type": "string",
-                    "enum": ["success", "error", "disabled"]
+                    "enum": [
+                      "success",
+                      "error",
+                      "disabled"
+                    ]
                   }
                 }
               },
@@ -249,6 +299,98 @@
                 "example": 25
               }
             }
+          }
+        }
+      },
+      "UrlScanResponse": {
+        "type": "object",
+        "description": "URL scan report (returned when the 'url' parameter is supplied).",
+        "properties": {
+          "scanType": {
+            "type": "string",
+            "example": "url"
+          },
+          "input": {
+            "type": "object",
+            "description": "Raw value, detected encoding and decoded URL"
+          },
+          "target": {
+            "type": "object"
+          },
+          "summary": {
+            "type": "object",
+            "description": "finalUrl, statusCode, title, securityScore (0-100), riskLevel, findingCounts, durationMs"
+          },
+          "redirects": {
+            "type": "object",
+            "description": "Hop-by-hop redirect chain with downgrade and cross-domain flags"
+          },
+          "http": {
+            "type": "object",
+            "description": "HTTP/1.1, h2 and h3 support with evidence, HTTPS enforcement, selected headers, security header analysis, cookie flags"
+          },
+          "tls": {
+            "type": "object",
+            "description": "TLS 1.0-1.3 support, ciphers, ALPN and parsed leaf certificate"
+          },
+          "domain": {
+            "type": "object",
+            "description": "RDAP registration (created, expires, ageDays, registrar) and DNS (A, AAAA, CNAME, NS, MX, CAA, SPF, DMARC, DNSSEC)"
+          },
+          "network": {
+            "type": "object",
+            "description": "Resolved IPs with ASN and abuse score, CDN providers with evidence"
+          },
+          "technologies": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            },
+            "description": "Fingerprinted frameworks and libraries with versions and known vulnerabilities"
+          },
+          "content": {
+            "type": "object",
+            "description": "Title, scripts without SRI, mixed content, insecure forms, third-party hosts"
+          },
+          "securityTxt": {
+            "type": "object"
+          },
+          "screenshot": {
+            "type": "object",
+            "description": "success, image (data:image/jpeg;base64 URL), width, height"
+          },
+          "findings": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "severity": {
+                  "type": "string",
+                  "enum": [
+                    "critical",
+                    "high",
+                    "medium",
+                    "low",
+                    "info"
+                  ]
+                },
+                "category": {
+                  "type": "string"
+                },
+                "title": {
+                  "type": "string"
+                },
+                "detail": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "aiAssessment": {
+            "type": "object"
+          },
+          "workerInfo": {
+            "type": "object"
           }
         }
       }

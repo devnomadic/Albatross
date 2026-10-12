@@ -4,6 +4,7 @@ A modern Blazor WebAssembly application that provides comprehensive IP address a
 
 ## Features
 
+- **URL Security Scanning**: Passive scan of any public URL: redirect chain, HTTP/1.1, HTTP/2 and HTTP/3 support, TLS 1.0-1.3 support and certificate details, domain registration age (RDAP), DNS (SPF, DMARC, CAA, DNSSEC), hosting IPs/ASN, CDN detection, framework and dependency fingerprinting with known-vulnerable versions flagged, security headers, cookie flags and a screenshot of the rendered page
 - **IP Abuse Checking**: Query the AbuseIPDB API to check if an IP address has been reported for malicious activity
 - **AI-Powered Reputation Analysis**: Advanced risk assessment using Cloudflare Workers AI with Llama 3.1 70B Instruct model
 - **Cloud IP Range Detection**: Identify if an IP address belongs to major cloud providers (AWS, Azure, GCP, Oracle Cloud)
@@ -351,6 +352,50 @@ Example AI Response:
     "timestamp": "2025-10-28T04:45:00.000Z"
   }
 }
+```
+
+## URL Security Scanning
+
+Enter a full `http://` or `https://` URL and press **Scan URL** (pressing Search or Enter with a URL also starts a scan).
+
+![Sample URL scan of https://jquery.com/](docs/images/url-scan-sample.jpg)
+
+### How it works
+
+1. The SPA validates the URL (scheme, no credentials, ports 80/443/8080/8443, no localhost, internal or private-IP targets) and sends it to the worker **base64url-encoded** in the `url` query parameter.
+2. The worker detects a URL target in `url`, `scanurl` or `target`, or an encoded URL supplied in `ipaddress`. It accepts plain, percent-encoded, base64, base64url and hex values, and routes them to a separate scan function in [worker/url-scanner.js](worker/url-scanner.js) instead of the IP analysis.
+3. The target value is read from the original-case query string, because the lowercased URL used for HMAC validation would corrupt base64. The HMAC still covers the whole query string.
+4. The scanner re-validates the URL and refuses hostnames that resolve to private or reserved addresses. It then runs these checks in parallel:
+
+| Area | Source |
+|------|--------|
+| Redirect chain, HTTPS downgrade, cross-domain hops | Manual hop-by-hop `fetch` (max 10 hops, 25s budget) |
+| HTTP/2 and HTTP/3 | TLS ALPN, DNS `HTTPS` record ALPN, `Alt-Svc` header |
+| TLS 1.0 / 1.1 / 1.2 / 1.3, cipher, certificate | Raw TLS ClientHello probes over `cloudflare:sockets`, with the leaf certificate parsed from the TLS 1.2 handshake |
+| Domain age, registrar, expiry | RDAP via rdap.org |
+| A/AAAA/CNAME/NS/MX/CAA, SPF, DMARC, DNSSEC | Cloudflare DNS over HTTPS |
+| ASN and abuse score of hosting IPs | Cloudflare Radar, AbuseIPDB |
+| CDN | Response headers, CNAME chain, ASN names |
+| Frameworks and dependencies | Headers, cookies, HTML, script URLs, and JavaScript globals in the rendered page, matched against a small static table of known-vulnerable or end-of-life versions |
+| Security headers, cookies, SRI, mixed content, security.txt | Response analysis |
+| Screenshot | Cloudflare Browser Rendering (`BROWSER` binding, `@cloudflare/puppeteer`) |
+
+Findings are scored from 100 down: 30 per critical, 15 per high, 7 per medium and 3 per low finding. When AI is enabled, Workers AI adds a written assessment.
+
+### Limitations
+
+- Workers sockets cannot connect to Cloudflare IP ranges, so TLS versions and certificates for Cloudflare-proxied sites are reported as unavailable.
+- Servers that only speak TLS 1.3 encrypt their certificate, so certificate details are unavailable from the probe.
+- The vulnerable-version table is intentionally small. It is a signal, not a substitute for a full software composition analysis or CVE database.
+- Screenshots need Browser Rendering on the Cloudflare account. Without the binding, the scan still runs and reports the screenshot as unavailable.
+- The scan is passive. It only requests the target page, `http://host/` and `/.well-known/security.txt`.
+
+### API
+
+```bash
+# Base64url-encode the target and call the API host (no HMAC required there)
+URL_B64=$(printf 'https://example.com/' | base64 | tr '+/' '-_' | tr -d '=')
+curl "https://albatross-api.devnomadic.com/?url=${URL_B64}&enableai=true&screenshot=true"
 ```
 
 ## Current Status
