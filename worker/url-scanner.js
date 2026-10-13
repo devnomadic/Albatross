@@ -395,14 +395,89 @@ async function collectDns(hostname, registrableDomain) {
 // RDAP domain registration
 // ---------------------------------------------------------------------------
 
+const IANA_RDAP_BOOTSTRAP_URL = 'https://data.iana.org/rdap/dns.json';
+const RDAP_CACHE_TTL_SECONDS = 6 * 3600;
+let rdapBootstrapCache = null; // { loadedAt, map: Map<tld, baseUrl> } - per isolate
+
+/**
+ * Resolve the authoritative RDAP server for a TLD from the IANA bootstrap registry (RFC 9224).
+ * Querying the registry directly avoids the shared rdap.org redirector, which rate-limits
+ * heavily when many Cloudflare Workers share the same egress IPs.
+ */
+async function getRdapBaseUrl(domain) {
+  const tld = domain.split('.').pop().toLowerCase();
+  if (!rdapBootstrapCache || Date.now() - rdapBootstrapCache.loadedAt > 24 * 3600 * 1000) {
+    try {
+      const res = await fetchWithTimeout(IANA_RDAP_BOOTSTRAP_URL, {
+        headers: { Accept: 'application/json', 'User-Agent': SCANNER_USER_AGENT },
+        cf: { cacheTtl: 86400, cacheEverything: true }
+      }, 5000);
+      if (res.ok) {
+        const json = await res.json();
+        const map = new Map();
+        for (const [tlds, urls] of json.services || []) {
+          const base = (urls || []).find((u) => u.startsWith('https://')) || urls?.[0];
+          for (const t of tlds) if (base) map.set(t.toLowerCase(), base.endsWith('/') ? base : `${base}/`);
+        }
+        rdapBootstrapCache = { loadedAt: Date.now(), map };
+      }
+    } catch { /* fall back to rdap.org */ }
+  }
+  return rdapBootstrapCache?.map.get(tld) || null;
+}
+
+async function fetchRdap(url) {
+  const init = {
+    headers: { Accept: 'application/rdap+json, application/json', 'User-Agent': SCANNER_USER_AGENT },
+    redirect: 'follow',
+    cf: { cacheTtl: RDAP_CACHE_TTL_SECONDS, cacheEverything: true }
+  };
+  let res = await fetchWithTimeout(url, init, 8000);
+  if (res.status === 429 || res.status === 503) {
+    // One retry, honouring a short Retry-After
+    const retryAfter = parseInt(res.headers.get('retry-after') || '', 10);
+    const waitMs = Number.isFinite(retryAfter) ? Math.min(retryAfter * 1000, 3000) : 1500;
+    try { await res.body?.cancel(); } catch { /* ignore */ }
+    await new Promise((r) => setTimeout(r, waitMs));
+    res = await fetchWithTimeout(url, init, 8000);
+  }
+  return res;
+}
+
+function rdapHttpError(status, server) {
+  if (status === 429) return `RDAP lookup was rate-limited by ${server} (HTTP 429). Try again in a few minutes.`;
+  if (status === 404) return `Domain not found in the registry's RDAP service (${server})`;
+  return `RDAP lookup failed: HTTP ${status} from ${server}`;
+}
+
 async function lookupRdap(domain) {
   if (!domain) return { success: false, error: 'No registrable domain (IP address target)' };
   try {
-    const res = await fetchWithTimeout(`${RDAP_BOOTSTRAP_URL}${encodeURIComponent(domain)}`, {
-      headers: { Accept: 'application/rdap+json, application/json', 'User-Agent': SCANNER_USER_AGENT },
-      redirect: 'follow'
-    }, 8000);
-    if (!res.ok) return { success: false, error: `RDAP lookup failed: HTTP ${res.status}` };
+    const registryBase = await getRdapBaseUrl(domain);
+    const attempts = [
+      ...(registryBase ? [`${registryBase}domain/${encodeURIComponent(domain)}`] : []),
+      `${RDAP_BOOTSTRAP_URL}${encodeURIComponent(domain)}`
+    ];
+
+    let res = null;
+    let lastError = null;
+    for (const url of attempts) {
+      let attempt;
+      try {
+        attempt = await fetchRdap(url);
+      } catch (error) {
+        lastError = `RDAP lookup failed: ${error.message}`;
+        continue;
+      }
+      if (attempt.ok) {
+        res = attempt;
+        break;
+      }
+      lastError = rdapHttpError(attempt.status, new URL(url).hostname);
+      try { await attempt.body?.cancel(); } catch { /* ignore */ }
+      if (attempt.status === 404) break; // authoritative "not found" - no point asking the redirector
+    }
+    if (!res) return { success: false, error: lastError || 'RDAP lookup failed' };
     const json = await res.json();
 
     const eventDate = (action) => json.events?.find((e) => e.eventAction === action)?.eventDate || null;
@@ -410,12 +485,18 @@ async function lookupRdap(domain) {
     const expires = eventDate('expiration');
     const updated = eventDate('last changed');
 
+    // RFC 9537 redaction markers (e.g. auDA withholds registration and expiry dates for all .au names)
+    const redactedTypes = (json.redacted || []).map((r) => `${r.name?.type || ''} ${r.name?.description || ''} ${r.prePath || ''}`.toLowerCase());
+    const registrationRedacted = !created && redactedTypes.some((t) => t.includes('registration'));
+    const expirationRedacted = !expires && redactedTypes.some((t) => t.includes('expiration'));
+
     const registrarEntity = (json.entities || []).find((e) => (e.roles || []).includes('registrar'));
     const vcardFn = registrarEntity?.vcardArray?.[1]?.find((f) => f[0] === 'fn')?.[3] || null;
 
     const now = new Date();
     const createdDate = created ? new Date(created) : null;
     const expiresDate = expires ? new Date(expires) : null;
+    const tld = domain.split('.').pop();
 
     return {
       success: true,
@@ -425,6 +506,11 @@ async function lookupRdap(domain) {
       updated,
       ageDays: createdDate && !isNaN(createdDate) ? daysBetween(createdDate, now) : null,
       daysUntilExpiry: expiresDate && !isNaN(expiresDate) ? daysBetween(now, expiresDate) : null,
+      registrationDateRedacted: registrationRedacted,
+      expirationDateRedacted: expirationRedacted,
+      note: registrationRedacted
+        ? `The .${tld} registry does not publish registration or expiry dates (redacted under registry policy), so domain age cannot be determined.`
+        : (!created ? 'The registry did not return a registration date.' : null),
       registrar: vcardFn,
       status: json.status || [],
       nameservers: (json.nameservers || []).map((n) => n.ldhName?.toLowerCase().replace(/\.$/, '')).filter(Boolean),
@@ -483,6 +569,11 @@ async function followRedirects(startUrl) {
       server: res.headers.get('server'),
       timeMs: Date.now() - started
     };
+    const hopCookies = getSetCookies(res.headers);
+    if (hopCookies.length) {
+      Object.defineProperty(entry, '_setCookies', { value: hopCookies, enumerable: false });
+      entry.cookiesSet = hopCookies.length;
+    }
 
     if (!isRedirect) {
       chain.push(entry);
@@ -571,25 +662,245 @@ function getSetCookies(headers) {
   return raw ? raw.split(/,(?=\s*[^;,=\s]+=[^;,]*)/) : [];
 }
 
-function analyzeCookies(headers, isHttps) {
-  return getSetCookies(headers).slice(0, 30).map((cookie) => {
-    const [nameValue, ...attrs] = cookie.split(';').map((s) => s.trim());
-    const name = nameValue.split('=')[0];
-    const attrLower = attrs.map((a) => a.toLowerCase());
-    const sameSite = attrLower.find((a) => a.startsWith('samesite='))?.split('=')[1] || null;
+/**
+ * Known cookie names -> purpose category. Matched in order; first match wins.
+ * Categories: Session, Security, Analytics, Marketing, Consent, Functional, Load balancing.
+ */
+const COOKIE_PURPOSES = [
+  { pattern: /^(PHPSESSID|JSESSIONID|ASP\.NET_SessionId|\.AspNetCore\.(Session|Cookies|Identity\.Application)|laravel_session|connect\.sid|sessionid|_session_id|session|sid|ci_session|CFID|CFTOKEN|_[a-z0-9_]+_session|wordpress_logged_in_.*|wordpress_sec_.*|wp-settings-.*)$/i, category: 'Session', vendor: null },
+  { pattern: /^(XSRF-TOKEN|csrftoken|_csrf|csrf_token|__RequestVerificationToken.*|\.AspNetCore\.Antiforgery\..*)$/i, category: 'Security', vendor: 'CSRF protection' },
+  { pattern: /^(__cf_bm|cf_clearance|__cfruid|_cfuvid|__cflb|cf_chl_.*)$/i, category: 'Security', vendor: 'Cloudflare' },
+  { pattern: /^(incap_ses_.*|visid_incap_.*|nlbi_.*)$/i, category: 'Security', vendor: 'Imperva' },
+  { pattern: /^(_px.*|_pxhd|_pxvid)$/i, category: 'Security', vendor: 'HUMAN / PerimeterX' },
+  { pattern: /^(datadome)$/i, category: 'Security', vendor: 'DataDome' },
+  { pattern: /^(AWSALB|AWSALBCORS|AWSELB|AWSALBTG|AWSALBTGCORS)$/i, category: 'Load balancing', vendor: 'AWS' },
+  { pattern: /^(ARRAffinity|ARRAffinitySameSite)$/i, category: 'Load balancing', vendor: 'Azure App Service' },
+  { pattern: /^(BIGipServer.*|TS[0-9a-f]{6,})$/i, category: 'Load balancing', vendor: 'F5' },
+  { pattern: /^(OptanonConsent|OptanonAlertBoxClosed|CookieConsent|cookieyes-consent|euconsent-v2|__cmpcc.*|cookielawinfo-.*|didomi_token|_iub_cs-.*|CookieControl|cookie_consent.*)$/i, category: 'Consent', vendor: 'Consent manager' },
+  { pattern: /^(_ga|_ga_.*|_gid|_gat.*|__utm[a-z]+|_dc_gtm_.*)$/i, category: 'Analytics', vendor: 'Google Analytics' },
+  { pattern: /^(_hj.*)$/i, category: 'Analytics', vendor: 'Hotjar' },
+  { pattern: /^(_clck|_clsk|CLID|SM|MR)$/i, category: 'Analytics', vendor: 'Microsoft Clarity' },
+  { pattern: /^(_pk_.*|MATOMO_SESSID)$/i, category: 'Analytics', vendor: 'Matomo' },
+  { pattern: /^(ajs_.*)$/i, category: 'Analytics', vendor: 'Segment' },
+  { pattern: /^(amp_.*|AMP_.*)$/i, category: 'Analytics', vendor: 'Amplitude' },
+  { pattern: /^(mp_.*_mixpanel)$/i, category: 'Analytics', vendor: 'Mixpanel' },
+  { pattern: /^(s_cc|s_sq|s_vi|s_fid|AMCV_.*|AMCVS_.*)$/i, category: 'Analytics', vendor: 'Adobe Analytics' },
+  { pattern: /^(_fbp|_fbc|fr|datr|sb)$/i, category: 'Marketing', vendor: 'Meta' },
+  { pattern: /^(_gcl_.*|IDE|test_cookie|NID|DSID|__gads|__gpi|__eoi|1P_JAR|AEC)$/i, category: 'Marketing', vendor: 'Google Ads' },
+  { pattern: /^(_uetsid|_uetvid|MUID|MSPTC|ANONCHK)$/i, category: 'Marketing', vendor: 'Microsoft Advertising' },
+  { pattern: /^(_tt_.*|_ttp|ttwid|tt_.*)$/i, category: 'Marketing', vendor: 'TikTok' },
+  { pattern: /^(li_.*|bcookie|bscookie|lidc|UserMatchHistory|AnalyticsSyncHistory|lang)$/i, category: 'Marketing', vendor: 'LinkedIn' },
+  { pattern: /^(_pin_unauth|_pinterest_.*)$/i, category: 'Marketing', vendor: 'Pinterest' },
+  { pattern: /^(_rdt_uuid)$/i, category: 'Marketing', vendor: 'Reddit' },
+  { pattern: /^(personalization_id|guest_id.*|muc_ads)$/i, category: 'Marketing', vendor: 'X / Twitter' },
+  { pattern: /^(YSC|VISITOR_INFO1_LIVE|VISITOR_PRIVACY_METADATA|__Secure-YEC|LOGIN_INFO)$/i, category: 'Marketing', vendor: 'YouTube' },
+  { pattern: /^(__qca|_parsely_.*|__hstc|hubspotutk|__hssc|__hssrc|_hjAbsoluteSessionInProgress)$/i, category: 'Marketing', vendor: 'Marketing automation' },
+  { pattern: /^(_cb|_cb_svref|_chartbeat\d*|_v__chartbeat\d*)$/i, category: 'Analytics', vendor: 'Chartbeat' },
+  { pattern: /^(__pat|__pvi|__tbc|xbc|__pnahc|__tac|__tae|__pil)$/i, category: 'Analytics', vendor: 'Piano' },
+  { pattern: /^(optimizely.*)$/i, category: 'Analytics', vendor: 'Optimizely' },
+  { pattern: /^(cX_.*|gckp)$/i, category: 'Marketing', vendor: 'Cxense' },
+  { pattern: /^(_bti|_bts|bounceClientVisit.*)$/i, category: 'Marketing', vendor: 'Wunderkind' },
+  { pattern: /^(cto_.*)$/i, category: 'Marketing', vendor: 'Criteo' },
+  { pattern: /^(pbjs_.*|_sharedid.*|sharedid)$/i, category: 'Marketing', vendor: 'Prebid' },
+  { pattern: /^(__stripe_mid|__stripe_sid)$/i, category: 'Security', vendor: 'Stripe (fraud prevention)' },
+  { pattern: /^(_OT_.*|OTAdditionalConsentString)$/i, category: 'Consent', vendor: 'OneTrust' },
+  { pattern: /^(sp|_sp_id\..*|_sp_ses\..*)$/i, category: 'Analytics', vendor: 'Snowplow' },
+  { pattern: /^(nol_fpid|IMRID)$/i, category: 'Analytics', vendor: 'Nielsen' },
+  { pattern: /^(_lr_.*|_pubcid|panoramaId.*|_cc_.*|__gpi)$/i, category: 'Marketing', vendor: 'Ad tech' },
+  { pattern: /^(locale|language|lang|i18n.*|currency|theme|timezone|tz|country|region|preferred_color_mode)$/i, category: 'Functional', vendor: null }
+];
+
+/** Third-party cookie domains -> vendor/category (used when the cookie name is not recognised). */
+const COOKIE_DOMAIN_VENDORS = [
+  [/(^|\.)(doubleclick\.net|googlesyndication\.com|googleadservices\.com)$/, 'Marketing', 'Google Ads'],
+  [/(^|\.)(google-analytics\.com|analytics\.google\.com)$/, 'Analytics', 'Google Analytics'],
+  [/(^|\.)(facebook\.com|facebook\.net)$/, 'Marketing', 'Meta'],
+  [/(^|\.)(bing\.com|clarity\.ms)$/, 'Marketing', 'Microsoft'],
+  [/(^|\.)(linkedin\.com|licdn\.com)$/, 'Marketing', 'LinkedIn'],
+  [/(^|\.)(tiktok\.com|tiktokw\.us)$/, 'Marketing', 'TikTok'],
+  [/(^|\.)(twitter\.com|x\.com|ads-twitter\.com)$/, 'Marketing', 'X / Twitter'],
+  [/(^|\.)(youtube\.com)$/, 'Marketing', 'YouTube'],
+  [/(^|\.)(adnxs\.com)$/, 'Marketing', 'Xandr'],
+  [/(^|\.)(rubiconproject\.com)$/, 'Marketing', 'Magnite'],
+  [/(^|\.)(pubmatic\.com)$/, 'Marketing', 'PubMatic'],
+  [/(^|\.)(openx\.net)$/, 'Marketing', 'OpenX'],
+  [/(^|\.)(casalemedia\.com)$/, 'Marketing', 'Index Exchange'],
+  [/(^|\.)(adsrvr\.org)$/, 'Marketing', 'The Trade Desk'],
+  [/(^|\.)(criteo\.com|criteo\.net)$/, 'Marketing', 'Criteo'],
+  [/(^|\.)(demdex\.net|everesttech\.net|omtrdc\.net)$/, 'Marketing', 'Adobe'],
+  [/(^|\.)(smartadserver\.com)$/, 'Marketing', 'Equativ'],
+  [/(^|\.)(3lift\.com)$/, 'Marketing', 'TripleLift'],
+  [/(^|\.)(gumgum\.com)$/, 'Marketing', 'GumGum'],
+  [/(^|\.)(taboola\.com)$/, 'Marketing', 'Taboola'],
+  [/(^|\.)(outbrain\.com)$/, 'Marketing', 'Outbrain'],
+  [/(^|\.)(amazon-adsystem\.com)$/, 'Marketing', 'Amazon Ads'],
+  [/(^|\.)(id5-sync\.com)$/, 'Marketing', 'ID5'],
+  [/(^|\.)(pippio\.com|rlcdn\.com)$/, 'Marketing', 'LiveRamp'],
+  [/(^|\.)(rezync\.com|zeotap\.com)$/, 'Marketing', 'Identity resolution'],
+  [/(^|\.)(mathtag\.com|ml314\.com|ladsp\.com|bidswitch\.net|agkn\.com|crwdcntrl\.net|bluekai\.com|tapad\.com|adform\.net|teads\.tv|yieldmo\.com|sharethrough\.com|sonobi\.com|media\.net|quantserve\.com|prmutv\.co|temu\.com|cxense\.com)$/, 'Marketing', 'Ad tech'],
+  [/(^|\.)(scorecardresearch\.com)$/, 'Analytics', 'Comscore'],
+  [/(^|\.)(imrworldwide\.com)$/, 'Analytics', 'Nielsen'],
+  [/(^|\.)(dotmetrics\.net)$/, 'Analytics', 'Dotmetrics'],
+  [/(^|\.)(chartbeat\.(com|net))$/, 'Analytics', 'Chartbeat'],
+  [/(^|\.)(optimizely\.com)$/, 'Analytics', 'Optimizely'],
+  [/(^|\.)(tinypass\.com|piano\.io)$/, 'Analytics', 'Piano'],
+  [/(^|\.)(hotjar\.com)$/, 'Analytics', 'Hotjar'],
+  [/(^|\.)(moatads\.com)$/, 'Analytics', 'Moat']
+];
+
+const SENSITIVE_COOKIE_CATEGORIES = new Set(['Session', 'Security', 'Load balancing']);
+
+const TRACKING_CATEGORIES = new Set(['Analytics', 'Marketing']);
+const SESSION_NAME_HINT = /(sess|sid$|auth|token|login|jwt)/i;
+const MAX_COOKIES = 150;
+const BROWSER_COOKIE_LIFETIME_CAP_DAYS = 400; // Chrome caps cookie lifetime at 400 days
+
+function classifyCookie(name, domain) {
+  const match = COOKIE_PURPOSES.find((c) => c.pattern.test(name));
+  if (match) return { category: match.category, vendor: match.vendor };
+  const byDomain = COOKIE_DOMAIN_VENDORS.find(([re]) => re.test(domain || ''));
+  if (byDomain) return { category: byDomain[1], vendor: byDomain[2] };
+  if (SESSION_NAME_HINT.test(name) && name.length <= 40) return { category: 'Session', vendor: null };
+  return { category: 'Unclassified', vendor: null };
+}
+
+/**
+ * Parse a Set-Cookie header value into attributes (value is not retained, only its length).
+ */
+function parseSetCookie(header, requestUrl) {
+  const [nameValue, ...attrs] = header.split(';').map((s) => s.trim());
+  const eq = nameValue.indexOf('=');
+  const name = (eq >= 0 ? nameValue.substring(0, eq) : nameValue).trim();
+  const value = eq >= 0 ? nameValue.substring(eq + 1) : '';
+  const attr = {};
+  for (const a of attrs) {
+    const i = a.indexOf('=');
+    const key = (i >= 0 ? a.substring(0, i) : a).trim().toLowerCase();
+    attr[key] = i >= 0 ? a.substring(i + 1).trim() : true;
+  }
+
+  let expires = null;
+  if (attr['max-age'] !== undefined && /^-?\d+$/.test(String(attr['max-age']))) {
+    expires = new Date(Date.now() + parseInt(attr['max-age'], 10) * 1000).toISOString();
+  } else if (typeof attr.expires === 'string' && !isNaN(Date.parse(attr.expires))) {
+    expires = new Date(attr.expires).toISOString();
+  }
+
+  const host = safeHost(requestUrl) || '';
+  return {
+    name,
+    domain: (typeof attr.domain === 'string' ? attr.domain : host).replace(/^\./, '').toLowerCase(),
+    hostOnly: typeof attr.domain !== 'string',
+    path: typeof attr.path === 'string' ? attr.path : '/',
+    secure: attr.secure === true,
+    httpOnly: attr.httponly === true,
+    sameSite: typeof attr.samesite === 'string' ? attr.samesite.toLowerCase() : null,
+    partitioned: attr.partitioned === true,
+    expires,
+    valueLength: value.length,
+    setBy: requestUrl
+  };
+}
+
+/**
+ * Builds the cookie inventory from Set-Cookie headers on every hop of the redirect chain
+ * plus cookies observed by the browser while rendering (includes cookies set by JavaScript
+ * and by third-party resources). Cookie values are never returned.
+ */
+function analyzeCookies({ headerCookies, browserCookies, targetDomain, isHttps }) {
+  const byKey = new Map();
+  const keyOf = (c) => `${c.name}|${c.domain}|${c.path}`;
+
+  for (const c of headerCookies) {
+    byKey.set(keyOf(c), { ...c, sources: ['http-header'] });
+  }
+
+  for (const b of browserCookies || []) {
+    const cookie = {
+      name: b.name,
+      domain: (b.domain || '').replace(/^\./, '').toLowerCase(),
+      hostOnly: !String(b.domain || '').startsWith('.'),
+      path: b.path || '/',
+      secure: !!b.secure,
+      httpOnly: !!b.httpOnly,
+      sameSite: b.sameSite ? String(b.sameSite).toLowerCase() : null,
+      partitioned: !!b.partitionKey,
+      expires: b.session || !(b.expires > 0) ? null : new Date(b.expires * 1000).toISOString(),
+      valueLength: typeof b.value === 'string' ? b.value.length : null,
+      setBy: null
+    };
+    const existing = byKey.get(keyOf(cookie));
+    if (existing) {
+      if (!existing.sources.includes('browser')) existing.sources.push('browser');
+    } else {
+      byKey.set(keyOf(cookie), { ...cookie, sources: ['browser'] });
+    }
+  }
+
+  const now = Date.now();
+  const allItems = [...byKey.values()].map((c) => {
+    const { category, vendor } = classifyCookie(c.name, c.domain);
+    const thirdParty = !!targetDomain && getRegistrableDomain(c.domain) !== targetDomain;
+    const lifetimeDays = c.expires ? Math.round((new Date(c.expires).getTime() - now) / 86_400_000) : null;
+    const sensitive = SENSITIVE_COOKIE_CATEGORIES.has(category);
+    const issues = [];
+    // Strict attribute checks apply to cookies that carry session / security state;
+    // analytics and marketing cookies are reported but not flagged for missing HttpOnly/SameSite.
+    if (isHttps && !c.secure && (sensitive || category === 'Unclassified')) issues.push('missing Secure');
+    // Cookies from known vendor scripts (Stripe, Cloudflare, AWS...) are set by the vendor and outside the site's control
+    const vendorManaged = !!vendor && vendor !== 'CSRF protection';
+    if (!c.httpOnly && sensitive && !vendorManaged && !/^(XSRF-TOKEN|csrftoken|_csrf)$/i.test(c.name)) issues.push('missing HttpOnly');
+    if (!c.sameSite && sensitive) issues.push('missing SameSite');
+    if (c.sameSite === 'none' && !c.secure) issues.push('SameSite=None without Secure');
+    if (/^__Host-/.test(c.name) && (!c.secure || !c.hostOnly || c.path !== '/')) issues.push('invalid __Host- prefix usage');
+    if (/^__Secure-/.test(c.name) && !c.secure) issues.push('invalid __Secure- prefix usage');
+    if (lifetimeDays !== null && lifetimeDays > BROWSER_COOKIE_LIFETIME_CAP_DAYS) issues.push(`lifetime over ${BROWSER_COOKIE_LIFETIME_CAP_DAYS} days`);
     return {
-      name,
-      secure: attrLower.includes('secure'),
-      httpOnly: attrLower.includes('httponly'),
-      sameSite,
-      issues: [
-        ...(isHttps && !attrLower.includes('secure') ? ['missing Secure'] : []),
-        ...(!attrLower.includes('httponly') ? ['missing HttpOnly'] : []),
-        ...(!sameSite ? ['missing SameSite'] : []),
-        ...(sameSite === 'none' && !attrLower.includes('secure') ? ['SameSite=None without Secure'] : [])
-      ]
+      name: c.name,
+      domain: c.domain,
+      path: c.path,
+      category,
+      vendor,
+      thirdParty,
+      session: !c.expires,
+      expires: c.expires,
+      lifetimeDays,
+      secure: c.secure,
+      httpOnly: c.httpOnly,
+      sameSite: c.sameSite,
+      partitioned: c.partitioned,
+      valueLength: c.valueLength,
+      sources: c.sources,
+      setBy: c.setBy,
+      issues
     };
   });
+
+  const order = ['Session', 'Security', 'Load balancing', 'Consent', 'Functional', 'Analytics', 'Marketing', 'Unclassified'];
+  allItems.sort((a, b) => (Number(a.thirdParty) - Number(b.thirdParty))
+    || (b.issues.length > 0) - (a.issues.length > 0)
+    || order.indexOf(a.category) - order.indexOf(b.category)
+    || a.name.localeCompare(b.name));
+
+  // Summary counts cover every cookie; the itemised list is capped to keep the response small
+  const items = allItems;
+  const byCategory = {};
+  for (const c of items) byCategory[c.category] = (byCategory[c.category] || 0) + 1;
+
+  return {
+    total: items.length,
+    firstParty: items.filter((c) => !c.thirdParty).length,
+    thirdParty: items.filter((c) => c.thirdParty).length,
+    session: items.filter((c) => c.session).length,
+    persistent: items.filter((c) => !c.session).length,
+    tracking: items.filter((c) => TRACKING_CATEGORIES.has(c.category)).length,
+    withIssues: items.filter((c) => c.issues.length).length,
+    byCategory,
+    thirdPartyDomains: [...new Set(items.filter((c) => c.thirdParty).map((c) => getRegistrableDomain(c.domain) || c.domain))],
+    browserInspected: Array.isArray(browserCookies),
+    truncated: items.length > MAX_COOKIES,
+    items: items.slice(0, MAX_COOKIES)
+  };
 }
 
 function analyzeSecurityHeaders(headers, isHttps) {
@@ -949,12 +1260,24 @@ function extractAssetUrls(html) {
   return urls;
 }
 
+function decodeHtmlEntities(text) {
+  const named = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ', ndash: '–', mdash: '—', middot: '·', copy: '©', reg: '®', trade: '™', hellip: '…', laquo: '«', raquo: '»' };
+  return text.replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (m, code) => {
+    if (code[0] === '#') {
+      const n = code[1].toLowerCase() === 'x' ? parseInt(code.substring(2), 16) : parseInt(code.substring(1), 10);
+      return Number.isFinite(n) && n > 0 && n <= 0x10ffff ? String.fromCodePoint(n) : m;
+    }
+    return named[code.toLowerCase()] ?? m;
+  });
+}
+
 function analyzeContent(html, pageUrl) {
   if (!html) return { title: null, scripts: { total: 0, external: 0, withoutSri: [] }, mixedContent: [], insecureForms: [], thirdPartyScriptHosts: [] };
 
   const page = new URL(pageUrl);
   const pageDomain = getRegistrableDomain(page.hostname);
-  const title = /<title[^>]*>([\s\S]*?)<\/title>/i.exec(html)?.[1]?.replace(/\s+/g, ' ').trim().substring(0, 200) || null;
+  const rawTitle = /<title[^>]*>([\s\S]*?)<\/title>/i.exec(html)?.[1];
+  const title = rawTitle ? decodeHtmlEntities(rawTitle).replace(/\s+/g, ' ').trim().substring(0, 200) || null : null;
 
   const scripts = [...html.matchAll(/<script\b([^>]*)>/gi)].map((m) => m[1]);
   const external = [];
@@ -1190,6 +1513,7 @@ async function runTlsHandshakeProbe(connect, hostname, port, versionKey, onSocke
   try {
     socket = connect({ hostname, port }, { secureTransport: 'off', allowHalfOpen: false });
     onSocket(socket);
+    if (socket.opened) await socket.opened; // surfaces connect failures as a clear error instead of a cancelled stream
     const writer = socket.writable.getWriter();
     await writer.write(buildClientHello(hostname, versionKey));
     writer.releaseLock();
@@ -1262,7 +1586,26 @@ async function runTlsHandshakeProbe(connect, hostname, port, versionKey, onSocke
   return result;
 }
 
-async function probeTls(connect, hostname, port) {
+/**
+ * Translate low-level socket errors into something a user can act on.
+ */
+function describeTlsProbeError(err, port) {
+  const message = String(err || '');
+  if (/proxy request failed|cannot connect to the specified address|prohibited|not allowed/i.test(message)) {
+    return 'Cloudflare Workers is not permitted to open raw TCP connections to this address (typically a Cloudflare-proxied host), so TLS versions could not be probed directly';
+  }
+  if (/stream was cancell?ed|connection (was )?(reset|closed)|ECONNRESET|EPIPE|network connection lost/i.test(message)) {
+    return `The TLS probe connection on port ${port} was closed before the server answered (the host or an intermediary refused raw TLS probing)`;
+  }
+  if (/ECONNREFUSED|refused/i.test(message)) return `Connection refused on port ${port}: no HTTPS listener`;
+  if (/ENOTFOUND|EAI_AGAIN|DNS/i.test(message)) return `Could not resolve the host for TLS probing`;
+  return message || `No TLS response on port ${port}`;
+}
+
+async function probeTls(connect, hostname, port, { skipReason } = {}) {
+  if (skipReason) {
+    return { probed: false, error: skipReason };
+  }
   if (!connect) {
     return { probed: false, error: 'Raw socket support (cloudflare:sockets) is not available in this runtime' };
   }
@@ -1273,13 +1616,11 @@ async function probeTls(connect, hostname, port) {
 
   const anyResponse = probes.some((p) => p.negotiatedVersion || p.alert);
   if (!anyResponse) {
-    const err = probes.find((p) => p.error)?.error || `No TLS response on port ${port}`;
-    const blocked = /proxy request failed|cannot connect to the specified address|Cloudflare/i.test(err);
+    const rawError = probes.find((p) => p.error)?.error;
     return {
       probed: false,
-      error: blocked
-        ? 'Target resolves to Cloudflare IP space; Workers sockets cannot connect to Cloudflare-proxied hosts, so TLS versions could not be probed directly'
-        : err
+      error: describeTlsProbeError(rawError, port),
+      rawError: rawError || null
     };
   }
 
@@ -1289,7 +1630,7 @@ async function probeTls(connect, hostname, port) {
   if (certSource?.certificates?.length) {
     try {
       chain = certSource.certificates.map(parseX509);
-      certificate = { ...chain[0], hostnameMatch: certificateMatchesHost(chain[0], hostname), chainLength: chain.length };
+      certificate = { ...chain[0], hostnameMatch: certificateMatchesHost(chain[0], hostname), chainLength: chain.length, source: 'tls-handshake' };
     } catch (error) {
       certificate = { error: `Failed to parse certificate: ${error.message}` };
     }
@@ -1309,6 +1650,88 @@ async function probeTls(connect, hostname, port) {
 }
 
 const TLS_ALERTS = { 40: 'handshake_failure', 47: 'illegal_parameter', 50: 'decode_error', 70: 'protocol_version', 71: 'insufficient_security', 80: 'internal_error', 86: 'inappropriate_fallback', 112: 'unrecognized_name' };
+
+// ---------------------------------------------------------------------------
+// Cloudflare IP ranges (https://www.cloudflare.com/ips/) - Workers sockets cannot connect to these
+// ---------------------------------------------------------------------------
+
+const CLOUDFLARE_RANGES = [
+  '173.245.48.0/20', '103.21.244.0/22', '103.22.200.0/22', '103.31.4.0/22', '141.101.64.0/18',
+  '108.162.192.0/18', '190.93.240.0/20', '188.114.96.0/20', '197.234.240.0/22', '198.41.128.0/17',
+  '162.158.0.0/15', '104.16.0.0/13', '104.24.0.0/14', '172.64.0.0/13', '131.0.72.0/22',
+  '2400:cb00::/32', '2606:4700::/32', '2803:f800::/32', '2405:b500::/32', '2405:8100::/32',
+  '2a06:98c0::/29', '2c0f:f248::/32'
+];
+
+function ipToBigInt(ip) {
+  if (ip.includes(':')) {
+    const [head, tail = ''] = ip.toLowerCase().split('::');
+    const h = head ? head.split(':') : [];
+    const t = tail ? tail.split(':') : [];
+    const groups = ip.includes('::') ? [...h, ...Array(8 - h.length - t.length).fill('0'), ...t] : h;
+    if (groups.length !== 8) return null;
+    return { value: groups.reduce((acc, g) => (acc << 16n) + BigInt(parseInt(g || '0', 16)), 0n), bits: 128 };
+  }
+  const parts = ip.split('.').map(Number);
+  if (parts.length !== 4 || parts.some((n) => !Number.isInteger(n) || n < 0 || n > 255)) return null;
+  return { value: parts.reduce((acc, n) => (acc << 8n) + BigInt(n), 0n), bits: 32 };
+}
+
+export function isIpInCidr(ip, cidr) {
+  const [range, prefixStr] = cidr.split('/');
+  const a = ipToBigInt(ip);
+  const b = ipToBigInt(range);
+  const prefix = parseInt(prefixStr, 10);
+  if (!a || !b || a.bits !== b.bits) return false;
+  const shift = BigInt(a.bits - prefix);
+  return (a.value >> shift) === (b.value >> shift);
+}
+
+export function isCloudflareIp(ip) {
+  return CLOUDFLARE_RANGES.some((cidr) => isIpInCidr(ip, cidr));
+}
+
+// ---------------------------------------------------------------------------
+// Certificate Transparency fallback (Cert Spotter API)
+// ---------------------------------------------------------------------------
+
+/**
+ * Most recent unexpired, unrevoked certificate for the exact hostname from public CT logs.
+ * Used when a live TLS handshake cannot be inspected (Cloudflare-proxied or TLS 1.3-only hosts).
+ */
+async function lookupCtCertificate(hostname) {
+  if (isIpLiteral(hostname)) return { certificate: null, error: 'Certificate Transparency lookup is not available for IP addresses' };
+  try {
+    const url = `https://api.certspotter.com/v1/issuances?domain=${encodeURIComponent(hostname)}&expand=dns_names&expand=issuer&expand=cert`;
+    const res = await fetchWithTimeout(url, { headers: { Accept: 'application/json', 'User-Agent': SCANNER_USER_AGENT } }, 8000);
+    if (!res.ok) return { certificate: null, error: `Certificate Transparency lookup failed: HTTP ${res.status}` };
+    const { text } = await readBodyLimited(res, 2_000_000);
+    const issuances = JSON.parse(text);
+    const now = Date.now();
+    const candidates = (Array.isArray(issuances) ? issuances : [])
+      .filter((i) => !i.revoked && i.cert?.data && new Date(i.not_before).getTime() <= now && new Date(i.not_after).getTime() > now)
+      .filter((i) => certificateMatchesHost({ subjectAltNames: i.dns_names || [] }, hostname))
+      .sort((x, y) => new Date(y.not_before) - new Date(x.not_before));
+    if (!candidates.length) return { certificate: null, error: 'No current certificate for this hostname found in Certificate Transparency logs' };
+
+    const latest = candidates[0];
+    const der = Uint8Array.from(atob(latest.cert.data), (c) => c.charCodeAt(0));
+    const parsed = parseX509(der);
+    return {
+      certificate: {
+        ...parsed,
+        hostnameMatch: certificateMatchesHost(parsed, hostname),
+        chainLength: null,
+        source: 'certificate-transparency',
+        issuerFriendlyName: latest.issuer?.friendly_name || null,
+        currentCertificatesInLogs: candidates.length
+      },
+      error: null
+    };
+  } catch (error) {
+    return { certificate: null, error: `Certificate Transparency lookup failed: ${error.message}` };
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Minimal X.509 DER parser
@@ -1631,6 +2054,13 @@ async function renderPage(puppeteer, env, url, targetDomain, holder) {
     }
 
     const runtimeLibraries = await page.evaluate(detectRuntimeLibraries).catch(() => ({}));
+    let cookies = null;
+    try {
+      const cdp = await page.createCDPSession();
+      cookies = (await cdp.send('Network.getAllCookies')).cookies || [];
+    } catch {
+      cookies = await page.cookies().catch(() => null);
+    }
     const image = await page.screenshot({ type: 'jpeg', quality: 60, encoding: 'base64' });
 
     const hosts = new Map();
@@ -1655,7 +2085,8 @@ async function renderPage(puppeteer, env, url, targetDomain, holder) {
       requestCount: requests.length,
       thirdPartyHosts,
       runtimeLibraries,
-      _requests: requests
+      _requests: requests,
+      _cookies: cookies
     };
   } catch (error) {
     return { success: false, error: `Screenshot failed: ${error.message}` };
@@ -1701,6 +2132,8 @@ function buildFindings(report) {
     if (tls.tls12Cipher && /(-SHA$|DES|RC4|^AES)/.test(tls.tls12Cipher)) {
       add('low', 'TLS', `Weak preferred TLS 1.2 cipher: ${tls.tls12Cipher}`, 'Prefer ECDHE with AES-GCM or ChaCha20-Poly1305.');
     }
+  }
+  {
     const cert = tls.certificate;
     if (cert && !cert.error) {
       if (cert.expired) add('critical', 'Certificate', 'Certificate has expired', `Expired on ${cert.validTo}.`);
@@ -1729,9 +2162,24 @@ function buildFindings(report) {
   if (report.http.headers?.['x-aspnet-version']) add('low', 'Information disclosure', 'X-AspNet-Version header present', report.http.headers['x-aspnet-version']);
 
   // Cookies
-  const badCookies = (report.http.cookies || []).filter((c) => c.issues.length);
-  if (badCookies.length) {
-    add('low', 'Cookies', `${badCookies.length} cookie(s) missing security flags`, badCookies.slice(0, 5).map((c) => `${c.name}: ${c.issues.join(', ')}`).join('; '));
+  const cookieItems = report.cookies?.items || [];
+  const firstPartyWithIssues = cookieItems.filter((c) => !c.thirdParty && c.issues.length);
+  const exposedSession = firstPartyWithIssues.filter((c) => (c.category === 'Session' || c.category === 'Security') && c.issues.some((i) => /HttpOnly|Secure/.test(i)));
+  if (exposedSession.length) {
+    add('medium', 'Cookies', `${exposedSession.length} session/security cookie(s) without HttpOnly or Secure`, exposedSession.slice(0, 5).map((c) => `${c.name}: ${c.issues.join(', ')}`).join('; '));
+  }
+  const otherFlagIssues = firstPartyWithIssues.filter((c) => !exposedSession.includes(c));
+  if (otherFlagIssues.length) {
+    add('low', 'Cookies', `${otherFlagIssues.length} first-party cookie(s) missing security attributes`, otherFlagIssues.slice(0, 5).map((c) => `${c.name}: ${c.issues.join(', ')}`).join('; '));
+  }
+  const tracking = cookieItems.filter((c) => c.category === 'Analytics' || c.category === 'Marketing');
+  if (report.cookies?.tracking) {
+    const vendors = [...new Set(tracking.map((c) => c.vendor).filter(Boolean))];
+    add('low', 'Privacy', `${report.cookies.tracking} tracking cookie(s) set on first visit without user interaction`,
+      `${vendors.length ? `Vendors: ${vendors.join(', ')}. ` : ''}Analytics/marketing cookies set before consent may conflict with GDPR / ePrivacy requirements.`);
+  }
+  if (report.cookies?.thirdParty) {
+    add('info', 'Privacy', `${report.cookies.thirdParty} third-party cookie(s)`, `Domains: ${report.cookies.thirdPartyDomains.slice(0, 8).join(', ')}`);
   }
 
   // Content
@@ -1804,6 +2252,7 @@ async function runAiAssessment(env, model, report) {
     cdn: report.network.cdn.providers.map((p) => p.name),
     hosting: report.network.ips.map((i) => `${i.ip} AS${i.asn ?? '?'} ${i.asnName ?? ''}`),
     technologies: report.technologies.slice(0, 25).map((t) => `${t.name}${t.version ? ` ${t.version}` : ''}`),
+    cookies: report.cookies ? { total: report.cookies.total, thirdParty: report.cookies.thirdParty, tracking: report.cookies.tracking, byCategory: report.cookies.byCategory } : null,
     findings: report.findings.slice(0, 25).map((f) => `[${f.severity}] ${f.title}`),
     pageTitle: report.content.title
   };
@@ -1904,13 +2353,31 @@ export async function runUrlScan(rawTarget, options = {}) {
   const tlsPort = target.protocol === 'https:' && target.port ? parseInt(target.port, 10) : 443;
   const wantScreenshot = options.screenshot !== false;
 
-  const [redirects, httpsEnforcement, tls, ipIntel, screenshot] = await Promise.all([
+  const behindCloudflare = resolvedIps.some(isCloudflareIp);
+  const tlsSkipReason = behindCloudflare
+    ? 'Host is served from Cloudflare IP space. Cloudflare Workers cannot open raw TCP connections to Cloudflare addresses, so supported TLS versions cannot be probed. TLS versions for Cloudflare-proxied sites are set by the zone\'s Minimum TLS Version setting.'
+    : null;
+
+  const [redirects, httpsEnforcement, tlsProbe, ipIntel, screenshot] = await Promise.all([
     followRedirects(target.href),
     target.port === '' ? checkHttpsEnforcement(hostname) : Promise.resolve({ checked: false }),
-    probeTls(options.connect, hostname, tlsPort),
+    probeTls(options.connect, hostname, tlsPort, { skipReason: tlsSkipReason }),
     lookupIpIntel(resolvedIps, options),
     wantScreenshot ? captureScreenshot(options.puppeteer, options.env, target.href, registrableDomain) : Promise.resolve({ success: false, error: 'Screenshot not requested' })
   ]);
+
+  // Certificate fallback from Certificate Transparency when the live handshake could not be inspected
+  const tls = { ...tlsProbe, behindCloudflare };
+  if (!tls.certificate || tls.certificate.error) {
+    const ct = await lookupCtCertificate(hostname);
+    if (ct.certificate) {
+      tls.certificate = ct.certificate;
+      tls.certificateNote = 'Certificate taken from public Certificate Transparency logs (most recently issued, currently valid certificate for this hostname). ' +
+        (behindCloudflare ? 'Cloudflare may be serving a different one of the certificates it holds for this host.' : 'It could not be read from a live handshake.');
+    } else {
+      tls.certificateNote = [tls.certificateNote, ct.error].filter(Boolean).join(' ');
+    }
+  }
 
   const finalResponse = redirects.response;
   const finalUrl = redirects.finalUrl;
@@ -1924,7 +2391,14 @@ export async function runUrlScan(rawTarget, options = {}) {
     securityTxt = await checkSecurityTxt(new URL(finalUrl).origin);
   } catch { /* ignore */ }
 
-  const cookies = analyzeCookies(headers, finalIsHttps);
+  const headerCookies = redirects.chain.flatMap((hop) => (hop._setCookies || []).map((h) => parseSetCookie(h, hop.url)));
+  const cookieReport = analyzeCookies({
+    headerCookies,
+    browserCookies: screenshot.success ? screenshot._cookies : null,
+    targetDomain: registrableDomain || hostname,
+    isHttps: finalIsHttps
+  });
+  const cookies = cookieReport.items;
   const technologies = fingerprintTechnologies({
     headers,
     html: isHtml ? body.text : '',
@@ -1949,6 +2423,7 @@ export async function runUrlScan(rawTarget, options = {}) {
   const screenshotPublic = { ...screenshot };
   delete screenshotPublic._requests;
   delete screenshotPublic.runtimeLibraries;
+  delete screenshotPublic._cookies;
 
   const report = {
     scanType: 'url',
@@ -1975,9 +2450,9 @@ export async function runUrlScan(rawTarget, options = {}) {
       evidence: httpVersionEvidence,
       httpsEnforcement,
       headers: pickHeaders(headers),
-      securityHeaders: finalResponse ? analyzeSecurityHeaders(headers, finalIsHttps) : [],
-      cookies
+      securityHeaders: finalResponse ? analyzeSecurityHeaders(headers, finalIsHttps) : []
     },
+    cookies: cookieReport,
     tls,
     domain: { name: registrableDomain, registration, dns },
     network: { ips: ipIntel, cdn },

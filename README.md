@@ -356,7 +356,7 @@ Example AI Response:
 
 ## URL Security Scanning
 
-Enter a full `http://` or `https://` URL and press **Scan URL** (pressing Search or Enter with a URL also starts a scan).
+Enter a full `http://` or `https://` URL and press **Scan URL** (pressing Search IP or Enter with a URL also starts a scan).
 
 ![Sample URL scan of https://jquery.com/](docs/images/url-scan-sample.jpg)
 
@@ -377,7 +377,8 @@ Enter a full `http://` or `https://` URL and press **Scan URL** (pressing Search
 | ASN and abuse score of hosting IPs | Cloudflare Radar, AbuseIPDB |
 | CDN | Response headers, CNAME chain, ASN names |
 | Frameworks and dependencies | Headers, cookies, HTML, script URLs, and JavaScript globals in the rendered page, matched against a small static table of known-vulnerable or end-of-life versions |
-| Security headers, cookies, SRI, mixed content, security.txt | Response analysis |
+| Cookies: first or third party, purpose and vendor, lifetime, Secure, HttpOnly and SameSite, issues | `Set-Cookie` on every redirect hop, plus all cookies seen by the rendering browser. Values are never collected |
+| Security headers, SRI, mixed content, security.txt | Response analysis |
 | Screenshot | Cloudflare Browser Rendering (`BROWSER` binding, `@cloudflare/puppeteer`) |
 
 Findings are scored from 100 down: 30 per critical, 15 per high, 7 per medium and 3 per low finding. When AI is enabled, Workers AI adds a written assessment.

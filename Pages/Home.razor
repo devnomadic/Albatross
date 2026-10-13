@@ -103,15 +103,15 @@
 
 <input @bind="ipAddress" @bind:event="oninput" @onkeydown="OnInputKeyDown" type="text" inputmode="url" autocomplete="off" spellcheck="false" maxlength="2048"
        placeholder="Enter a public IPv4/IPv6 address (ip;maxDays) or a URL (https://example.com/path)" class="ip-input form-control" />
-<button class="btn btn-primary" @onclick="ValidateAndSearchAsync" disabled="@(isSearching || isScanningUrl)">Search</button>
+<button class="btn btn-primary" @onclick="ValidateAndSearchAsync" disabled="@(isSearching || isScanningUrl)">Search IP</button>
 <button class="btn btn-danger" @onclick="ScanUrlAsync" disabled="@(isScanningUrl || isCheckingAbuse || isSearching)" style="margin-left: 10px;" title="Passive security scan of a URL: redirects, HTTP/TLS versions, certificate, domain age, IPs, CDN, technologies and a screenshot">
     <span class="oi oi-globe"></span> Scan URL
 </button>
-<button class="btn btn-info" @onclick="ToggleDescription" style="margin-left: 10px;">
-    <span class="oi oi-info"></span> About
-</button>
 <button class="btn btn-warning" @onclick="CheckAbuseIPDBAsync" disabled="@(isCheckingAbuse || isScanningUrl)" style="margin-left: 10px;">
     <span class="oi oi-shield"></span> Check IP Reputation
+</button>
+<button class="btn btn-info" @onclick="ToggleDescription" style="margin-left: 10px;">
+    <span class="oi oi-info"></span> About
 </button>
 <button class="btn @(enableAI ? "btn-success" : "btn-secondary")" @onclick="ToggleAI" style="margin-left: 10px;" title="@(enableAI ? "AI Analysis Enabled" : "AI Analysis Disabled")">
     <span class="oi oi-@(enableAI ? "lightbulb" : "ban")"></span> AI @(enableAI ? "On" : "Off")
@@ -147,7 +147,7 @@
                     <li><code>8.8.8.8</code> - Standard IP lookup (30 days of abuse reports)</li>
                     <li><code>8.8.8.8;60</code> - Custom report age (60 days of history)</li>
                     <li><code>2001:4860:4860::8888</code> - IPv6 addresses supported</li>
-                    <li><code>https://example.com/login</code> - URL security scan (press <strong>Scan URL</strong>, or Search with a URL)</li>
+                    <li><code>https://example.com/login</code> - URL security scan (press <strong>Scan URL</strong>, or press Enter)</li>
                 </ul>
 
                 <h6>🌐 <strong>URL Scanning:</strong></h6>
@@ -358,10 +358,26 @@
                             <div class="url-scan-card-title">📸 Screenshot</div>
                             @if (scan.Screenshot?.Success == true && !string.IsNullOrEmpty(scan.Screenshot.Image))
                             {
-                                <a href="@scan.Screenshot.Image" target="_blank" rel="noopener" title="Open full-size screenshot">
+                                <button type="button" class="screenshot-thumb" @onclick="() => showScreenshotViewer = true" title="View full-size screenshot">
                                     <img src="@scan.Screenshot.Image" alt="Screenshot of @(scan.Summary?.FinalUrl)" loading="lazy" />
-                                </a>
+                                    <span class="screenshot-zoom-hint">🔍 Click to enlarge</span>
+                                </button>
                                 <div class="url-scan-muted">Rendered at @(scan.Screenshot.Width)×@(scan.Screenshot.Height) · @(scan.Screenshot.RequestCount ?? 0) network requests@(string.IsNullOrEmpty(scan.Screenshot.NavigationWarning) ? "" : " · page did not fully settle")</div>
+                                <div class="screenshot-actions">
+                                    <button type="button" class="btn btn-sm btn-outline-secondary json-toggle-btn" @onclick="() => showScreenshotViewer = true">⤢ View full size</button>
+                                    <button type="button" class="btn btn-sm btn-outline-secondary json-toggle-btn" @onclick="() => OpenScreenshotInNewTab(scan.Screenshot.Image)">↗ Open in new tab</button>
+                                    <a class="btn btn-sm btn-outline-secondary json-toggle-btn" href="@scan.Screenshot.Image" download="@ScreenshotFileName(scan)">⬇ Download</a>
+                                </div>
+                                @if (showScreenshotViewer)
+                                {
+                                    <div class="screenshot-lightbox" role="dialog" aria-modal="true" aria-label="Full-size screenshot" @onclick="() => showScreenshotViewer = false">
+                                        <div class="screenshot-lightbox-bar">
+                                            <span>@(scan.Screenshot.FinalUrl ?? scan.Summary?.FinalUrl)</span>
+                                            <button type="button" class="btn btn-sm btn-light" @onclick="() => showScreenshotViewer = false" aria-label="Close">✕ Close</button>
+                                        </div>
+                                        <img src="@scan.Screenshot.Image" alt="Full-size screenshot of @(scan.Summary?.FinalUrl)" @onclick:stopPropagation="true" />
+                                    </div>
+                                }
                             }
                             else
                             {
@@ -450,7 +466,7 @@
                             }
                             else
                             {
-                                <div class="url-scan-muted">@(scan.Tls?.Error ?? "TLS not probed")</div>
+                                <div class="url-scan-muted url-scan-note">@(scan.Tls?.BehindCloudflare == true ? "☁️ " : "ℹ️ ")@(scan.Tls?.Error ?? "TLS not probed")</div>
                             }
                             <dl class="url-scan-kv">
                                 <dt>HTTP→HTTPS</dt>
@@ -464,21 +480,26 @@
                             {
                                 <dl class="url-scan-kv">
                                     <dt>Subject</dt><dd>@(cert.Subject?.GetValueOrDefault("CN") ?? cert.SubjectString)</dd>
-                                    <dt>Issuer</dt><dd>@(cert.Issuer?.GetValueOrDefault("O") ?? cert.Issuer?.GetValueOrDefault("CN") ?? cert.IssuerString)</dd>
+                                    <dt>Issuer</dt><dd>@(cert.Issuer?.GetValueOrDefault("O") ?? cert.IssuerFriendlyName ?? cert.Issuer?.GetValueOrDefault("CN") ?? cert.IssuerString)@(cert.Issuer?.GetValueOrDefault("CN") is string icn ? $" ({icn})" : "")</dd>
                                     <dt>Valid to</dt><dd class="@(cert.Expired || cert.DaysRemaining < 14 ? "text-danger" : "")">@FormatDate(cert.ValidTo) (@(cert.Expired ? "expired" : $"{cert.DaysRemaining} days left"))</dd>
                                     <dt>Key</dt><dd>@cert.KeyAlgorithm @(cert.KeySize.HasValue ? $"{cert.KeySize}-bit" : "")</dd>
                                     <dt>Signature</dt><dd>@cert.SignatureAlgorithm</dd>
                                     <dt>Hostname</dt><dd>@(cert.HostnameMatch == true ? "✓ matches" : cert.HostnameMatch == false ? "✗ mismatch" : "n/a")@(cert.SelfSigned ? " · self-signed" : "")</dd>
-                                    <dt>Chain</dt><dd>@(cert.ChainLength ?? 1) certificate(s)</dd>
+                                    @if (cert.ChainLength.HasValue) { <dt>Chain</dt><dd>@cert.ChainLength certificate(s)</dd> }
+                                    <dt>Source</dt><dd>@(cert.Source == "certificate-transparency" ? "Certificate Transparency logs" : "Live TLS handshake")</dd>
                                     @if (cert.SubjectAltNames?.Any() == true)
                                     {
                                         <dt>SANs</dt><dd>@string.Join(", ", cert.SubjectAltNames.Take(6))@(cert.SubjectAltNames.Count > 6 ? $" +{cert.SubjectAltNames.Count - 6} more" : "")</dd>
                                     }
                                 </dl>
+                                @if (!string.IsNullOrEmpty(scan.Tls?.CertificateNote))
+                                {
+                                    <div class="url-scan-muted url-scan-note">ℹ️ @scan.Tls!.CertificateNote</div>
+                                }
                             }
                             else
                             {
-                                <div class="url-scan-muted">@(scan.Tls?.Certificate?.Error ?? scan.Tls?.CertificateNote ?? scan.Tls?.Error ?? "No certificate information")</div>
+                                <div class="url-scan-muted">@(scan.Tls?.Certificate?.Error ?? scan.Tls?.CertificateNote ?? "No certificate information could be retrieved for this host.")</div>
                             }
                         </div>
 
@@ -489,8 +510,10 @@
                                 <dt>Domain</dt><dd>@(scan.Domain?.Name ?? scan.Target?.Hostname)</dd>
                                 @if (reg?.Success == true)
                                 {
-                                    <dt>Registered</dt><dd class="@(reg.AgeDays < 180 ? "text-danger" : "")">@FormatDate(reg.Created) (@FormatAge(reg.AgeDays))</dd>
-                                    <dt>Expires</dt><dd>@FormatDate(reg.Expires)</dd>
+                                    <dt>Registered</dt>
+                                    <dd class="@(reg.AgeDays < 180 ? "text-danger" : "")">@(reg.Created != null ? $"{FormatDate(reg.Created)} ({FormatAge(reg.AgeDays)})" : reg.RegistrationDateRedacted ? "Not published by registry" : "n/a")</dd>
+                                    <dt>Expires</dt><dd>@(reg.Expires != null ? FormatDate(reg.Expires) : reg.ExpirationDateRedacted ? "Not published by registry" : "n/a")</dd>
+                                    @if (reg.Created == null && reg.Updated != null) { <dt>Last changed</dt><dd>@FormatDate(reg.Updated)</dd> }
                                     <dt>Registrar</dt><dd>@(reg.Registrar ?? "n/a")</dd>
                                 }
                                 else
@@ -506,6 +529,10 @@
                                     @if (dns.Cname?.Any() == true) { <dt>CNAME</dt><dd>@string.Join(" → ", dns.Cname)</dd> }
                                 }
                             </dl>
+                            @if (!string.IsNullOrEmpty(reg?.Note))
+                            {
+                                <div class="url-scan-muted url-scan-note">ℹ️ @reg!.Note</div>
+                            }
                         </div>
 
                         <div class="url-scan-card">
@@ -568,12 +595,80 @@
                                     }
                                 </tbody>
                             </table>
-                            @{ var badCookies = scan.Http?.Cookies?.Where(c => c.Issues?.Any() == true).ToList() ?? new(); }
-                            @if (badCookies.Any())
-                            {
-                                <div class="url-scan-muted">Cookies missing flags: @string.Join("; ", badCookies.Take(4).Select(c => $"{c.Name} ({string.Join(", ", c.Issues!)})"))</div>
-                            }
                         </div>
+                    </div>
+
+                    <div class="url-scan-card url-scan-wide">
+                        <div class="url-scan-card-title">🍪 Cookies (@(scan.Cookies?.Total ?? 0))</div>
+                        @if (scan.Cookies is { Total: > 0 } ck)
+                        {
+                            <div class="chip-row">
+                                <span class="chip chip-info">@ck.FirstParty first-party</span>
+                                <span class="chip @(ck.ThirdParty > 0 ? "chip-warn" : "chip-unknown")">@ck.ThirdParty third-party</span>
+                                <span class="chip chip-unknown">@ck.Session session</span>
+                                <span class="chip chip-unknown">@ck.Persistent persistent</span>
+                                <span class="chip @(ck.Tracking > 0 ? "chip-warn" : "chip-unknown")">@ck.Tracking tracking</span>
+                                <span class="chip @(ck.WithIssues > 0 ? "chip-bad" : "chip-good")">@ck.WithIssues with issues</span>
+                            </div>
+                            @if (ck.ByCategory?.Any() == true)
+                            {
+                                <div class="url-scan-subtitle">By purpose</div>
+                                <div class="chip-row">
+                                    @foreach (var cat in ck.ByCategory.OrderByDescending(c => c.Value))
+                                    {
+                                        <span class="chip @CookieCategoryClass(cat.Key)">@cat.Key: @cat.Value</span>
+                                    }
+                                </div>
+                            }
+                            @if (ck.ThirdPartyDomains?.Any() == true)
+                            {
+                                <div class="url-scan-muted">Third-party domains: @string.Join(", ", ck.ThirdPartyDomains.Take(15))@(ck.ThirdPartyDomains.Count > 15 ? $" +{ck.ThirdPartyDomains.Count - 15} more" : "")</div>
+                            }
+
+                            var filtered = FilterCookies(ck.Items ?? new());
+                            <div class="cookie-filters">
+                                @foreach (var f in CookieFilters)
+                                {
+                                    <button type="button" class="btn btn-sm @(cookieFilter == f ? "btn-secondary" : "btn-outline-secondary") json-toggle-btn" @onclick="() => { cookieFilter = f; showAllCookies = false; }">@f</button>
+                                }
+                            </div>
+                            <table class="url-scan-table cookie-table">
+                                <thead><tr><th>Name</th><th>Domain</th><th>Purpose</th><th>Expires</th><th>Flags</th><th>Seen via</th><th>Issues</th></tr></thead>
+                                <tbody>
+                                    @foreach (var c in showAllCookies ? filtered : filtered.Take(CookiePageSize))
+                                    {
+                                        <tr class="@(c.Issues?.Any() == true ? "row-vuln" : "")">
+                                            <td class="cookie-name" title="@c.Name"><code>@c.Name</code></td>
+                                            <td title="@($"{c.Domain}{c.Path}")">@c.Domain @if (c.ThirdParty) { <span class="chip chip-warn">3P</span> }</td>
+                                            <td><span class="chip @CookieCategoryClass(c.Category)">@c.Category</span>@(string.IsNullOrEmpty(c.Vendor) ? "" : $" {c.Vendor}")</td>
+                                            <td title="@c.Expires">@(c.Session ? "Session" : FormatCookieLifetime(c.LifetimeDays))</td>
+                                            <td class="cookie-flags">
+                                                <span class="chip @(c.Secure ? "chip-good" : "chip-off")" title="Secure">S</span>
+                                                <span class="chip @(c.HttpOnly ? "chip-good" : "chip-off")" title="HttpOnly">H</span>
+                                                <span class="chip @(c.SameSite is null ? "chip-off" : c.SameSite == "none" ? "chip-warn" : "chip-good")" title="SameSite">@(c.SameSite ?? "SameSite?")</span>
+                                            </td>
+                                            <td>@string.Join(", ", (c.Sources ?? new()).Select(src => src == "http-header" ? "header" : src))</td>
+                                            <td>@string.Join(", ", c.Issues ?? new())</td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                            @if (filtered.Count > CookiePageSize)
+                            {
+                                <button type="button" class="btn btn-sm btn-outline-secondary json-toggle-btn mt-2" @onclick="() => showAllCookies = !showAllCookies">
+                                    @(showAllCookies ? "Show fewer" : $"Show all {filtered.Count} cookies")
+                                </button>
+                            }
+                            <div class="url-scan-muted mt-1">
+                                Flags: S = Secure, H = HttpOnly. Cookie values are never collected.
+                                @(ck.BrowserInspected ? "Includes cookies set by JavaScript and third-party resources during page rendering." : "Only cookies from HTTP response headers are shown, because the page could not be rendered in a browser.")
+                                @(ck.Truncated ? $" The list is limited to the first {ck.Items?.Count} cookies." : "")
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="url-scan-muted">No cookies were set on the first visit@(scan.Cookies?.BrowserInspected == false ? " (HTTP response headers only; the page was not rendered in a browser)" : "").</div>
+                        }
                     </div>
 
                     <div class="url-scan-card url-scan-wide">
@@ -651,6 +746,11 @@
     private bool worldMapNeedsRender = false; // Set when the summary section is re-shown, since the map's container div is destroyed/recreated by the @if block
     private bool enableAI = true; // Default to AI enabled
     private bool isScanningUrl = false;
+    private bool showScreenshotViewer = false;
+    private const int CookiePageSize = 25;
+    private static readonly string[] CookieFilters = { "All", "First-party", "Third-party", "Tracking", "With issues" };
+    private string cookieFilter = "All";
+    private bool showAllCookies = false;
     private Albatross.Services.UrlScanResult? urlScanResult;
     private static readonly string[] SeverityOrder = { "critical", "high", "medium", "low", "info" };
     private string formattedJson = string.Empty;
@@ -919,6 +1019,9 @@
         isScanningUrl = true;
         statusMessage = $"Scanning {normalizedUrl}...";
         urlScanResult = null;
+        showScreenshotViewer = false;
+        cookieFilter = "All";
+        showAllCookies = false;
         ClearIpResults();
         formattedJson = string.Empty;
         await JSRuntime.InvokeVoidAsync("AlbatrossWorldMap.destroy");
@@ -962,6 +1065,45 @@
         {
             return rawJson;
         }
+    }
+
+    private List<Albatross.Services.UrlScanCookie> FilterCookies(List<Albatross.Services.UrlScanCookie> items) => cookieFilter switch
+    {
+        "First-party" => items.Where(c => !c.ThirdParty).ToList(),
+        "Third-party" => items.Where(c => c.ThirdParty).ToList(),
+        "Tracking" => items.Where(c => c.Category is "Analytics" or "Marketing").ToList(),
+        "With issues" => items.Where(c => c.Issues?.Any() == true).ToList(),
+        _ => items
+    };
+
+    private static string CookieCategoryClass(string? category) => category switch
+    {
+        "Session" or "Security" or "Load balancing" => "chip-info",
+        "Analytics" or "Marketing" => "chip-warn",
+        "Consent" or "Functional" => "chip-good",
+        _ => "chip-unknown"
+    };
+
+    private static string FormatCookieLifetime(int? days) => days switch
+    {
+        null => "n/a",
+        <= 0 => "< 1 day",
+        1 => "1 day",
+        < 60 => $"{days} days",
+        < 730 => $"{days / 30} months",
+        _ => $"{days / 365.0:0.#} years"
+    };
+
+    private async Task OpenScreenshotInNewTab(string? dataUrl)
+    {
+        if (string.IsNullOrEmpty(dataUrl)) return;
+        await JSRuntime.InvokeAsync<bool>("AlbatrossScreenshot.openInNewTab", dataUrl);
+    }
+
+    private static string ScreenshotFileName(Albatross.Services.UrlScanResponse scan)
+    {
+        var host = scan.Target?.Hostname ?? "screenshot";
+        return $"albatross-{host}-{DateTime.UtcNow:yyyyMMdd-HHmm}.jpg";
     }
 
     private void ClearIpResults()

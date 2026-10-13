@@ -18,6 +18,7 @@ namespace Albatross.Services
         [JsonPropertyName("redirects")] public UrlScanRedirects? Redirects { get; set; }
         [JsonPropertyName("http")] public UrlScanHttp? Http { get; set; }
         [JsonPropertyName("tls")] public UrlScanTls? Tls { get; set; }
+        [JsonPropertyName("cookies")] public UrlScanCookies? Cookies { get; set; }
         [JsonPropertyName("domain")] public UrlScanDomain? Domain { get; set; }
         [JsonPropertyName("network")] public UrlScanNetwork? Network { get; set; }
         [JsonPropertyName("technologies")] public List<UrlScanTechnology>? Technologies { get; set; }
@@ -86,7 +87,6 @@ namespace Albatross.Services
         [JsonPropertyName("httpsEnforcement")] public UrlScanHttpsEnforcement? HttpsEnforcement { get; set; }
         [JsonPropertyName("headers")] public Dictionary<string, string>? Headers { get; set; }
         [JsonPropertyName("securityHeaders")] public List<UrlScanSecurityHeader>? SecurityHeaders { get; set; }
-        [JsonPropertyName("cookies")] public List<UrlScanCookie>? Cookies { get; set; }
     }
 
     public class UrlScanHttpsEnforcement
@@ -106,12 +106,43 @@ namespace Albatross.Services
         [JsonPropertyName("note")] public string? Note { get; set; }
     }
 
+    /// <summary>
+    /// Cookie inventory: Set-Cookie headers from every redirect hop plus cookies seen by the
+    /// rendering browser (including JavaScript and third-party cookies). Values are never included.
+    /// </summary>
+    public class UrlScanCookies
+    {
+        [JsonPropertyName("total")] public int Total { get; set; }
+        [JsonPropertyName("firstParty")] public int FirstParty { get; set; }
+        [JsonPropertyName("thirdParty")] public int ThirdParty { get; set; }
+        [JsonPropertyName("session")] public int Session { get; set; }
+        [JsonPropertyName("persistent")] public int Persistent { get; set; }
+        [JsonPropertyName("tracking")] public int Tracking { get; set; }
+        [JsonPropertyName("withIssues")] public int WithIssues { get; set; }
+        [JsonPropertyName("byCategory")] public Dictionary<string, int>? ByCategory { get; set; }
+        [JsonPropertyName("thirdPartyDomains")] public List<string>? ThirdPartyDomains { get; set; }
+        [JsonPropertyName("browserInspected")] public bool BrowserInspected { get; set; }
+        [JsonPropertyName("truncated")] public bool Truncated { get; set; }
+        [JsonPropertyName("items")] public List<UrlScanCookie>? Items { get; set; }
+    }
+
     public class UrlScanCookie
     {
         [JsonPropertyName("name")] public string? Name { get; set; }
+        [JsonPropertyName("domain")] public string? Domain { get; set; }
+        [JsonPropertyName("path")] public string? Path { get; set; }
+        [JsonPropertyName("category")] public string? Category { get; set; }
+        [JsonPropertyName("vendor")] public string? Vendor { get; set; }
+        [JsonPropertyName("thirdParty")] public bool ThirdParty { get; set; }
+        [JsonPropertyName("session")] public bool Session { get; set; }
+        [JsonPropertyName("expires")] public string? Expires { get; set; }
+        [JsonPropertyName("lifetimeDays")] public int? LifetimeDays { get; set; }
         [JsonPropertyName("secure")] public bool Secure { get; set; }
         [JsonPropertyName("httpOnly")] public bool HttpOnly { get; set; }
         [JsonPropertyName("sameSite")] public string? SameSite { get; set; }
+        [JsonPropertyName("partitioned")] public bool Partitioned { get; set; }
+        [JsonPropertyName("sources")] public List<string>? Sources { get; set; }
+        [JsonPropertyName("setBy")] public string? SetBy { get; set; }
         [JsonPropertyName("issues")] public List<string>? Issues { get; set; }
     }
 
@@ -126,6 +157,7 @@ namespace Albatross.Services
         [JsonPropertyName("certificate")] public UrlScanCertificate? Certificate { get; set; }
         [JsonPropertyName("chain")] public List<UrlScanChainCert>? Chain { get; set; }
         [JsonPropertyName("certificateNote")] public string? CertificateNote { get; set; }
+        [JsonPropertyName("behindCloudflare")] public bool BehindCloudflare { get; set; }
     }
 
     public class UrlScanCertificate
@@ -145,6 +177,8 @@ namespace Albatross.Services
         [JsonPropertyName("selfSigned")] public bool SelfSigned { get; set; }
         [JsonPropertyName("hostnameMatch")] public bool? HostnameMatch { get; set; }
         [JsonPropertyName("chainLength")] public int? ChainLength { get; set; }
+        [JsonPropertyName("source")] public string? Source { get; set; }
+        [JsonPropertyName("issuerFriendlyName")] public string? IssuerFriendlyName { get; set; }
         [JsonPropertyName("error")] public string? Error { get; set; }
     }
 
@@ -172,6 +206,9 @@ namespace Albatross.Services
         [JsonPropertyName("updated")] public string? Updated { get; set; }
         [JsonPropertyName("ageDays")] public int? AgeDays { get; set; }
         [JsonPropertyName("daysUntilExpiry")] public int? DaysUntilExpiry { get; set; }
+        [JsonPropertyName("registrationDateRedacted")] public bool RegistrationDateRedacted { get; set; }
+        [JsonPropertyName("expirationDateRedacted")] public bool ExpirationDateRedacted { get; set; }
+        [JsonPropertyName("note")] public string? Note { get; set; }
         [JsonPropertyName("registrar")] public string? Registrar { get; set; }
         [JsonPropertyName("status")] public List<string>? Status { get; set; }
         [JsonPropertyName("nameservers")] public List<string>? Nameservers { get; set; }
