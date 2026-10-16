@@ -357,6 +357,7 @@ namespace Albatross.Services
         [JsonPropertyName("detected")] public bool Detected { get; set; }
         [JsonPropertyName("providers")] public List<UrlScanCdnProvider>? Providers { get; set; }
         [JsonPropertyName("cacheStatus")] public string? CacheStatus { get; set; }
+        [JsonPropertyName("cacheHeader")] public string? CacheHeader { get; set; }
     }
 
     public class UrlScanCdnProvider

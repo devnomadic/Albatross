@@ -786,9 +786,10 @@ const INTERESTING_HEADERS = [
   'cross-origin-embedder-policy', 'access-control-allow-origin', 'access-control-allow-credentials', 'x-xss-protection'
 ];
 
-function pickHeaders(headers) {
+function pickHeaders(headers, { behindCloudflare = false } = {}) {
   const out = {};
   for (const name of INTERESTING_HEADERS) {
+    if (WORKER_INJECTED_HEADERS.includes(name) && !behindCloudflare) continue;
     const value = headers.get(name);
     if (value !== null) out[name] = value.length > 500 ? `${value.substring(0, 500)}…` : value;
   }
@@ -1490,7 +1491,16 @@ const CDN_SIGNATURES = [
   { name: 'CDN77', server: /cdn77/i, cname: /cdn77\.org$/ }
 ];
 
-function detectCdn(headers, cnames, asnNames) {
+/**
+ * Headers that Cloudflare adds to a Worker's own outbound fetch() responses. In production every
+ * subrequest passes through Cloudflare, so these appear (e.g. cf-cache-status: DYNAMIC) even for
+ * sites that do not use Cloudflare. They are only meaningful when the target is on Cloudflare IPs.
+ */
+const WORKER_INJECTED_HEADERS = ['cf-cache-status', 'cf-ray'];
+
+const CACHE_STATUS_HEADERS = ['x-cache', 'x-cache-status', 'x-vercel-cache', 'x-nf-cache-status', 'cdn-cache', 'x-proxy-cache', 'x-drupal-cache', 'x-litespeed-cache', 'x-fastcgi-cache'];
+
+function detectCdn(headers, cnames, asnNames, { behindCloudflare = false } = {}) {
   const providers = [];
   const server = headers?.get('server') || '';
   const via = headers?.get('via') || '';
@@ -1499,7 +1509,11 @@ function detectCdn(headers, cnames, asnNames) {
 
   for (const sig of CDN_SIGNATURES) {
     const evidence = [];
-    for (const h of sig.headers || []) if (headers?.get(h)) evidence.push(`header ${h}`);
+    for (const h of sig.headers || []) {
+      if (WORKER_INJECTED_HEADERS.includes(h) && !behindCloudflare) continue;
+      if (headers?.get(h)) evidence.push(`header ${h}`);
+    }
+    if (sig.name === 'Cloudflare' && behindCloudflare) evidence.push('IP in Cloudflare range');
     if (sig.server && sig.server.test(server)) evidence.push(`Server: ${server}`);
     if (sig.via && sig.via.test(via)) evidence.push(`Via: ${via}`);
     if (sig.servedBy && sig.servedBy.test(servedBy)) evidence.push(`X-Served-By: ${servedBy}`);
@@ -1509,10 +1523,13 @@ function detectCdn(headers, cnames, asnNames) {
     if (evidence.length) providers.push({ name: sig.name, evidence: [...new Set(evidence)] });
   }
 
+  // Prefer the site's own cache header; cf-cache-status only counts when the site is actually on Cloudflare
+  const cacheHeader = [...(behindCloudflare ? ['cf-cache-status'] : []), ...CACHE_STATUS_HEADERS].find((h) => headers?.get(h));
   return {
     detected: providers.length > 0,
     providers,
-    cacheStatus: headers?.get('cf-cache-status') || headers?.get('x-cache') || headers?.get('x-vercel-cache') || null
+    cacheStatus: cacheHeader ? headers.get(cacheHeader).substring(0, 60) : null,
+    cacheHeader: cacheHeader || null
   };
 }
 
@@ -3067,7 +3084,7 @@ export async function runUrlScan(rawTarget, options = {}) {
   ];
 
   const asnNames = ipIntel.map((i) => i.asnName).filter(Boolean);
-  const cdn = detectCdn(headers, dns.cname, asnNames);
+  const cdn = detectCdn(headers, dns.cname, asnNames, { behindCloudflare });
 
   const screenshotPublic = { ...screenshot };
   delete screenshotPublic._requests;
@@ -3101,7 +3118,7 @@ export async function runUrlScan(rawTarget, options = {}) {
       versions: { 'http/1.1': finalResponse ? true : null, h2: http2, h3: http3 },
       evidence: httpVersionEvidence,
       httpsEnforcement,
-      headers: pickHeaders(headers),
+      headers: pickHeaders(headers, { behindCloudflare }),
       securityHeaders: finalResponse ? analyzeSecurityHeaders(headers, finalIsHttps) : []
     },
     cookies: cookieReport,
@@ -3147,6 +3164,7 @@ export const _internal = {
   analyzeSecurityHeaders,
   analyzeContent,
   detectCdn,
+  pickHeaders,
   compareVersions,
   parseServerHello,
   buildFindings,

@@ -84,7 +84,12 @@
 -->
 @{
     var currentMonth = DateTime.Now.Month;
-    var logoPath = currentMonth == 12 ? "/images/ascii-text-art-christmas.png" : "/images/ascii-text-art.png";
+    var logoPath = currentMonth switch
+    {
+        10 => "/images/ascii-text-art-halloween.png",
+        12 => "/images/ascii-text-art-christmas.png",
+        _ => "/images/ascii-text-art.png"
+    };
 }
 <img src="@logoPath" alt="CloudIPSearch" width="38%" style="padding-bottom: 5px;" border="0" class="header-ascii-logo"/> <br>
 <img src="/images/ascii-text-art-albatross.png" alt="ascii-text-art-albatross" width="15%" border="0" class="header-ascii-logo" /> <br><br>
@@ -102,7 +107,7 @@
 <br><br>
 
 <input @bind="ipAddress" @bind:event="oninput" @onkeydown="OnInputKeyDown" type="text" inputmode="url" autocomplete="off" spellcheck="false" maxlength="2048"
-       placeholder="Enter a public IPv4/IPv6 address (ip;maxDays) or a URL (https://example.com/path)" class="ip-input form-control" />
+       placeholder="Enter a public IPv4/IPv6 address (ip;maxDays) or URL (http(s):)" class="ip-input form-control" />
 <button class="btn btn-primary" @onclick="ValidateAndSearchAsync" disabled="@(isSearching || isScanningUrl)">Search IP</button>
 <button class="btn btn-danger" @onclick="ScanUrlAsync" disabled="@(isScanningUrl || isCheckingAbuse || isSearching)" style="margin-left: 10px;" title="Passive security scan of a URL: redirects, HTTP/TLS versions, certificate, domain age, IPs, CDN, technologies and a screenshot">
     <span class="oi oi-globe"></span> Scan URL
@@ -545,7 +550,7 @@
                                     {
                                         <span class="chip chip-info" title="@string.Join("\n", p.Evidence ?? new())">@p.Name</span>
                                     }
-                                    @if (!string.IsNullOrEmpty(scan.Network.Cdn.CacheStatus)) { <span class="chip chip-unknown">cache: @scan.Network.Cdn.CacheStatus</span> }
+                                    @if (!string.IsNullOrEmpty(scan.Network.Cdn.CacheStatus)) { <span class="chip chip-unknown" title="From the @scan.Network.Cdn.CacheHeader response header">cache: @scan.Network.Cdn.CacheStatus</span> }
                                 }
                                 else
                                 {
