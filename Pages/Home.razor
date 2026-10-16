@@ -515,6 +515,7 @@
                                     <dt>Expires</dt><dd>@(reg.Expires != null ? FormatDate(reg.Expires) : reg.ExpirationDateRedacted ? "Not published by registry" : "n/a")</dd>
                                     @if (reg.Created == null && reg.Updated != null) { <dt>Last changed</dt><dd>@FormatDate(reg.Updated)</dd> }
                                     <dt>Registrar</dt><dd>@(reg.Registrar ?? "n/a")</dd>
+                                    <dt>Source</dt><dd title="@reg.Source">@(reg.Method == "whois" ? "WHOIS" : "RDAP") · @(Uri.TryCreate(reg.Source, UriKind.Absolute, out var regSrc) ? regSrc.Host : reg.Source)</dd>
                                 }
                                 else
                                 {
@@ -672,6 +673,161 @@
                     </div>
 
                     <div class="url-scan-card url-scan-wide">
+                        <div class="url-scan-card-title">🌐 Off-domain Resources</div>
+                        @if (scan.OffDomain is { } off)
+                        {
+                            <div class="chip-row">
+                                <span class="chip chip-info">@off.OffDomainRequests of @off.TotalRequests requests off-domain</span>
+                                <span class="chip @(off.DomainCount > 0 ? "chip-warn" : "chip-good")">@off.DomainCount third-party domain@(off.DomainCount == 1 ? "" : "s")</span>
+                                <span class="chip @(off.ScriptDomainCount > 0 ? "chip-warn" : "chip-good")">scripts from @off.ScriptDomainCount domain@(off.ScriptDomainCount == 1 ? "" : "s") (@off.ThirdPartyScriptCount files)</span>
+                                <span class="chip @(off.ScriptsWithoutSri > 0 ? "chip-bad" : "chip-good")">@off.ScriptsWithoutSri without SRI</span>
+                                @if (off.InsecureRequests > 0) { <span class="chip chip-bad">@off.InsecureRequests over HTTP</span> }
+                                @if (off.FailedRequests > 0) { <span class="chip chip-unknown">@off.FailedRequests failed</span> }
+                            </div>
+                            @if (off.ByCategory?.Any() == true)
+                            {
+                                <div class="chip-row">
+                                    @foreach (var cat in off.ByCategory.OrderByDescending(c => c.Value))
+                                    {
+                                        <span class="chip @ResourceCategoryClass(cat.Key)">@cat.Key: @cat.Value</span>
+                                    }
+                                </div>
+                            }
+                            @if (off.RelatedDomains?.Any() == true)
+                            {
+                                <div class="url-scan-muted">Treated as the site's own domains: @string.Join(", ", off.RelatedDomains.Select(r => $"{r.Domain} ({r.Reason})"))</div>
+                            }
+
+                            @if (off.Domains?.Any() == true)
+                            {
+                                <div class="url-scan-subtitle">Domains</div>
+                                <table class="url-scan-table">
+                                    <thead><tr><th>Domain</th><th>Category</th><th>Requests</th><th>Types</th><th>Size</th><th>IPs</th></tr></thead>
+                                    <tbody>
+                                        @foreach (var d in showAllOffDomains ? off.Domains : off.Domains.Take(OffDomainPageSize))
+                                        {
+                                            <tr class="@(d.Insecure > 0 || d.IpLiteral ? "row-vuln" : "")">
+                                                <td title="@string.Join("\n", d.Hosts ?? new())"><strong>@d.Domain</strong>@if ((d.Hosts?.Count ?? 0) > 1) { <span class="url-scan-muted"> +@(d.Hosts!.Count - 1) host@(d.Hosts.Count == 2 ? "" : "s")</span> }</td>
+                                                <td><span class="chip @ResourceCategoryClass(d.Category)">@d.Category</span>@(string.IsNullOrEmpty(d.Vendor) ? "" : $" {d.Vendor}")</td>
+                                                <td>@d.Requests</td>
+                                                <td class="resource-types">
+                                                    @foreach (var t in (d.Types ?? new()).OrderByDescending(t => t.Value))
+                                                    {
+                                                        <span class="chip @(t.Key == "script" ? "chip-warn" : "chip-unknown")">@t.Key ×@t.Value</span>
+                                                    }
+                                                </td>
+                                                <td>@FormatBytes(d.Bytes)</td>
+                                                <td><code>@string.Join(", ", d.Ips ?? new())</code></td>
+                                            </tr>
+                                        }
+                                    </tbody>
+                                </table>
+                                @if (off.Domains.Count > OffDomainPageSize)
+                                {
+                                    <button type="button" class="btn btn-sm btn-outline-secondary json-toggle-btn mt-2" @onclick="() => showAllOffDomains = !showAllOffDomains">@(showAllOffDomains ? "Show fewer" : $"Show all {off.Domains.Count} domains")</button>
+                                }
+                            }
+
+                            @if (off.Scripts?.Any() == true)
+                            {
+                                <div class="url-scan-subtitle">Off-domain scripts</div>
+                                <table class="url-scan-table">
+                                    <thead><tr><th>Script</th><th>Domain</th><th>SRI</th><th>Size</th><th>Library</th><th>Notes</th></tr></thead>
+                                    <tbody>
+                                        @foreach (var js in showAllOffDomainScripts ? off.Scripts : off.Scripts.Take(OffDomainPageSize))
+                                        {
+                                            <tr class="@(js.Insecure ? "row-vuln" : "")">
+                                                <td class="script-url" title="@js.Url"><code>@js.Url</code></td>
+                                                <td>@js.Domain@(js.Related ? " (site-owned)" : "")</td>
+                                                <td><span class="chip @(js.Integrity == true ? "chip-good" : js.Integrity == false ? (js.Related ? "chip-unknown" : "chip-bad") : "chip-unknown")" title="@(js.Integrity == null ? "Script was injected by JavaScript, so its integrity attribute could not be read" : "")">@(js.Integrity == true ? "yes" : js.Integrity == false ? "no" : "n/a")</span></td>
+                                                <td>@FormatBytes(js.Size ?? 0)</td>
+                                                <td>@(js.Library ?? "-")</td>
+                                                <td class="url-scan-muted">@string.Join(", ", new[] { js.Injected ? "injected by JS" : null, js.Frame == "sub-frame" ? "in iframe" : null, js.Insecure ? "HTTP" : null, js.Failed != null ? $"failed: {js.Failed}" : null, js.Status >= 400 ? $"HTTP {js.Status}" : null }.Where(x => x != null))</td>
+                                            </tr>
+                                        }
+                                    </tbody>
+                                </table>
+                                @if (off.Scripts.Count > OffDomainPageSize)
+                                {
+                                    <button type="button" class="btn btn-sm btn-outline-secondary json-toggle-btn mt-2" @onclick="() => showAllOffDomainScripts = !showAllOffDomainScripts">@(showAllOffDomainScripts ? "Show fewer" : $"Show all {off.Scripts.Count} scripts")</button>
+                                }
+                            }
+                            @if (off.DomainCount == 0 && off.RelatedDomains?.Any() != true)
+                            {
+                                <div class="url-scan-muted">The page did not load anything from other domains.</div>
+                            }
+                            <div class="url-scan-muted url-scan-note">ℹ️ Source: @off.Source. Third-party scripts run with full access to the page, so each script domain is part of the site's supply chain.</div>
+                        }
+                        else
+                        {
+                            <div class="url-scan-muted">Off-domain analysis not available.</div>
+                        }
+                    </div>
+
+                    <div class="url-scan-card url-scan-wide">
+                        <div class="url-scan-card-title">🔗 Affiliate Activity</div>
+                        @if (scan.Affiliate is { } aff)
+                        {
+                            <div class="chip-row">
+                                <span class="chip @AffiliateVerdictClass(aff.Verdict)">@AffiliateVerdictText(aff.Verdict)</span>
+                                @if (!string.IsNullOrEmpty(aff.Confidence)) { <span class="chip chip-unknown">confidence: @aff.Confidence</span> }
+                                @foreach (var n in aff.Networks ?? new()) { <span class="chip chip-info">@n</span> }
+                            </div>
+
+                            @if (aff.Background?.Any() == true)
+                            {
+                                <div class="url-scan-subtitle">⚠️ Affiliate click requests fired without any user interaction</div>
+                                <table class="url-scan-table">
+                                    <thead><tr><th>Network</th><th>Loaded as</th><th>Hidden</th><th>Affiliate ID</th><th>URL</th></tr></thead>
+                                    <tbody>
+                                        @foreach (var b in aff.Background)
+                                        {
+                                            <tr class="row-vuln">
+                                                <td>@b.Network</td>
+                                                <td>@b.ResourceType@(b.Frame == "sub-frame" ? " (in iframe)" : "")</td>
+                                                <td>@(b.Hidden ?? "-")</td>
+                                                <td>@(b.AffiliateId ?? "-")</td>
+                                                <td class="url-scan-url"><code>@b.Url</code></td>
+                                            </tr>
+                                        }
+                                    </tbody>
+                                </table>
+                                <div class="url-scan-muted mt-1">The scanner never clicks anything. Affiliate click URLs loaded in the background drop commission cookies on visitors who never chose to follow an affiliate link, which is the signature of cookie stuffing.</div>
+                            }
+
+                            @if (aff.Navigation?.Any() == true)
+                            {
+                                <div class="url-scan-subtitle">Affiliate link in the scanned URL's redirect chain</div>
+                                <ul class="url-scan-redirects">
+                                    @foreach (var n in aff.Navigation)
+                                    {
+                                        <li><span class="chip chip-info">hop @n.Hop</span> @n.Network@(string.IsNullOrEmpty(n.AffiliateId) ? "" : $" · ID {n.AffiliateId}") <span class="url-scan-url">@n.Url</span></li>
+                                    }
+                                </ul>
+                                <div class="url-scan-muted">The person who shared this link earns commission on purchases. That's normal when the visitor chooses to open the link.</div>
+                            }
+
+                            @if (aff.Impressions?.Any() == true)
+                            {
+                                <div class="url-scan-muted mt-1">Affiliate impression pixels: @string.Join(", ", aff.Impressions.Select(i => i.Network).Distinct()) (normal ad tracking, not stuffing).</div>
+                            }
+                            @if (aff.AffiliateCookies?.Any() == true)
+                            {
+                                <div class="url-scan-muted mt-1">Affiliate network cookies present after load: @string.Join(", ", aff.AffiliateCookies.Select(c => $"{c.Name} ({c.Domain})"))</div>
+                            }
+                            @if (aff.Verdict == "none")
+                            {
+                                <div class="url-scan-muted">No affiliate links or background affiliate requests were detected.</div>
+                            }
+                            <div class="url-scan-muted url-scan-note">ℹ️ @aff.Note</div>
+                        }
+                        else
+                        {
+                            <div class="url-scan-muted">Affiliate analysis not available.</div>
+                        }
+                    </div>
+
+                    <div class="url-scan-card url-scan-wide">
                         <div class="url-scan-card-title">🧩 Frameworks &amp; Dependencies (@(scan.Technologies?.Count ?? 0))</div>
                         @if (scan.Technologies?.Any() == true)
                         {
@@ -751,6 +907,9 @@
     private static readonly string[] CookieFilters = { "All", "First-party", "Third-party", "Tracking", "With issues" };
     private string cookieFilter = "All";
     private bool showAllCookies = false;
+    private const int OffDomainPageSize = 15;
+    private bool showAllOffDomains = false;
+    private bool showAllOffDomainScripts = false;
     private Albatross.Services.UrlScanResult? urlScanResult;
     private static readonly string[] SeverityOrder = { "critical", "high", "medium", "low", "info" };
     private string formattedJson = string.Empty;
@@ -1022,6 +1181,8 @@
         showScreenshotViewer = false;
         cookieFilter = "All";
         showAllCookies = false;
+        showAllOffDomains = false;
+        showAllOffDomainScripts = false;
         ClearIpResults();
         formattedJson = string.Empty;
         await JSRuntime.InvokeVoidAsync("AlbatrossWorldMap.destroy");
@@ -1074,6 +1235,38 @@
         "Tracking" => items.Where(c => c.Category is "Analytics" or "Marketing").ToList(),
         "With issues" => items.Where(c => c.Issues?.Any() == true).ToList(),
         _ => items
+    };
+
+    private static string ResourceCategoryClass(string? category) => category switch
+    {
+        "Advertising" or "Analytics / monitoring" or "Tag manager" or "Social" => "chip-warn",
+        "Site-owned (related domain)" or "Public CDN" or "Fonts" or "Hosting / CDN" => "chip-good",
+        "Payments" or "Security / CAPTCHA" or "Consent manager" or "Chat / CRM" or "Video" or "Maps" => "chip-info",
+        _ => "chip-unknown"
+    };
+
+    private static string FormatBytes(long bytes) => bytes switch
+    {
+        <= 0 => "-",
+        < 1024 => $"{bytes} B",
+        < 1024 * 1024 => $"{bytes / 1024.0:0.#} KB",
+        _ => $"{bytes / 1024.0 / 1024.0:0.#} MB"
+    };
+
+    private static string AffiliateVerdictText(string? verdict) => verdict switch
+    {
+        "suspected-stuffing" => "Possible cookie stuffing",
+        "affiliate-link" => "Affiliate link",
+        "affiliate-tracking" => "Affiliate tracking only",
+        _ => "No affiliate activity"
+    };
+
+    private static string AffiliateVerdictClass(string? verdict) => verdict switch
+    {
+        "suspected-stuffing" => "chip-bad",
+        "affiliate-link" => "chip-info",
+        "affiliate-tracking" => "chip-unknown",
+        _ => "chip-good"
     };
 
     private static string CookieCategoryClass(string? category) => category switch

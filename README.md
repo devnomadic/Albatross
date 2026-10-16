@@ -372,12 +372,14 @@ Enter a full `http://` or `https://` URL and press **Scan URL** (pressing Search
 | Redirect chain, HTTPS downgrade, cross-domain hops | Manual hop-by-hop `fetch` (max 10 hops, 25s budget) |
 | HTTP/2 and HTTP/3 | TLS ALPN, DNS `HTTPS` record ALPN, `Alt-Svc` header |
 | TLS 1.0 / 1.1 / 1.2 / 1.3, cipher, certificate | Raw TLS ClientHello probes over `cloudflare:sockets`, with the leaf certificate parsed from the TLS 1.2 handshake |
-| Domain age, registrar, expiry | RDAP via rdap.org |
+| Domain age, registrar, expiry | The registry's own RDAP service (found via the IANA bootstrap), then the registry's WHOIS server on port 43 for TLDs without RDAP (.io, .de, .nz, .jp, .co, .cn, .eu…), then rdap.org as a last resort |
 | A/AAAA/CNAME/NS/MX/CAA, SPF, DMARC, DNSSEC | Cloudflare DNS over HTTPS |
 | ASN and abuse score of hosting IPs | Cloudflare Radar, AbuseIPDB |
 | CDN | Response headers, CNAME chain, ASN names |
 | Frameworks and dependencies | Headers, cookies, HTML, script URLs, and JavaScript globals in the rendered page, matched against a small static table of known-vulnerable or end-of-life versions |
 | Cookies: first or third party, purpose and vendor, lifetime, Secure, HttpOnly and SameSite, issues | `Set-Cookie` on every redirect hop, plus all cookies seen by the rendering browser. Values are never collected |
+| Off-domain resources | Every request the rendered page makes to other domains, grouped by domain with category, request types, transfer size and IPs. Off-domain scripts are listed with SRI status and library versions read from the file banner. Site-owned domains are detected from the site certificate or a shared name (e.g. bbci.co.uk, githubassets.com) |
+| Affiliate activity and possible cookie stuffing | Affiliate links in the redirect chain, plus affiliate click URLs loaded in the background from hidden images, iframes, off-screen elements and prefetch hints. Covers about 20 networks, including Amazon, Awin, CJ, Impact, Rakuten, ShareASale, ClickBank and eBay |
 | Security headers, SRI, mixed content, security.txt | Response analysis |
 | Screenshot | Cloudflare Browser Rendering (`BROWSER` binding, `@cloudflare/puppeteer`) |
 

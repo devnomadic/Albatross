@@ -19,6 +19,8 @@ namespace Albatross.Services
         [JsonPropertyName("http")] public UrlScanHttp? Http { get; set; }
         [JsonPropertyName("tls")] public UrlScanTls? Tls { get; set; }
         [JsonPropertyName("cookies")] public UrlScanCookies? Cookies { get; set; }
+        [JsonPropertyName("offDomain")] public UrlScanOffDomain? OffDomain { get; set; }
+        [JsonPropertyName("affiliate")] public UrlScanAffiliate? Affiliate { get; set; }
         [JsonPropertyName("domain")] public UrlScanDomain? Domain { get; set; }
         [JsonPropertyName("network")] public UrlScanNetwork? Network { get; set; }
         [JsonPropertyName("technologies")] public List<UrlScanTechnology>? Technologies { get; set; }
@@ -126,6 +128,105 @@ namespace Albatross.Services
         [JsonPropertyName("items")] public List<UrlScanCookie>? Items { get; set; }
     }
 
+    /// <summary>
+    /// Everything the page fetched from other domains (scripts, styles, images, fonts, frames, API calls).
+    /// </summary>
+    public class UrlScanOffDomain
+    {
+        [JsonPropertyName("browserInspected")] public bool BrowserInspected { get; set; }
+        [JsonPropertyName("source")] public string? Source { get; set; }
+        [JsonPropertyName("totalRequests")] public int TotalRequests { get; set; }
+        [JsonPropertyName("offDomainRequests")] public int OffDomainRequests { get; set; }
+        [JsonPropertyName("domainCount")] public int DomainCount { get; set; }
+        [JsonPropertyName("relatedDomains")] public List<UrlScanRelatedDomain>? RelatedDomains { get; set; }
+        [JsonPropertyName("scriptDomainCount")] public int ScriptDomainCount { get; set; }
+        [JsonPropertyName("scriptCount")] public int ScriptCount { get; set; }
+        [JsonPropertyName("thirdPartyScriptCount")] public int ThirdPartyScriptCount { get; set; }
+        [JsonPropertyName("scriptsWithoutSri")] public int ScriptsWithoutSri { get; set; }
+        [JsonPropertyName("insecureRequests")] public int InsecureRequests { get; set; }
+        [JsonPropertyName("failedRequests")] public int FailedRequests { get; set; }
+        [JsonPropertyName("byCategory")] public Dictionary<string, int>? ByCategory { get; set; }
+        [JsonPropertyName("domains")] public List<UrlScanOffDomainHost>? Domains { get; set; }
+        [JsonPropertyName("truncatedDomains")] public bool TruncatedDomains { get; set; }
+        [JsonPropertyName("scripts")] public List<UrlScanOffDomainScript>? Scripts { get; set; }
+    }
+
+    public class UrlScanRelatedDomain
+    {
+        [JsonPropertyName("domain")] public string? Domain { get; set; }
+        [JsonPropertyName("reason")] public string? Reason { get; set; }
+    }
+
+    public class UrlScanOffDomainHost
+    {
+        [JsonPropertyName("domain")] public string? Domain { get; set; }
+        [JsonPropertyName("category")] public string? Category { get; set; }
+        [JsonPropertyName("vendor")] public string? Vendor { get; set; }
+        [JsonPropertyName("related")] public bool Related { get; set; }
+        [JsonPropertyName("hosts")] public List<string>? Hosts { get; set; }
+        [JsonPropertyName("ips")] public List<string>? Ips { get; set; }
+        [JsonPropertyName("requests")] public int Requests { get; set; }
+        [JsonPropertyName("types")] public Dictionary<string, int>? Types { get; set; }
+        [JsonPropertyName("bytes")] public long Bytes { get; set; }
+        [JsonPropertyName("insecure")] public int Insecure { get; set; }
+        [JsonPropertyName("failed")] public int Failed { get; set; }
+        [JsonPropertyName("ipLiteral")] public bool IpLiteral { get; set; }
+        [JsonPropertyName("scriptCount")] public int ScriptCount { get; set; }
+    }
+
+    public class UrlScanOffDomainScript
+    {
+        [JsonPropertyName("url")] public string? Url { get; set; }
+        [JsonPropertyName("domain")] public string? Domain { get; set; }
+        [JsonPropertyName("category")] public string? Category { get; set; }
+        [JsonPropertyName("vendor")] public string? Vendor { get; set; }
+        [JsonPropertyName("related")] public bool Related { get; set; }
+        [JsonPropertyName("integrity")] public bool? Integrity { get; set; }
+        [JsonPropertyName("injected")] public bool Injected { get; set; }
+        [JsonPropertyName("insecure")] public bool Insecure { get; set; }
+        [JsonPropertyName("status")] public int? Status { get; set; }
+        [JsonPropertyName("failed")] public string? Failed { get; set; }
+        [JsonPropertyName("size")] public long? Size { get; set; }
+        [JsonPropertyName("frame")] public string? Frame { get; set; }
+        [JsonPropertyName("library")] public string? Library { get; set; }
+    }
+
+    /// <summary>
+    /// Affiliate activity: disclosed affiliate links in the redirect chain versus affiliate click
+    /// URLs fired in the background without user interaction (possible cookie stuffing).
+    /// </summary>
+    public class UrlScanAffiliate
+    {
+        [JsonPropertyName("verdict")] public string? Verdict { get; set; }
+        [JsonPropertyName("suspectedStuffing")] public bool SuspectedStuffing { get; set; }
+        [JsonPropertyName("confidence")] public string? Confidence { get; set; }
+        [JsonPropertyName("networks")] public List<string>? Networks { get; set; }
+        [JsonPropertyName("navigation")] public List<UrlScanAffiliateHit>? Navigation { get; set; }
+        [JsonPropertyName("background")] public List<UrlScanAffiliateHit>? Background { get; set; }
+        [JsonPropertyName("impressions")] public List<UrlScanAffiliateHit>? Impressions { get; set; }
+        [JsonPropertyName("affiliateCookies")] public List<UrlScanAffiliateCookie>? AffiliateCookies { get; set; }
+        [JsonPropertyName("browserInspected")] public bool BrowserInspected { get; set; }
+        [JsonPropertyName("note")] public string? Note { get; set; }
+    }
+
+    public class UrlScanAffiliateHit
+    {
+        [JsonPropertyName("network")] public string? Network { get; set; }
+        [JsonPropertyName("affiliateId")] public string? AffiliateId { get; set; }
+        [JsonPropertyName("url")] public string? Url { get; set; }
+        [JsonPropertyName("hop")] public int? Hop { get; set; }
+        [JsonPropertyName("resourceType")] public string? ResourceType { get; set; }
+        [JsonPropertyName("frame")] public string? Frame { get; set; }
+        [JsonPropertyName("hidden")] public string? Hidden { get; set; }
+    }
+
+    public class UrlScanAffiliateCookie
+    {
+        [JsonPropertyName("name")] public string? Name { get; set; }
+        [JsonPropertyName("domain")] public string? Domain { get; set; }
+        [JsonPropertyName("lifetimeDays")] public int? LifetimeDays { get; set; }
+    }
+
     public class UrlScanCookie
     {
         [JsonPropertyName("name")] public string? Name { get; set; }
@@ -206,6 +307,8 @@ namespace Albatross.Services
         [JsonPropertyName("updated")] public string? Updated { get; set; }
         [JsonPropertyName("ageDays")] public int? AgeDays { get; set; }
         [JsonPropertyName("daysUntilExpiry")] public int? DaysUntilExpiry { get; set; }
+        [JsonPropertyName("method")] public string? Method { get; set; }
+        [JsonPropertyName("source")] public string? Source { get; set; }
         [JsonPropertyName("registrationDateRedacted")] public bool RegistrationDateRedacted { get; set; }
         [JsonPropertyName("expirationDateRedacted")] public bool ExpirationDateRedacted { get; set; }
         [JsonPropertyName("note")] public string? Note { get; set; }

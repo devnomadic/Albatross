@@ -2124,3 +2124,17 @@ html[data-theme="dark"] .chip-info { color: #8ab9ff; }
     padding: 0 0.35rem;
     font-size: 0.7rem;
 }
+
+/* URL scan off-domain resources */
+.resource-types .chip {
+    padding: 0 0.4rem;
+    font-size: 0.7rem;
+    margin: 0 0.15rem 0.15rem 0;
+}
+
+.url-scan-table td.script-url {
+    max-width: 480px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}

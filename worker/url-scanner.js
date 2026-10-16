@@ -24,6 +24,9 @@ export const SCAN_LIMITS = {
   maxBodyBytes: 1_000_000,
   fetchTimeoutMs: 10_000,
   redirectBudgetMs: 25_000,
+  maxScriptBodies: 60,
+  maxOffDomainDomains: 80,
+  maxOffDomainScripts: 80,
   tlsTimeoutMs: 6_000,
   screenshotTimeoutMs: 20_000,
   maxUrlLength: 2048,
@@ -450,74 +453,210 @@ function rdapHttpError(status, server) {
   return `RDAP lookup failed: HTTP ${status} from ${server}`;
 }
 
-async function lookupRdap(domain) {
-  if (!domain) return { success: false, error: 'No registrable domain (IP address target)' };
+function parseRdapResponse(json, domain, sourceUrl) {
+  const eventDate = (action) => json.events?.find((e) => e.eventAction === action)?.eventDate || null;
+  const created = eventDate('registration');
+  const expires = eventDate('expiration');
+  const updated = eventDate('last changed');
+
+  // RFC 9537 redaction markers (e.g. auDA withholds registration and expiry dates for all .au names)
+  const redactedTypes = (json.redacted || []).map((r) => `${r.name?.type || ''} ${r.name?.description || ''} ${r.prePath || ''}`.toLowerCase());
+  const registrationRedacted = !created && redactedTypes.some((t) => t.includes('registration'));
+  const expirationRedacted = !expires && redactedTypes.some((t) => t.includes('expiration'));
+
+  const registrarEntity = (json.entities || []).find((e) => (e.roles || []).includes('registrar'));
+  const vcardFn = registrarEntity?.vcardArray?.[1]?.find((f) => f[0] === 'fn')?.[3] || null;
+
+  const now = new Date();
+  const createdDate = created ? new Date(created) : null;
+  const expiresDate = expires ? new Date(expires) : null;
+  const tld = domain.split('.').pop();
+
+  return {
+    success: true,
+    domain: json.ldhName?.toLowerCase() || domain,
+    created,
+    expires,
+    updated,
+    ageDays: createdDate && !isNaN(createdDate) ? daysBetween(createdDate, now) : null,
+    daysUntilExpiry: expiresDate && !isNaN(expiresDate) ? daysBetween(now, expiresDate) : null,
+    registrationDateRedacted: registrationRedacted,
+    expirationDateRedacted: expirationRedacted,
+    note: registrationRedacted
+      ? `The .${tld} registry does not publish registration or expiry dates (redacted under registry policy), so domain age cannot be determined.`
+      : (!created ? 'The registry did not return a registration date.' : null),
+    registrar: vcardFn,
+    status: json.status || [],
+    nameservers: (json.nameservers || []).map((n) => n.ldhName?.toLowerCase().replace(/\.$/, '')).filter(Boolean),
+    source: sourceUrl,
+    method: 'rdap'
+  };
+}
+
+async function rdapQuery(url) {
+  const server = new URL(url).hostname;
   try {
-    const registryBase = await getRdapBaseUrl(domain);
-    const attempts = [
-      ...(registryBase ? [`${registryBase}domain/${encodeURIComponent(domain)}`] : []),
-      `${RDAP_BOOTSTRAP_URL}${encodeURIComponent(domain)}`
-    ];
-
-    let res = null;
-    let lastError = null;
-    for (const url of attempts) {
-      let attempt;
-      try {
-        attempt = await fetchRdap(url);
-      } catch (error) {
-        lastError = `RDAP lookup failed: ${error.message}`;
-        continue;
-      }
-      if (attempt.ok) {
-        res = attempt;
-        break;
-      }
-      lastError = rdapHttpError(attempt.status, new URL(url).hostname);
-      try { await attempt.body?.cancel(); } catch { /* ignore */ }
-      if (attempt.status === 404) break; // authoritative "not found" - no point asking the redirector
+    const res = await fetchRdap(url);
+    if (!res.ok) {
+      try { await res.body?.cancel(); } catch { /* ignore */ }
+      return { ok: false, status: res.status, server, error: rdapHttpError(res.status, server) };
     }
-    if (!res) return { success: false, error: lastError || 'RDAP lookup failed' };
-    const json = await res.json();
+    return { ok: true, json: await res.json(), url: res.url || url, server };
+  } catch (error) {
+    return { ok: false, status: null, server, error: `RDAP lookup at ${server} failed: ${error.message}` };
+  }
+}
 
-    const eventDate = (action) => json.events?.find((e) => e.eventAction === action)?.eventDate || null;
-    const created = eventDate('registration');
-    const expires = eventDate('expiration');
-    const updated = eventDate('last changed');
+// ---------------------------------------------------------------------------
+// WHOIS (port 43) fallback for TLDs without RDAP (.io, .de, .nz, .jp, .co, .cn, .eu ...)
+// ---------------------------------------------------------------------------
 
-    // RFC 9537 redaction markers (e.g. auDA withholds registration and expiry dates for all .au names)
-    const redactedTypes = (json.redacted || []).map((r) => `${r.name?.type || ''} ${r.name?.description || ''} ${r.prePath || ''}`.toLowerCase());
-    const registrationRedacted = !created && redactedTypes.some((t) => t.includes('registration'));
-    const expirationRedacted = !expires && redactedTypes.some((t) => t.includes('expiration'));
+const whoisServerCache = new Map(); // tld -> server | null (per isolate)
 
-    const registrarEntity = (json.entities || []).find((e) => (e.roles || []).includes('registrar'));
-    const vcardFn = registrarEntity?.vcardArray?.[1]?.find((f) => f[0] === 'fn')?.[3] || null;
+async function whoisQuery(connect, server, query, timeoutMs = 6000) {
+  let socket;
+  let timer;
+  const run = (async () => {
+    socket = connect({ hostname: server, port: 43 }, { secureTransport: 'off', allowHalfOpen: true });
+    if (socket.opened) await socket.opened;
+    const writer = socket.writable.getWriter();
+    await writer.write(new TextEncoder().encode(`${query}\r\n`));
+    writer.releaseLock();
+    const reader = socket.readable.getReader();
+    const chunks = [];
+    let total = 0;
+    while (total < 65_536) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      chunks.push(value);
+      total += value.length;
+    }
+    try { reader.releaseLock(); } catch { /* ignore */ }
+    return new TextDecoder('utf-8').decode(concatBytes(...chunks));
+  })();
+  const timeout = new Promise((_, reject) => { timer = setTimeout(() => reject(new Error(`no response from ${server} within ${timeoutMs / 1000}s`)), timeoutMs); });
+  try {
+    return await Promise.race([run, timeout]);
+  } finally {
+    clearTimeout(timer);
+    try { await socket?.close(); } catch { /* ignore */ }
+  }
+}
 
-    const now = new Date();
-    const createdDate = created ? new Date(created) : null;
-    const expiresDate = expires ? new Date(expires) : null;
-    const tld = domain.split('.').pop();
+async function getWhoisServer(connect, tld) {
+  if (whoisServerCache.has(tld)) return whoisServerCache.get(tld);
+  let server = null;
+  try {
+    const text = await whoisQuery(connect, 'whois.iana.org', tld, 5000);
+    server = /^whois:\s*(\S+)/im.exec(text)?.[1]?.toLowerCase() || null;
+  } catch { /* leave null */ }
+  whoisServerCache.set(tld, server);
+  return server;
+}
 
-    return {
+const WHOIS_QUERY_FORMATS = {
+  'whois.denic.de': (d) => `-T dn,ace ${d}`,
+  'whois.jprs.jp': (d) => `${d}/e`
+};
+
+// Optional "a. " item prefix used by JPRS (.jp); bracketed labels are also JPRS style
+const WHOIS_PREFIX = String.raw`^\s*(?:[a-z]\.\s*)?`;
+const whoisField = (labels) => new RegExp(`${WHOIS_PREFIX}(?:${labels})\\s*:?[ \\t]*(.+?)\\s*$`, 'im');
+const WHOIS_FIELD_PATTERNS = {
+  created: whoisField(String.raw`Creation Date|Created On|Created|created|Registered on|Registered|Registration Time|Registration Date|Domain Registration Date|domain_dateregistered|Domain Create Date|\[Created on\]|\[Registered Date\]|\[登録年月日\]`),
+  expires: whoisField(String.raw`Registry Expiry Date|Registrar Registration Expiration Date|Expiration Date|Expiry Date|Expiration Time|Expires On|Expires|expire|paid-till|domain_datebilleduntil|Renewal Date|\[Expires on\]|\[有効期限\]|\[State\]\s+Connected\s*\(`),
+  updated: whoisField(String.raw`Updated Date|Last Updated|Last Modified|Changed|changed|last-update|domain_datelastmodified|\[Last Updated\]|\[Last Update\]|\[最終更新\]`),
+  registrar: /^\s*(?:Registrar|Sponsoring Registrar|registrar|Registrar Name|domain_registrar)\s*:[ \t]*(?:\r?\n\s*Name:[ \t]*)?(.+?)\s*$/im
+};
+
+function parseWhoisDate(value) {
+  if (!value) return null;
+  const cleaned = value.replace(/\)\s*$/, '').replace(/\s*\((?:JST|UTC|GMT)\s*$/i, '').replace(/\s*\((?:JST|UTC|GMT)\)\s*$/i, '').replace(/^(\d{4})\/(\d{2})\/(\d{2})/, '$1-$2-$3').trim();
+  const t = Date.parse(cleaned);
+  return Number.isNaN(t) ? null : new Date(t).toISOString();
+}
+
+async function lookupWhois(domain, connect) {
+  const tld = domain.split('.').pop().toLowerCase();
+  const server = await getWhoisServer(connect, tld);
+  if (!server) return { ok: false, server: 'whois.iana.org', error: `no WHOIS server found for .${tld}` };
+  let text;
+  try {
+    text = await whoisQuery(connect, server, (WHOIS_QUERY_FORMATS[server] || ((d) => d))(domain));
+  } catch (error) {
+    return { ok: false, server, error: `WHOIS ${server} failed: ${describeTlsProbeError(error.message, 43)}` };
+  }
+  if (/no match|not found|no data found|no entries found|status:\s*(free|available)|is free|object does not exist|no object found/i.test(text) && !WHOIS_FIELD_PATTERNS.registrar.test(text)) {
+    return { ok: false, notFound: true, server, error: `Domain not found in WHOIS (${server})` };
+  }
+  const field = (k) => WHOIS_FIELD_PATTERNS[k].exec(text)?.[1] || null;
+  const created = parseWhoisDate(field('created'));
+  const expires = parseWhoisDate(field('expires'));
+  const updated = parseWhoisDate(field('updated'));
+  const registrar = field('registrar');
+  if (!created && !expires && !registrar && !updated) {
+    return { ok: false, server, error: `WHOIS ${server} returned no parsable registration data` };
+  }
+  const now = new Date();
+  return {
+    ok: true,
+    result: {
       success: true,
-      domain: json.ldhName?.toLowerCase() || domain,
+      domain,
       created,
       expires,
       updated,
-      ageDays: createdDate && !isNaN(createdDate) ? daysBetween(createdDate, now) : null,
-      daysUntilExpiry: expiresDate && !isNaN(expiresDate) ? daysBetween(now, expiresDate) : null,
-      registrationDateRedacted: registrationRedacted,
-      expirationDateRedacted: expirationRedacted,
-      note: registrationRedacted
-        ? `The .${tld} registry does not publish registration or expiry dates (redacted under registry policy), so domain age cannot be determined.`
-        : (!created ? 'The registry did not return a registration date.' : null),
-      registrar: vcardFn,
-      status: json.status || [],
-      nameservers: (json.nameservers || []).map((n) => n.ldhName?.toLowerCase().replace(/\.$/, '')).filter(Boolean),
-      source: res.url || 'rdap'
+      ageDays: created ? daysBetween(new Date(created), now) : null,
+      daysUntilExpiry: expires ? daysBetween(now, new Date(expires)) : null,
+      registrationDateRedacted: false,
+      expirationDateRedacted: false,
+      note: created ? null : `The .${tld} WHOIS service (${server}) does not publish a registration date, so domain age cannot be determined.`,
+      registrar: registrar && !/^(not disclosed|redacted)/i.test(registrar) ? registrar.replace(/^Name:\s*/i, '') : null,
+      status: [],
+      nameservers: [...text.matchAll(/^\s*(?:[a-z]\.\s*)?(?:Name Server|nserver|Nameserver|\[Name Server\])\s*:?[ \t]*([a-z0-9.-]+\.[a-z]{2,})/gim)].map((m) => m[1].toLowerCase()).slice(0, 8),
+      source: `whois://${server}`,
+      method: 'whois'
+    }
+  };
+}
+
+/**
+ * Domain registration lookup: the registry's own RDAP service (from the IANA bootstrap), then the
+ * registry's WHOIS server over port 43, then rdap.org as a last resort. rdap.org is avoided where
+ * possible because it rate-limits the shared egress IPs that Cloudflare Workers use.
+ */
+async function lookupRdap(domain, { connect } = {}) {
+  if (!domain) return { success: false, error: 'No registrable domain (IP address target)' };
+  const tried = [];
+  try {
+    const registryBase = await getRdapBaseUrl(domain);
+    if (registryBase) {
+      const r = await rdapQuery(`${registryBase}domain/${encodeURIComponent(domain)}`);
+      if (r.ok) return parseRdapResponse(r.json, domain, r.url);
+      tried.push(r);
+      if (r.status === 404) return { success: false, error: r.error, attempts: tried.map((t) => t.error) };
+    } else {
+      tried.push({ error: `.${domain.split('.').pop()} has no RDAP service registered with IANA` });
+    }
+
+    if (connect) {
+      const w = await lookupWhois(domain, connect);
+      if (w.ok) return w.result;
+      tried.push(w);
+      if (w.notFound) return { success: false, error: w.error, attempts: tried.map((t) => t.error) };
+    }
+
+    const fallback = await rdapQuery(`${RDAP_BOOTSTRAP_URL}${encodeURIComponent(domain)}`);
+    if (fallback.ok) return parseRdapResponse(fallback.json, domain, fallback.url);
+    tried.push(fallback);
+
+    return {
+      success: false,
+      error: `Registration lookup failed. ${tried.map((t) => t.error).join('; ')}`,
+      attempts: tried.map((t) => t.error)
     };
   } catch (error) {
-    return { success: false, error: `RDAP lookup failed: ${error.message}` };
+    return { success: false, error: `Registration lookup failed: ${error.message}`, attempts: tried.map((t) => t.error) };
   }
 }
 
@@ -1149,7 +1288,7 @@ function parseServerSoftware(value) {
   return results;
 }
 
-function fingerprintTechnologies({ headers, html, cookies, runtimeLibraries, renderedRequests }) {
+function fingerprintTechnologies({ headers, html, cookies, runtimeLibraries, renderedRequests, bannerLibraries }) {
   const techs = new Map();
   const add = (name, category, version, source, evidence) => {
     const existing = techs.get(name);
@@ -1215,6 +1354,11 @@ function fingerprintTechnologies({ headers, html, cookies, runtimeLibraries, ren
     if (req.type !== 'script' && req.type !== 'stylesheet') continue;
     const lib = identifyAssetUrl(req.url);
     if (lib) add(lib.name, lib.category, lib.version, 'network', req.url.length > 120 ? `${req.url.substring(0, 120)}…` : req.url);
+  }
+
+  for (const b of bannerLibraries || []) {
+    const lib = SCRIPT_LIBRARIES.find((l) => l.name === b.name);
+    add(b.name, lib?.category || 'JavaScript library', b.version, 'script-content', `banner in ${b.url.length > 100 ? `${b.url.substring(0, 100)}…` : b.url}`);
   }
 
   return [...techs.values()].map((t) => ({ ...t, vulnerabilities: matchVulnerabilities(t.name, t.version) }))
@@ -1971,6 +2115,59 @@ async function lookupIpIntel(ips, { radarApiUrl, radarToken, abuseApiUrl, abuseA
 // Screenshot (Cloudflare Browser Rendering)
 // ---------------------------------------------------------------------------
 
+/* Runs inside the page via page.evaluate - must be self-contained.
+ * Finds elements that load a URL while being invisible to the visitor: zero/1px images and iframes,
+ * elements hidden with CSS or positioned off-screen, and prefetch/prerender link hints.
+ */
+function detectHiddenElements() {
+  const out = [];
+  const vw = window.innerWidth;
+  const vh = Math.max(document.documentElement.scrollHeight, window.innerHeight);
+  const isHidden = (el) => {
+    const r = el.getBoundingClientRect();
+    const cs = window.getComputedStyle(el);
+    const reasons = [];
+    if (r.width <= 2 || r.height <= 2) reasons.push(`${Math.round(r.width)}x${Math.round(r.height)}px`);
+    if (cs.display === 'none') reasons.push('display:none');
+    if (cs.visibility === 'hidden') reasons.push('visibility:hidden');
+    if (parseFloat(cs.opacity) === 0) reasons.push('opacity:0');
+    if (r.right < 0 || r.bottom < 0 || r.left > vw + 100 || r.top > vh + 100) reasons.push('off-screen');
+    let p = el.parentElement;
+    for (let i = 0; p && i < 6; i++, p = p.parentElement) {
+      const pcs = window.getComputedStyle(p);
+      if (pcs.display === 'none' || pcs.visibility === 'hidden') { reasons.push('hidden parent'); break; }
+    }
+    return reasons;
+  };
+  document.querySelectorAll('img[src], iframe[src], frame[src], embed[src], object[data], video[src], audio[src], source[src]').forEach((el) => {
+    if (out.length >= 300) return;
+    const src = el.src || el.data || el.getAttribute('src') || el.getAttribute('data');
+    if (!src || !/^https?:/i.test(src)) return;
+    const reasons = isHidden(el);
+    if (reasons.length) out.push({ tag: el.tagName.toLowerCase(), url: src, reasons });
+  });
+  document.querySelectorAll('link[rel~="prefetch"][href], link[rel~="prerender"][href], link[rel~="preload"][href]').forEach((el) => {
+    if (out.length >= 300) return;
+    if (/^https?:/i.test(el.href)) out.push({ tag: `link rel=${el.rel}`, url: el.href, reasons: ['resource hint'] });
+  });
+  return out;
+}
+
+/* Runs inside the page via page.evaluate - must be self-contained.
+ * Script and stylesheet elements in the rendered DOM (including ones injected by JavaScript)
+ * with their Subresource Integrity / crossorigin attributes.
+ */
+function detectResourceElements() {
+  const out = [];
+  document.querySelectorAll('script[src]').forEach((el) => {
+    if (out.length < 400 && /^https?:/i.test(el.src)) out.push({ kind: 'script', url: el.src, integrity: !!el.integrity, crossorigin: el.crossOrigin || null, async: el.async, defer: el.defer, type: el.type || null });
+  });
+  document.querySelectorAll('link[rel~="stylesheet"][href]').forEach((el) => {
+    if (out.length < 400 && /^https?:/i.test(el.href)) out.push({ kind: 'stylesheet', url: el.href, integrity: !!el.integrity, crossorigin: el.crossOrigin || null });
+  });
+  return out;
+}
+
 /* Runs inside the page via page.evaluate - must be self-contained */
 function detectRuntimeLibraries() {
   const r = {};
@@ -2043,7 +2240,59 @@ async function renderPage(puppeteer, env, url, targetDomain, holder) {
     const requests = [];
     page.on('request', (req) => {
       const reqUrl = req.url();
-      if (requests.length < 400 && /^https?:/i.test(reqUrl)) requests.push({ url: reqUrl, type: req.resourceType() });
+      if (requests.length >= 400 || !/^https?:/i.test(reqUrl)) return;
+      let mainFrame = true;
+      try { mainFrame = req.frame() === page.mainFrame(); } catch { /* frame detached */ }
+      let navigation = false;
+      try { navigation = req.isNavigationRequest(); } catch { /* ignore */ }
+      requests.push({ url: reqUrl, type: req.resourceType(), navigation, mainFrame });
+    });
+
+    // Actual transfer sizes from the DevTools protocol (Content-Length is often absent for compressed responses)
+    const transferSizes = new Map();
+    let cdp = null;
+    try {
+      cdp = await page.createCDPSession();
+      await cdp.send('Network.enable');
+      const idToUrl = new Map();
+      cdp.on('Network.requestWillBeSent', (e) => { if (idToUrl.size < 1000) idToUrl.set(e.requestId, e.request.url); });
+      cdp.on('Network.loadingFinished', (e) => {
+        const u = idToUrl.get(e.requestId);
+        if (u) transferSizes.set(u, (transferSizes.get(u) || 0) + e.encodedDataLength);
+      });
+    } catch { cdp = null; }
+
+    // Response metadata for every resource, plus the opening bytes of scripts (library banners)
+    const responses = new Map();
+    const scriptReads = [];
+    page.on('response', (res) => {
+      const resUrl = res.url();
+      if (responses.size >= 400 || !/^https?:/i.test(resUrl)) return;
+      const headers = res.headers();
+      let remoteIp = null;
+      try { remoteIp = res.remoteAddress()?.ip || null; } catch { /* ignore */ }
+      const meta = {
+        status: res.status(),
+        mimeType: (headers['content-type'] || '').split(';')[0].trim() || null,
+        size: parseInt(headers['content-length'] || '', 10) || null,
+        remoteIp,
+        fromCache: (() => { try { return res.fromCache(); } catch { return false; } })()
+      };
+      responses.set(resUrl, meta);
+      const type = (() => { try { return res.request().resourceType(); } catch { return null; } })();
+      if (type === 'script' && res.status() === 200 && scriptReads.length < SCAN_LIMITS.maxScriptBodies) {
+        scriptReads.push(res.buffer().then((buf) => {
+          meta.size = meta.size || buf.length;
+          meta.banner = new TextDecoder('utf-8').decode(buf.subarray(0, 4096));
+        }).catch(() => { /* body unavailable (redirect / evicted) */ }));
+      }
+    });
+    page.on('requestfailed', (req) => {
+      const reqUrl = req.url();
+      if (!/^https?:/i.test(reqUrl) || responses.has(reqUrl)) return;
+      let errorText = 'failed';
+      try { errorText = req.failure()?.errorText || errorText; } catch { /* ignore */ }
+      responses.set(reqUrl, { status: null, failed: errorText });
     });
 
     let navigationWarning = null;
@@ -2054,10 +2303,17 @@ async function renderPage(puppeteer, env, url, targetDomain, holder) {
     }
 
     const runtimeLibraries = await page.evaluate(detectRuntimeLibraries).catch(() => ({}));
+    const hiddenElements = await page.evaluate(detectHiddenElements).catch(() => []);
+    const domResources = await page.evaluate(detectResourceElements).catch(() => []);
+    await Promise.race([Promise.allSettled(scriptReads), new Promise((r) => setTimeout(r, 4000))]);
+    for (const [u, size] of transferSizes) {
+      const meta = responses.get(u);
+      if (meta && size) meta.size = size;
+    }
     let cookies = null;
     try {
-      const cdp = await page.createCDPSession();
-      cookies = (await cdp.send('Network.getAllCookies')).cookies || [];
+      const cookieSession = cdp || await page.createCDPSession();
+      cookies = (await cookieSession.send('Network.getAllCookies')).cookies || [];
     } catch {
       cookies = await page.cookies().catch(() => null);
     }
@@ -2086,7 +2342,10 @@ async function renderPage(puppeteer, env, url, targetDomain, holder) {
       thirdPartyHosts,
       runtimeLibraries,
       _requests: requests,
-      _cookies: cookies
+      _cookies: cookies,
+      _hiddenElements: hiddenElements,
+      _responses: responses,
+      _domResources: domResources
     };
   } catch (error) {
     return { success: false, error: `Screenshot failed: ${error.message}` };
@@ -2095,6 +2354,345 @@ async function renderPage(puppeteer, env, url, targetDomain, holder) {
       try { await browser.close(); } catch { /* ignore */ }
     }
   }
+}
+
+// ---------------------------------------------------------------------------
+// Off-domain resources (scripts, styles, images, fonts, frames, API calls)
+// ---------------------------------------------------------------------------
+
+/** Known third-party domains -> category / vendor. Falls back to the cookie vendor table. */
+const RESOURCE_DOMAIN_VENDORS = [
+  [/(^|\.)(cdnjs\.cloudflare\.com|cdn\.jsdelivr\.net|unpkg\.com|ajax\.googleapis\.com|code\.jquery\.com|ajax\.aspnetcdn\.com|stackpath\.bootstrapcdn\.com|maxcdn\.bootstrapcdn\.com|cdn\.skypack\.dev|esm\.sh)$/, 'Public CDN', null],
+  [/(^|\.)(fonts\.googleapis\.com|fonts\.gstatic\.com|use\.typekit\.net|p\.typekit\.net|use\.fontawesome\.com|kit\.fontawesome\.com|fonts\.bunny\.net)$/, 'Fonts', null],
+  [/(^|\.)(googletagmanager\.com|tags\.tiqcdn\.com|assets\.adobedtm\.com|cdn\.segment\.com|tealium\w*\.com)$/, 'Tag manager', null],
+  [/(^|\.)(google-analytics\.com|analytics\.google\.com|static\.cloudflareinsights\.com|cloudflareinsights\.com|plausible\.io|matomo\.cloud|clarity\.ms|static\.hotjar\.com|script\.hotjar\.com|cdn\.mxpnl\.com|api\.amplitude\.com|cdn\.amplitude\.com|heapanalytics\.com|fullstory\.com|newrelic\.com|nr-data\.net|js-agent\.newrelic\.com|sentry\.io|sentry-cdn\.com|browser-intake-datadoghq\.com|datadoghq-browser-agent\.com)$/, 'Analytics / monitoring', null],
+  [/(^|\.)(connect\.facebook\.net|platform\.twitter\.com|platform\.linkedin\.com|snap\.licdn\.com|static\.addtoany\.com|s7\.addthis\.com|apis\.google\.com)$/, 'Social', null],
+  [/(^|\.)(youtube\.com|youtube-nocookie\.com|ytimg\.com|googlevideo\.com|vimeo\.com|vimeocdn\.com|jwplayer\.com|jwpcdn\.com|brightcove\.(com|net)|wistia\.(com|net))$/, 'Video', null],
+  [/(^|\.)(js\.stripe\.com|m\.stripe\.network|stripe\.com|paypal\.com|paypalobjects\.com|braintreegateway\.com|checkout\.com|adyen\.com|square(up)?\.com|afterpay\.com|klarna\.com)$/, 'Payments', null],
+  [/(^|\.)(recaptcha\.net|www\.gstatic\.com|hcaptcha\.com|challenges\.cloudflare\.com)$/, 'Security / CAPTCHA', null],
+  [/(^|\.)(privacy-mgmt\.com|sourcepoint\.com|cmp\.inmobi\.com|quantcast\.mgr\.consensu\.org|termly\.io|osano\.com)$/, 'Consent manager', null],
+  [/(^|\.)(usefathom\.com|plausible\.io|simpleanalytics\w*\.com|goatcounter\.com|chartbeat\.(com|net)|parsely\.com|scorecardresearch\.com|imrworldwide\.com|dotmetrics\.net|omtrdc\.net|demdex\.net|2o7\.net|sc-static\.net)$/, 'Analytics / monitoring', null],
+  [/(^|\.)(carbonads\.(com|net)|buysellads\.(com|net)|the-ozone-project\.com|googlesyndication\.com|doubleclick\.net|adnxs\.com|amazon-adsystem\.com|criteo\.(com|net)|taboola\.com|outbrain\.com|pubmatic\.com|rubiconproject\.com|openx\.net|casalemedia\.com|adsrvr\.org|teads\.tv|moatads\.com|prebid\.org|cxense\.com|permutive\.(app|com)|doubleverify\.com|webcontentassessor\.com|adsafeprotected\.com|id5-sync\.com)$/, 'Advertising', null],
+  [/(^|\.)(cookielaw\.org|onetrust\.com|cookiebot\.com|consensu\.org|didomi\.io|usercentrics\.eu|trustarc\.com|cookieyes\.com|iubenda\.com)$/, 'Consent manager', null],
+  [/(^|\.)(intercom\.io|intercomcdn\.com|zendesk\.com|zdassets\.com|livechatinc\.com|tawk\.to|drift\.com|crisp\.chat|hubspot\.com|hs-scripts\.com|hs-analytics\.net|hsforms\.net)$/, 'Chat / CRM', null],
+  [/(^|\.)(cloudfront\.net|akamaized\.net|akamaihd\.net|fastly\.net|azureedge\.net|azurefd\.net|b-cdn\.net|kxcdn\.com|cdn77\.org|edgekey\.net|amazonaws\.com|storage\.googleapis\.com|blob\.core\.windows\.net|r2\.dev|wp\.com|shopifycdn\.com|cdn\.shopify\.com|squarespace-cdn\.com|wixstatic\.com|website-files\.com)$/, 'Hosting / CDN', null],
+  [/(^|\.)(maps\.googleapis\.com|maps\.gstatic\.com|api\.mapbox\.com|tile\.openstreetmap\.org)$/, 'Maps', null]
+];
+
+const SCRIPT_BANNERS = [
+  [/jQuery UI - v(\d+\.\d+\.\d+)/i, 'jQuery UI'],
+  [/jQuery Migrate - v(\d+\.\d+\.\d+)/i, 'jQuery Migrate'],
+  [/jQuery (?:JavaScript Library )?v(\d+\.\d+\.\d+)/i, 'jQuery'],
+  [/Bootstrap v(\d+\.\d+\.\d+)/i, 'Bootstrap'],
+  [/AngularJS v(\d+\.\d+\.\d+)/i, 'AngularJS'],
+  [/Vue\.js v(\d+\.\d+\.\d+)/i, 'Vue'],
+  [/moment\.js[\s\S]{0,40}?version\s*:\s*(\d+\.\d+\.\d+)/i, 'Moment.js'],
+  [/handlebars v(\d+\.\d+\.\d+)/i, 'Handlebars'],
+  [/DOMPurify (\d+\.\d+\.\d+)/i, 'DOMPurify'],
+  [/Underscore\.js (\d+\.\d+\.\d+)/i, 'Underscore'],
+  [/@popperjs\/core v(\d+\.\d+\.\d+)|Popper\.js v(\d+\.\d+\.\d+)/i, 'Popper'],
+  [/Swiper (\d+\.\d+\.\d+)/i, 'Swiper'],
+  [/GSAP (\d+\.\d+\.\d+)/i, 'GSAP'],
+  [/Chart\.js v(\d+\.\d+\.\d+)/i, 'Chart.js'],
+  [/D3 v?(\d+\.\d+\.\d+)|d3js\.org v(\d+\.\d+\.\d+)/i, 'D3'],
+  [/Modernizr (\d+\.\d+\.\d+)/i, 'Modernizr'],
+  [/axios v(\d+\.\d+\.\d+)/i, 'Axios'],
+  [/Lodash <https:\/\/lodash\.com\/>[\s\S]{0,300}?(\d+\.\d+\.\d+)|lodash v?(\d+\.\d+\.\d+)/i, 'Lodash']
+];
+
+function identifyScriptBanner(text) {
+  if (!text) return null;
+  for (const [re, name] of SCRIPT_BANNERS) {
+    const m = re.exec(text);
+    if (m) {
+      const version = m.slice(1).find(Boolean);
+      return { name, version };
+    }
+  }
+  return null;
+}
+
+function classifyResourceDomain(host) {
+  const hit = RESOURCE_DOMAIN_VENDORS.find(([re]) => re.test(host));
+  if (hit) return { category: hit[1], vendor: hit[2] };
+  const vendor = COOKIE_DOMAIN_VENDORS.find(([re]) => re.test(host));
+  if (vendor) return { category: vendor[1] === 'Marketing' ? 'Advertising' : vendor[1] === 'Analytics' ? 'Analytics / monitoring' : vendor[1], vendor: vendor[2] };
+  return { category: 'Unclassified', vendor: null };
+}
+
+const RESOURCE_TYPE_LABELS = { script: 'script', stylesheet: 'style', image: 'image', font: 'font', media: 'media', xhr: 'xhr', fetch: 'fetch', document: 'frame', websocket: 'websocket', manifest: 'manifest', eventsource: 'eventsource', ping: 'beacon', other: 'other' };
+
+/**
+ * Inventory of everything the rendered page fetched from other domains, grouped by domain,
+ * with the third-party scripts listed individually (SRI, transport, size, library banner).
+ * Falls back to the static HTML asset list when the page could not be rendered.
+ */
+/**
+ * Heuristic for domains that belong to the scanned site's owner (e.g. bbci.co.uk for bbc.co.uk,
+ * githubassets.com for github.com): the domain is listed in the site's own TLS certificate, or its
+ * name starts with the site's brand label.
+ */
+function makeRelatedDomainTest(targetDomain, certificateNames) {
+  const brand = (targetDomain || '').split('.')[0];
+  const certDomains = new Set((certificateNames || []).map((n) => getRegistrableDomain(n.replace(/^\*\./, ''))).filter(Boolean));
+  return (domain) => {
+    if (certDomains.has(domain)) return 'listed in the site certificate';
+    const label = domain.split('.')[0];
+    if (brand.length >= 3 && label !== brand && label.startsWith(brand)) return `name matches "${brand}"`;
+    return null;
+  };
+}
+
+function analyzeOffDomain({ requests, responses, domResources, html, pageUrl, targetDomain, browserInspected, certificateNames }) {
+  const pageIsHttps = (pageUrl || '').startsWith('https:');
+  const isOffDomain = (host) => (getRegistrableDomain(host) || host) !== targetDomain;
+  const relatedReason = makeRelatedDomainTest(targetDomain, certificateNames);
+  const domMeta = new Map((domResources || []).map((d) => [d.url, d]));
+
+  let entries = [];
+  if (browserInspected) {
+    entries = (requests || [])
+      .filter((r) => !(r.navigation && r.mainFrame))
+      .map((r) => ({ url: r.url, type: r.type, frame: r.mainFrame ? 'main' : 'sub-frame', response: responses?.get(r.url) || null }));
+  } else if (html) {
+    // Static fallback: resources referenced in the HTML (not executed)
+    const re = /<(script|link|img|iframe|source|video|audio)\b[^>]*?\b(src|href)\s*=\s*["']([^"']+)["'][^>]*>/gi;
+    let m;
+    while ((m = re.exec(html)) !== null && entries.length < 400) {
+      const tag = m[1].toLowerCase();
+      if (tag === 'link' && !/rel\s*=\s*["'][^"']*(stylesheet|preload|icon)/i.test(m[0])) continue;
+      let abs;
+      try { abs = new URL(m[3], pageUrl).href; } catch { continue; }
+      if (!/^https?:/i.test(abs)) continue;
+      const type = tag === 'script' ? 'script' : tag === 'link' ? 'stylesheet' : tag === 'iframe' ? 'document' : tag === 'img' ? 'image' : 'media';
+      entries.push({ url: abs, type, frame: 'main', response: null, staticIntegrity: /\bintegrity\s*=/i.test(m[0]) });
+    }
+  }
+
+  const domains = new Map();
+  const scripts = [];
+  let totalOffDomain = 0;
+  let insecure = 0;
+  let failed = 0;
+  let totalRequests = 0;
+  let totalScripts = 0;
+
+  for (const e of entries) {
+    const host = safeHost(e.url);
+    if (!host) continue;
+    totalRequests++;
+    if (!isOffDomain(host)) continue;
+    totalOffDomain++;
+    const domain = getRegistrableDomain(host) || host;
+    const typeLabel = RESOURCE_TYPE_LABELS[e.type] || e.type || 'other';
+    const isHttp = e.url.startsWith('http:');
+    const isFailed = !!e.response?.failed || (e.response?.status ?? 0) >= 400;
+    if (isHttp && pageIsHttps) insecure++;
+    if (isFailed) failed++;
+
+    let d = domains.get(domain);
+    if (!d) {
+      const related = relatedReason(domain);
+      const { category, vendor } = related ? { category: 'Site-owned (related domain)', vendor: null } : classifyResourceDomain(host);
+      d = { domain, category, vendor, related: !!related, relatedReason: related, hosts: new Set(), ips: new Set(), requests: 0, types: {}, bytes: 0, insecure: 0, failed: 0, ipLiteral: isIpLiteral(host) };
+      domains.set(domain, d);
+    }
+    d.hosts.add(host);
+    if (e.response?.remoteIp && d.ips.size < 3) d.ips.add(e.response.remoteIp);
+    d.requests++;
+    d.types[typeLabel] = (d.types[typeLabel] || 0) + 1;
+    d.bytes += e.response?.size || 0;
+    if (isHttp && pageIsHttps) d.insecure++;
+    if (isFailed) d.failed++;
+
+    if (e.type === 'script') totalScripts++;
+    if (e.type === 'script' && scripts.length < SCAN_LIMITS.maxOffDomainScripts && !scripts.some((x) => x.url === shortUrl(e.url, 200))) {
+      const dom = domMeta.get(e.url);
+      const banner = identifyScriptBanner(e.response?.banner);
+      scripts.push({
+        url: shortUrl(e.url, 200),
+        domain,
+        host,
+        category: d.category,
+        vendor: d.vendor,
+        related: d.related,
+        integrity: dom ? dom.integrity : (e.staticIntegrity ?? null),
+        injected: browserInspected ? !dom : false,
+        insecure: isHttp,
+        status: e.response?.status ?? null,
+        failed: e.response?.failed || null,
+        size: e.response?.size ?? null,
+        frame: e.frame,
+        library: banner ? `${banner.name}${banner.version ? ` ${banner.version}` : ''}` : null,
+        _banner: banner
+      });
+    }
+  }
+
+  const domainList = [...domains.values()]
+    .map((d) => ({ ...d, hosts: [...d.hosts].slice(0, 6), ips: [...d.ips], scriptCount: d.types.script || 0 }))
+    .sort((a, b) => (Number(a.related) - Number(b.related)) || (b.scriptCount - a.scriptCount) || (b.requests - a.requests));
+
+  // Site-owned related domains are listed but excluded from third-party counts
+  const scriptDomains = domainList.filter((d) => d.scriptCount > 0 && !d.related);
+  const scriptsWithoutSri = scripts.filter((sc) => sc.integrity === false && !sc.related && sc.category !== 'Tag manager');
+  scripts.sort((a, b) => (Number(a.related) - Number(b.related)) || (Number(b.integrity === false) - Number(a.integrity === false)));
+
+  return {
+    browserInspected,
+    source: browserInspected ? 'rendered page (all network requests)' : 'static HTML only (page could not be rendered)',
+    totalRequests,
+    offDomainRequests: totalOffDomain,
+    domainCount: domainList.filter((d) => !d.related).length,
+    relatedDomains: domainList.filter((d) => d.related).map((d) => ({ domain: d.domain, reason: d.relatedReason })),
+    scriptDomainCount: scriptDomains.length,
+    scriptCount: totalScripts,
+    thirdPartyScriptCount: domainList.filter((d) => !d.related).reduce((n, d) => n + d.scriptCount, 0),
+    scriptsWithoutSri: scriptsWithoutSri.length,
+    insecureRequests: insecure,
+    failedRequests: failed,
+    byCategory: domainList.filter((d) => !d.related).reduce((acc, d) => { acc[d.category] = (acc[d.category] || 0) + 1; return acc; }, {}),
+    domains: domainList.slice(0, SCAN_LIMITS.maxOffDomainDomains),
+    truncatedDomains: domainList.length > SCAN_LIMITS.maxOffDomainDomains,
+    scripts
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Affiliate activity / cookie stuffing
+// ---------------------------------------------------------------------------
+
+/**
+ * Affiliate network endpoints. `click` patterns identify click/redirect URLs (the ones that set
+ * affiliate cookies); `impression` patterns identify legitimate impression pixels.
+ * `merchants` are registrable domains that belong to the network/merchant itself (scanning those is not stuffing).
+ */
+const AFFILIATE_NETWORKS = [
+  { name: 'Amazon Associates', host: /(^|\.)amazon\.[a-z.]{2,6}$/, click: /[?&]tag=[^&]+/, idParam: 'tag', merchants: /^amazon\./ },
+  { name: 'Amazon Associates', host: /(^|\.)amzn\.(to|eu|asia)$/, click: /^\/./, merchants: /^amazon\./ },
+  { name: 'Awin', host: /(^|\.)awin1\.com$/, click: /\/(cread|awclick)\.php/i, idParam: 'awinaffid', merchants: /^awin\.com$/ },
+  { name: 'CJ Affiliate', host: /(^|\.)(anrdoezrs\.net|jdoqocy\.com|tkqlhce\.com|dpbolvw\.net|kqzyfj\.com|qksrv\.net|tqlkg\.com|lduhtrp\.net|ftjcfx\.com|awltovhc\.com|yceml\.net)$/, click: /\/(click-|links\/|[a-z]{2,6}\d*-)/i, impression: /\/image-/i, merchants: /^cj\.com$/ },
+  { name: 'Impact', host: /(^|\.)(sjv\.io|pxf\.io|evyy\.net|ojrq\.net|7eer\.net|r4lb\.net|vzew\.net)$/, click: /^\/(c|[a-z0-9]{2,})\//i, merchants: /^impact\.com$/ },
+  { name: 'Rakuten Advertising', host: /(^|\.)linksynergy\.com$/, click: /\/(deeplink|fs-bin\/click|link)/i, impression: /\/fs-bin\/show/i, idParam: 'id', merchants: /^rakutenadvertising\.com$/ },
+  { name: 'ShareASale', host: /(^|\.)shareasale\.com$/, click: /\/(r|m-pr)\.cfm/i, idParam: 'u', merchants: /^shareasale\.com$/ },
+  { name: 'ClickBank', host: /(^|\.)hop\.clickbank\.net$/, click: /./, merchants: /^clickbank\.(com|net)$/ },
+  { name: 'Partnerize', host: /(^|\.)prf\.hn$/, click: /\/click\//i, merchants: /^partnerize\.com$/ },
+  { name: 'eBay Partner Network', host: /(^|\.)rover\.ebay\.[a-z.]+$/, click: /./, merchants: /^ebay\./ },
+  { name: 'eBay Partner Network', host: /(^|\.)ebay\.[a-z.]{2,6}$/, click: /[?&]campid=\d+/i, idParam: 'campid', merchants: /^ebay\./ },
+  { name: 'Skimlinks', host: /(^|\.)go\.skimresources\.com$/, click: /./, idParam: 'id', merchants: /^skimlinks\.com$/ },
+  { name: 'Sovrn Commerce (VigLink)', host: /(^|\.)redirect\.viglink\.com$/, click: /./, idParam: 'key', merchants: /^(sovrn|viglink)\.com$/ },
+  { name: 'Tradedoubler', host: /(^|\.)clk\.tradedoubler\.com$/, click: /./, impression: /\/(imp|impression)/i, merchants: /^tradedoubler\.com$/ },
+  { name: 'Ascend (Pepperjam)', host: /(^|\.)(pjtra\.com|pntra\.com|gopjn\.com|pjatr\.com|pntrs\.com|pntrac\.com)$/, click: /\/t\//i, merchants: /^(pepperjam|ascendpartner)\.com$/ },
+  { name: 'Webgains', host: /(^|\.)track\.webgains\.com$/, click: /\/click\.html/i, merchants: /^webgains\.com$/ },
+  { name: 'AvantLink', host: /(^|\.)avantlink\.com$/, click: /\/click\.php/i, merchants: /^avantlink\.com$/ },
+  { name: 'FlexOffers', host: /(^|\.)track\.flexlinkspro\.com$/, click: /./, merchants: /^flexoffers\.com$/ },
+  { name: 'Admitad', host: /(^|\.)(ad\.admitad\.com|alitems\.com|lenkmio\.com)$/, click: /\/g\//i, merchants: /^admitad\.com$/ },
+  { name: 'AliExpress Portals', host: /(^|\.)s\.click\.aliexpress\.com$/, click: /./, merchants: /^aliexpress\.(com|us|ru)$/ },
+  { name: 'TradeTracker', host: /(^|\.)tc\.tradetracker\.net$/, click: /./, merchants: /^tradetracker\.com$/ },
+  { name: 'Commission Factory', host: /(^|\.)t\.cfjump\.com$/, click: /./, merchants: /^commissionfactory\.com$/ }
+];
+
+const AFFILIATE_COOKIE_HINT = /^(_aw_|aw_|awc|cjevent|cje|LinkshareID|ranSiteID|ranMID|ranEAID|irclickid|_ir|IR_|sas_|MERCHANT|clickbank|q\d*hop|epn|pjn|AVOL_|tduid|TRADEDOUBLER|cf_jump|amzn-tag|aff_|affiliate)/i;
+
+function matchAffiliate(urlString) {
+  let u;
+  try { u = new URL(urlString); } catch { return null; }
+  const host = u.hostname.toLowerCase();
+  const pathAndQuery = `${u.pathname}${u.search}`;
+  for (const n of AFFILIATE_NETWORKS) {
+    if (!n.host.test(host)) continue;
+    if (n.impression && n.impression.test(pathAndQuery)) {
+      return { network: n.name, kind: 'impression', host, affiliateId: n.idParam ? u.searchParams.get(n.idParam) : null, merchants: n.merchants };
+    }
+    // Amazon/eBay host patterns match the merchant site itself; only URLs carrying the affiliate parameter count
+    const target = n.click.source.startsWith('[?&]') ? u.search : pathAndQuery;
+    if (n.click.test(target)) {
+      return { network: n.name, kind: 'click', host, affiliateId: n.idParam ? u.searchParams.get(n.idParam) : null, merchants: n.merchants };
+    }
+  }
+  return null;
+}
+
+function shortUrl(urlString, max = 160) {
+  return urlString.length > max ? `${urlString.substring(0, max)}…` : urlString;
+}
+
+/**
+ * Separates disclosed affiliate links (the scanned URL itself redirects through an affiliate network,
+ * i.e. the visitor chose to follow it) from affiliate click URLs fired in the background while the page
+ * loads without any user interaction - the signature of cookie stuffing.
+ */
+function analyzeAffiliate({ redirectChain, requests, hiddenElements, cookieItems, targetDomain, browserInspected }) {
+  const isOwnDomain = (host, merchants) => {
+    const domain = getRegistrableDomain(host) || host;
+    return domain === targetDomain || (merchants && merchants.test(targetDomain || ''));
+  };
+
+  // 1. Navigation chain (user-chosen link)
+  const navigation = [];
+  (redirectChain || []).forEach((hop, index) => {
+    const m = matchAffiliate(hop.url);
+    if (m && m.kind === 'click') {
+      navigation.push({ network: m.network, affiliateId: m.affiliateId, url: shortUrl(hop.url), hop: index + 1 });
+    }
+  });
+
+  // 2. Background requests while rendering (no clicks are ever performed by the scanner)
+  const hiddenByUrl = new Map((hiddenElements || []).map((h) => [h.url, h]));
+  const background = [];
+  const impressions = [];
+  for (const req of requests || []) {
+    if (req.navigation && req.mainFrame) continue; // the main page navigation itself
+    const m = matchAffiliate(req.url);
+    if (!m || isOwnDomain(m.host, m.merchants)) continue;
+    const hidden = hiddenByUrl.get(req.url);
+    const entry = {
+      network: m.network,
+      affiliateId: m.affiliateId,
+      url: shortUrl(req.url),
+      resourceType: req.type,
+      frame: req.mainFrame ? 'main' : 'sub-frame',
+      hidden: hidden ? `${hidden.tag} (${hidden.reasons.join(', ')})` : null
+    };
+    if (m.kind === 'impression') {
+      if (impressions.length < 20) impressions.push(entry);
+    } else if (background.length < 30 && !background.some((b) => b.url === entry.url)) {
+      background.push(entry);
+    }
+  }
+
+  // Hidden elements pointing at click URLs that never produced a captured request (e.g. lazy or blocked)
+  for (const h of hiddenElements || []) {
+    const m = matchAffiliate(h.url);
+    if (!m || m.kind !== 'click' || isOwnDomain(m.host, m.merchants)) continue;
+    if (background.some((b) => b.url === shortUrl(h.url))) continue;
+    background.push({ network: m.network, affiliateId: m.affiliateId, url: shortUrl(h.url), resourceType: h.tag, frame: 'main', hidden: `${h.tag} (${h.reasons.join(', ')})` });
+  }
+
+  // 3. Affiliate / network cookies present after load
+  const affiliateCookies = (cookieItems || [])
+    .filter((c) => c.thirdParty && (AFFILIATE_NETWORKS.some((n) => n.host.test(c.domain) && !n.click.source.startsWith('[?&]')) || AFFILIATE_COOKIE_HINT.test(c.name)))
+    .slice(0, 20)
+    .map((c) => ({ name: c.name, domain: c.domain, lifetimeDays: c.lifetimeDays }));
+
+  const suspectedStuffing = background.length > 0;
+  const strongEvidence = background.some((b) => b.hidden || ['image', 'document', 'iframe', 'sub_frame', 'other'].includes(b.resourceType) || b.frame === 'sub-frame');
+  const networks = [...new Set([...navigation, ...background].map((x) => x.network))];
+
+  return {
+    verdict: suspectedStuffing ? 'suspected-stuffing' : navigation.length ? 'affiliate-link' : impressions.length || affiliateCookies.length ? 'affiliate-tracking' : 'none',
+    suspectedStuffing,
+    confidence: suspectedStuffing ? (strongEvidence ? 'high' : 'medium') : null,
+    networks,
+    navigation,
+    background,
+    impressions,
+    affiliateCookies,
+    browserInspected,
+    note: browserInspected
+      ? 'Based on a single automated page load with no clicks. Stuffing that targets real visitors only (geo, frequency capping or bot detection) may not appear.'
+      : 'The page could not be rendered in a browser, so only the redirect chain was checked for affiliate links.'
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -2187,7 +2785,22 @@ function buildFindings(report) {
   if (content.mixedContent?.length) add('medium', 'Content', 'Mixed content', `${content.mixedContent.length} resource(s) loaded over HTTP on an HTTPS page.`);
   if (content.insecureForms?.length) add('high', 'Content', 'Form submits to HTTP', content.insecureForms.slice(0, 3).join(', '));
   if (content.hasPasswordField && !finalIsHttps) add('critical', 'Content', 'Password field on unencrypted page', 'Credentials would be sent in clear text.');
-  if (content.scripts?.withoutSri?.length) add('low', 'Content', 'Third-party scripts without Subresource Integrity', `${content.scripts.withoutSri.length} external script(s) lack an integrity attribute.`);
+  const off = report.offDomain;
+  if (off?.browserInspected) {
+    if (off.scriptsWithoutSri) add('low', 'Third-party content', 'Third-party scripts without Subresource Integrity', `${off.scriptsWithoutSri} script(s) from other domains have no integrity attribute (tag managers excluded, since they change constantly).`);
+  } else if (content.scripts?.withoutSri?.length) {
+    add('low', 'Content', 'Third-party scripts without Subresource Integrity', `${content.scripts.withoutSri.length} external script(s) lack an integrity attribute.`);
+  }
+  if (off?.scriptDomainCount) {
+    const names = off.domains.filter((d) => d.scriptCount && !d.related).slice(0, 8).map((d) => d.vendor ? `${d.domain} (${d.vendor})` : d.domain);
+    add(off.scriptDomainCount > 15 ? 'medium' : 'info', 'Third-party content', `Scripts execute from ${off.scriptDomainCount} other domain(s)`,
+      `Third-party scripts run with full access to the page, its cookies and form data. ${names.join(', ')}${off.scriptDomainCount > 8 ? ', …' : ''}`);
+  }
+  const ipScripts = (off?.domains || []).filter((d) => d.ipLiteral && d.scriptCount);
+  if (ipScripts.length) add('medium', 'Third-party content', 'Scripts loaded from a raw IP address', ipScripts.map((d) => d.domain).join(', '));
+  const unknownScripts = (off?.scripts || []).filter((sc) => sc.category === 'Unclassified' && !sc.related);
+  if (unknownScripts.length) add('info', 'Third-party content', `${unknownScripts.length} script(s) from unrecognised third-party domains`, [...new Set(unknownScripts.map((sc) => sc.domain))].slice(0, 8).join(', '));
+  if (off?.insecureRequests) add('medium', 'Third-party content', `${off.insecureRequests} off-domain request(s) over plain HTTP`, 'Resources fetched without encryption on an HTTPS page can be tampered with in transit (browsers block most of them as mixed content).');
   if (report.securityTxt && !report.securityTxt.present) add('info', 'Disclosure', 'No security.txt', 'Publish /.well-known/security.txt (RFC 9116) so researchers can report issues.');
 
   // Technologies
@@ -2195,6 +2808,19 @@ function buildFindings(report) {
     for (const v of tech.vulnerabilities) {
       add(v.severity, 'Dependencies', `${tech.name} ${tech.version} is vulnerable / outdated`, `${v.note}${v.advisories.length ? ` (${v.advisories.join(', ')})` : ''}`);
     }
+  }
+
+  // Affiliate activity
+  const aff = report.affiliate;
+  if (aff?.suspectedStuffing) {
+    const first = aff.background[0];
+    add(aff.confidence === 'high' ? 'high' : 'medium', 'Affiliate fraud',
+      `Possible cookie stuffing: ${aff.background.length} affiliate click request(s) fired without user interaction`,
+      `Networks: ${[...new Set(aff.background.map((b) => b.network))].join(', ')}. Example: ${first.resourceType}${first.hidden ? ` via hidden ${first.hidden}` : ''} → ${first.url}`);
+  }
+  if (aff?.navigation?.length) {
+    add('info', 'Affiliate', `Link passes through an affiliate network (${[...new Set(aff.navigation.map((n) => n.network))].join(', ')})`,
+      `The scanned URL earns affiliate commission for its publisher${aff.navigation[0].affiliateId ? ` (affiliate ID ${aff.navigation[0].affiliateId})` : ''}. This is normal for affiliate links the visitor chooses to open.`);
   }
 
   // Domain
@@ -2252,6 +2878,8 @@ async function runAiAssessment(env, model, report) {
     cdn: report.network.cdn.providers.map((p) => p.name),
     hosting: report.network.ips.map((i) => `${i.ip} AS${i.asn ?? '?'} ${i.asnName ?? ''}`),
     technologies: report.technologies.slice(0, 25).map((t) => `${t.name}${t.version ? ` ${t.version}` : ''}`),
+    offDomain: report.offDomain ? { domains: report.offDomain.domainCount, scriptDomains: report.offDomain.scriptDomainCount, scriptsWithoutSri: report.offDomain.scriptsWithoutSri, byCategory: report.offDomain.byCategory } : null,
+    affiliate: report.affiliate ? { verdict: report.affiliate.verdict, networks: report.affiliate.networks, backgroundRequests: report.affiliate.background.length } : null,
     cookies: report.cookies ? { total: report.cookies.total, thirdParty: report.cookies.thirdParty, tracking: report.cookies.tracking, byCategory: report.cookies.byCategory } : null,
     findings: report.findings.slice(0, 25).map((f) => `[${f.severity}] ${f.title}`),
     pageTitle: report.content.title
@@ -2332,7 +2960,7 @@ export async function runUrlScan(rawTarget, options = {}) {
   // Phase 1: DNS + RDAP (DNS also gates the SSRF check)
   const [dns, registration] = await Promise.all([
     collectDns(hostname, registrableDomain),
-    lookupRdap(registrableDomain)
+    lookupRdap(registrableDomain, { connect: options.connect })
   ]);
 
   const resolvedIps = isIpLiteral(hostname) ? [hostname] : [...dns.a, ...dns.aaaa];
@@ -2399,12 +3027,33 @@ export async function runUrlScan(rawTarget, options = {}) {
     isHttps: finalIsHttps
   });
   const cookies = cookieReport.items;
+  const offDomain = analyzeOffDomain({
+    requests: screenshot.success ? screenshot._requests : [],
+    responses: screenshot.success ? screenshot._responses : null,
+    domResources: screenshot.success ? screenshot._domResources : [],
+    html: isHtml ? body.text : '',
+    pageUrl: finalUrl,
+    targetDomain: registrableDomain || hostname,
+    browserInspected: !!screenshot.success,
+    certificateNames: tls.certificate?.subjectAltNames || []
+  });
+  // Library versions read from script file banners (first- and third-party scripts the browser loaded)
+  const bannerLibraries = [];
+  if (screenshot.success && screenshot._responses) {
+    for (const [resUrl, meta] of screenshot._responses) {
+      const banner = identifyScriptBanner(meta.banner);
+      if (banner) bannerLibraries.push({ ...banner, url: resUrl });
+    }
+  }
+  for (const sc of offDomain.scripts) delete sc._banner;
+
   const technologies = fingerprintTechnologies({
     headers,
     html: isHtml ? body.text : '',
     cookies,
     runtimeLibraries: screenshot.runtimeLibraries,
-    renderedRequests: screenshot._requests
+    renderedRequests: screenshot._requests,
+    bannerLibraries
   });
 
   const altSvc = headers.get('alt-svc') || '';
@@ -2424,6 +3073,9 @@ export async function runUrlScan(rawTarget, options = {}) {
   delete screenshotPublic._requests;
   delete screenshotPublic.runtimeLibraries;
   delete screenshotPublic._cookies;
+  delete screenshotPublic._hiddenElements;
+  delete screenshotPublic._responses;
+  delete screenshotPublic._domResources;
 
   const report = {
     scanType: 'url',
@@ -2453,6 +3105,15 @@ export async function runUrlScan(rawTarget, options = {}) {
       securityHeaders: finalResponse ? analyzeSecurityHeaders(headers, finalIsHttps) : []
     },
     cookies: cookieReport,
+    offDomain,
+    affiliate: analyzeAffiliate({
+      redirectChain: redirects.chain,
+      requests: screenshot.success ? screenshot._requests : [],
+      hiddenElements: screenshot.success ? screenshot._hiddenElements : [],
+      cookieItems: cookieReport.items,
+      targetDomain: registrableDomain || hostname,
+      browserInspected: !!screenshot.success
+    }),
     tls,
     domain: { name: registrableDomain, registration, dns },
     network: { ips: ipIntel, cdn },
@@ -2492,7 +3153,13 @@ export const _internal = {
   scoreFindings,
   fingerprintTechnologies,
   probeTls,
+  matchAffiliate,
+  analyzeOffDomain,
+  identifyScriptBanner,
+  analyzeAffiliate,
+  detectHiddenElements,
   followRedirects,
   collectDns,
-  lookupRdap
+  lookupRdap,
+  lookupWhois
 };
