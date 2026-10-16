@@ -19,6 +19,7 @@ namespace Albatross.Services
         [JsonPropertyName("http")] public UrlScanHttp? Http { get; set; }
         [JsonPropertyName("tls")] public UrlScanTls? Tls { get; set; }
         [JsonPropertyName("cookies")] public UrlScanCookies? Cookies { get; set; }
+        [JsonPropertyName("cms")] public UrlScanCms? Cms { get; set; }
         [JsonPropertyName("offDomain")] public UrlScanOffDomain? OffDomain { get; set; }
         [JsonPropertyName("affiliate")] public UrlScanAffiliate? Affiliate { get; set; }
         [JsonPropertyName("domain")] public UrlScanDomain? Domain { get; set; }
@@ -126,6 +127,38 @@ namespace Albatross.Services
         [JsonPropertyName("browserInspected")] public bool BrowserInspected { get; set; }
         [JsonPropertyName("truncated")] public bool Truncated { get; set; }
         [JsonPropertyName("items")] public List<UrlScanCookie>? Items { get; set; }
+    }
+
+    /// <summary>
+    /// CMS / platform detection with version and support status.
+    /// </summary>
+    public class UrlScanCms
+    {
+        [JsonPropertyName("detected")] public bool Detected { get; set; }
+        [JsonPropertyName("primary")] public string? Primary { get; set; }
+        [JsonPropertyName("platforms")] public List<UrlScanCmsPlatform>? Platforms { get; set; }
+    }
+
+    public class UrlScanCmsPlatform
+    {
+        [JsonPropertyName("name")] public string? Name { get; set; }
+        [JsonPropertyName("type")] public string? Type { get; set; }
+        [JsonPropertyName("hosted")] public bool Hosted { get; set; }
+        [JsonPropertyName("version")] public string? Version { get; set; }
+        [JsonPropertyName("versionSource")] public string? VersionSource { get; set; }
+        [JsonPropertyName("versionDisclosed")] public bool VersionDisclosed { get; set; }
+        [JsonPropertyName("evidence")] public List<string>? Evidence { get; set; }
+        [JsonPropertyName("detectedVia")] public List<string>? DetectedVia { get; set; }
+        [JsonPropertyName("support")] public UrlScanCmsSupport? Support { get; set; }
+    }
+
+    public class UrlScanCmsSupport
+    {
+        [JsonPropertyName("status")] public string? Status { get; set; }
+        [JsonPropertyName("label")] public string? Label { get; set; }
+        [JsonPropertyName("latest")] public string? Latest { get; set; }
+        [JsonPropertyName("supportedBranches")] public List<string>? SupportedBranches { get; set; }
+        [JsonPropertyName("source")] public string? Source { get; set; }
     }
 
     /// <summary>

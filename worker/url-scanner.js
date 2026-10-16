@@ -1210,6 +1210,16 @@ const HTML_FINGERPRINTS = [
   { name: 'Wix', category: 'Website builder', pattern: /static\.wixstatic\.com|wix-bolt|_wixCssImports/ },
   { name: 'Webflow', category: 'Website builder', pattern: /data-wf-site|webflow\.js|assets\.website-files\.com/ },
   { name: 'Ghost', category: 'CMS', pattern: /ghost-(?:portal|sdk)|content="Ghost/ },
+  { name: 'TYPO3', category: 'CMS', pattern: /\/typo3conf\/|\/typo3temp\/|\/typo3\/sysext\// },
+  { name: 'Umbraco', category: 'CMS', pattern: /\/umbraco\/|umbraco-forms/i },
+  { name: 'Craft CMS', category: 'CMS', pattern: /\/cpresources\/|craftcms/i },
+  { name: 'Concrete CMS', category: 'CMS', pattern: /\/concrete\/(js|css|images)\/|CCM_DISPATCHER_FILENAME/ },
+  { name: 'PrestaShop', category: 'E-commerce', pattern: /prestashop|\/modules\/ps_[a-z]+\// },
+  { name: 'OpenCart', category: 'E-commerce', pattern: /catalog\/view\/(theme|javascript)\// },
+  { name: 'Adobe Experience Manager', category: 'CMS', pattern: /\/etc\.clientlibs\/|\/content\/dam\/|\/libs\/granite\// },
+  { name: 'Sitecore', category: 'CMS', pattern: /\/-\/media\/|\/sitecore\/shell\// },
+  { name: 'BigCommerce', category: 'E-commerce', pattern: /cdn\d*\.bigcommerce\.com/ },
+  { name: 'HubSpot CMS', category: 'CMS', pattern: /\/_hcms\/|\.hs-sites\.com|hs-scripts\.com/ },
   { name: 'Next.js', category: 'JavaScript framework', pattern: /\/_next\/static\/|__NEXT_DATA__/ },
   { name: 'Nuxt', category: 'JavaScript framework', pattern: /\/_nuxt\/|window\.__NUXT__/ },
   { name: 'Gatsby', category: 'Static site generator', pattern: /id="___gatsby"|\/page-data\/app-data\.json/ },
@@ -1244,7 +1254,12 @@ const COOKIE_FINGERPRINTS = [
   { pattern: /^AWSALB(CORS)?$/i, name: 'AWS Elastic Load Balancing', category: 'Load balancer' },
   { pattern: /^ARRAffinity(SameSite)?$/i, name: 'Azure App Service', category: 'PaaS' },
   { pattern: /^(incap_ses|visid_incap)/i, name: 'Imperva Incapsula', category: 'CDN / Security' },
-  { pattern: /^_shopify/i, name: 'Shopify', category: 'E-commerce' }
+  { pattern: /^_shopify/i, name: 'Shopify', category: 'E-commerce' },
+  { pattern: /^UMB_/i, name: 'Umbraco', category: 'CMS' },
+  { pattern: /^CraftSessionId$/i, name: 'Craft CMS', category: 'CMS' },
+  { pattern: /^PrestaShop-/i, name: 'PrestaShop', category: 'E-commerce' },
+  { pattern: /^OCSESSID$/i, name: 'OpenCart', category: 'E-commerce' },
+  { pattern: /^SC_ANALYTICS_GLOBAL_COOKIE$/i, name: 'Sitecore', category: 'CMS' }
 ];
 
 function parseServerSoftware(value) {
@@ -1328,8 +1343,8 @@ function fingerprintTechnologies({ headers, html, cookies, runtimeLibraries, ren
     const generators = [...html.matchAll(/<meta[^>]+name=["']generator["'][^>]*content=["']([^"']+)["']/gi), ...html.matchAll(/<meta[^>]+content=["']([^"']+)["'][^>]*name=["']generator["']/gi)];
     for (const g of generators) {
       const content = g[1];
-      const version = /(\d+(?:\.\d+)+)/.exec(content)?.[1] || null;
-      const name = content.replace(/\s*v?\d+(\.\d+)+.*$/, '').trim() || content;
+      const version = /\b(\d+(?:\.\d+)*)\b/.exec(content)?.[1] || null;
+      const name = content.replace(/\s*v?\d+(\.\d+)*\b.*$/, '').trim() || content;
       add(name, 'CMS / Generator', version, 'html', `meta generator: ${content}`);
     }
 
@@ -2374,6 +2389,227 @@ async function renderPage(puppeteer, env, url, targetDomain, holder) {
 }
 
 // ---------------------------------------------------------------------------
+// CMS / platform detection, version and support status
+// ---------------------------------------------------------------------------
+
+/** Platforms reported in the CMS panel. Hosted platforms are patched by the vendor. */
+const CMS_PLATFORMS = {
+  WordPress: { type: 'Self-hosted CMS', aliases: [/^wordpress$/i] },
+  Drupal: { type: 'Self-hosted CMS', aliases: [/^drupal$/i] },
+  Joomla: { type: 'Self-hosted CMS', aliases: [/^joomla!?$/i] },
+  Ghost: { type: 'CMS (self-hosted or Ghost(Pro))', aliases: [/^ghost$/i] },
+  TYPO3: { type: 'Self-hosted CMS', aliases: [/^typo3( cms)?$/i] },
+  Umbraco: { type: 'Self-hosted CMS', aliases: [/^umbraco$/i] },
+  'Craft CMS': { type: 'Self-hosted CMS', aliases: [/^craft( cms)?$/i] },
+  'Concrete CMS': { type: 'Self-hosted CMS', aliases: [/^concrete( cms|5)?$/i] },
+  'Adobe Experience Manager': { type: 'Enterprise CMS', aliases: [/^adobe experience manager$/i] },
+  Sitecore: { type: 'Enterprise CMS', aliases: [/^sitecore$/i] },
+  Magento: { type: 'Self-hosted e-commerce', aliases: [/^magento$/i] },
+  PrestaShop: { type: 'Self-hosted e-commerce', aliases: [/^prestashop$/i] },
+  OpenCart: { type: 'Self-hosted e-commerce', aliases: [/^opencart$/i] },
+  WooCommerce: { type: 'WordPress e-commerce plugin', aliases: [/^woocommerce$/i] },
+  Shopify: { type: 'Hosted e-commerce', hosted: true, aliases: [/^shopify$/i] },
+  BigCommerce: { type: 'Hosted e-commerce', hosted: true, aliases: [/^bigcommerce$/i] },
+  Squarespace: { type: 'Hosted website builder', hosted: true, aliases: [/^squarespace$/i] },
+  Wix: { type: 'Hosted website builder', hosted: true, aliases: [/^wix(\.com)?( website builder)?$/i] },
+  Webflow: { type: 'Hosted website builder', hosted: true, aliases: [/^webflow$/i] },
+  'HubSpot CMS': { type: 'Hosted CMS', hosted: true, aliases: [/^hubspot( cms)?$/i] }
+};
+
+const CMS_CACHE_TTL_SECONDS = 12 * 3600;
+const cmsReleaseCache = new Map(); // per isolate: key -> { at, data }
+
+async function cachedJsonOrText(key, url, { text = false, maxBytes = 2_000_000 } = {}) {
+  const hit = cmsReleaseCache.get(key);
+  if (hit && Date.now() - hit.at < CMS_CACHE_TTL_SECONDS * 1000) return hit.data;
+  const res = await fetchWithTimeout(url, {
+    headers: { 'User-Agent': SCANNER_USER_AGENT, Accept: text ? 'application/xml,text/xml,*/*' : 'application/json' },
+    cf: { cacheTtl: CMS_CACHE_TTL_SECONDS, cacheEverything: true }
+  }, 8000);
+  if (!res.ok) throw new Error(`HTTP ${res.status} from ${new URL(url).hostname}`);
+  const { text: body } = await readBodyLimited(res, maxBytes);
+  const data = text ? body : JSON.parse(body);
+  cmsReleaseCache.set(key, { at: Date.now(), data });
+  return data;
+}
+
+function modeOf(values) {
+  const counts = new Map();
+  for (const v of values) counts.set(v, (counts.get(v) || 0) + 1);
+  return [...counts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] || null;
+}
+
+// WordPress loads bundled third-party libraries from wp-includes with *their own* version in ?ver=
+const WP_BUNDLED_LIBRARY_PATHS = /\/(vendor|jquery|tinymce|imagesloaded|masonry|underscore|backbone|plupload|mediaelement|thickbox|hoverIntent|clipboard|zxcvbn|lodash|moment|react|regenerator|wp-polyfill|swfobject|colorpicker|codemirror|jcrop|twemoji)/i;
+
+/**
+ * Finds the version of a detected CMS from the strongest available signal.
+ * Returns { version, source } where source describes how it was determined.
+ */
+async function detectCmsVersion(name, { techVersion, techEvidence, assetUrls, html, origin }) {
+  const fromGenerator = techVersion && (techEvidence || []).some((e) => /generator/i.test(e)) ? { version: techVersion, source: 'meta generator / X-Generator header', disclosed: true } : null;
+
+  if (name === 'WordPress') {
+    if (fromGenerator) return fromGenerator;
+    const vers = assetUrls
+      .filter((u) => /\/wp-includes\//.test(u) && !WP_BUNDLED_LIBRARY_PATHS.test(u.split('?')[0].split('/wp-includes/')[1] || ''))
+      .map((u) => /[?&]ver=(\d+\.\d+(?:\.\d+)?)(?:&|$)/.exec(u)?.[1])
+      .filter((v) => v && /^[3-9]\./.test(v));
+    const v = modeOf(vers);
+    if (v) return { version: v, source: `?ver= on ${vers.length} wp-includes asset(s)`, disclosed: false };
+    // One extra request: the RSS feed's <generator> line carries the core version
+    if (origin) {
+      try {
+        const res = await fetchWithTimeout(`${origin}/feed/`, { headers: { 'User-Agent': SCANNER_USER_AGENT } }, 6000);
+        if (res.ok) {
+          const { text } = await readBodyLimited(res, 65_536);
+          const fv = /<generator>https?:\/\/wordpress\.org\/\?v=(\d+\.\d+(?:\.\d+)?)<\/generator>/i.exec(text)?.[1];
+          if (fv) return { version: fv, source: 'RSS feed <generator> (/feed/)', disclosed: true };
+        } else {
+          try { await res.body?.cancel(); } catch { /* ignore */ }
+        }
+      } catch { /* ignore */ }
+    }
+    return { version: null, source: null };
+  }
+
+  if (name === 'Drupal') {
+    // Core libraries carry Drupal's own version; /core/assets/vendor/ holds bundled third-party libraries with theirs
+    const coreVers = assetUrls
+      .filter((u) => !/\/core\/assets\/vendor\//.test(u))
+      .map((u) => /\/core\/(?:misc|modules|themes)\/[^?]+\?v=(\d+\.\d+\.\d+)/.exec(u)?.[1])
+      .filter((v) => v && versionMajor(v) >= 8);
+    const v = modeOf(coreVers);
+    if (v) return { version: v, source: '?v= on Drupal core assets', disclosed: false };
+    if (fromGenerator) return { ...fromGenerator, version: String(techVersion).split('.')[0] };
+    const generatorMajor = /<meta[^>]+name=["']generator["'][^>]+content=["']Drupal (\d+)/i.exec(html || '')?.[1];
+    if (generatorMajor) return { version: generatorMajor, source: 'meta generator (major version only)', disclosed: true };
+    if (/\/misc\/drupal\.js|jQuery\.extend\(Drupal\.settings/.test(html || '') || assetUrls.some((u) => /\/misc\/drupal\.js/.test(u))) {
+      return { version: '7', source: 'Drupal 7 asset layout (/misc/drupal.js)', disclosed: false };
+    }
+    if (assetUrls.some((u) => /\/core\/(misc|assets)\//.test(u))) return { version: '8+', source: 'Drupal 8+ asset layout (/core/)', disclosed: false };
+    return { version: null, source: null };
+  }
+
+  if (name === 'Joomla') {
+    if (fromGenerator) return fromGenerator;
+    if (assetUrls.some((u) => /\/media\/jui\//.test(u)) || /\/media\/jui\//.test(html || '')) return { version: '3', source: 'Joomla 3 asset layout (/media/jui/)', disclosed: false };
+    if (assetUrls.some((u) => /\/media\/(vendor|templates\/site)\//.test(u)) || /\/media\/(vendor|templates\/site)\//.test(html || '')) return { version: '4+', source: 'Joomla 4+ asset layout (/media/vendor/)', disclosed: false };
+    return { version: null, source: null };
+  }
+
+  if (name === 'Magento') {
+    if (assetUrls.some((u) => /\/static\/version\d+\//.test(u)) || /data-mage-init/.test(html || '')) return { version: '2', source: 'Magento 2 asset layout (/static/version…)', disclosed: false };
+    if (assetUrls.some((u) => /\/skin\/frontend\/|\/js\/varien\//.test(u)) || /Mage\.Cookies|\/skin\/frontend\//.test(html || '')) return { version: '1', source: 'Magento 1 asset layout (/skin/frontend/)', disclosed: false };
+    return { version: null, source: null };
+  }
+
+  return fromGenerator || { version: techVersion || null, source: techVersion ? 'detected with technology fingerprint' : null, disclosed: false };
+}
+
+const versionMajor = (v) => parseInt(String(v || '').split('.')[0], 10);
+
+/**
+ * Support status for a CMS version.
+ * status: latest | supported | outdated | insecure | end-of-life | vendor-managed | unknown
+ */
+async function checkCmsSupport(name, version, hosted) {
+  if (hosted) return { status: 'vendor-managed', label: 'Hosted platform, patched by the vendor', source: null };
+  if (!version) return { status: 'unknown', label: 'Version could not be determined', source: null };
+  if (/\+$/.test(String(version))) {
+    return { status: 'unknown', label: `${name} ${version.replace('+', '')} or later (exact version not exposed, so support status can't be confirmed)`, source: null };
+  }
+
+  try {
+    if (name === 'WordPress') {
+      const map = await cachedJsonOrText('wp-stable', 'https://api.wordpress.org/core/stable-check/1.0/');
+      const latest = Object.entries(map).find(([, st]) => st === 'latest')?.[0] || null;
+      const st = map[version] || map[`${version}.0`] || (/^\d+\.\d+\.0$/.test(version) ? map[version.replace(/\.0$/, '')] : undefined);
+      const source = 'api.wordpress.org stable-check';
+      if (st === 'latest') return { status: 'latest', label: 'Latest release', latest, source };
+      if (st === 'outdated') return { status: 'outdated', label: 'Outdated but receiving security fixes; update to the latest release', latest, source };
+      if (st === 'insecure') return { status: 'insecure', label: 'Insecure: WordPress has published security fixes for this version', latest, source };
+      if (latest && compareVersions(version, latest) > 0) return { status: 'supported', label: `Development build, newer than the latest stable release (${latest})`, latest, source };
+      return { status: 'unknown', label: `Version ${version} not found in WordPress release data`, latest, source };
+    }
+
+    if (name === 'Drupal') {
+      const major = versionMajor(version);
+      if (major && major <= 9) {
+        const eol = { 7: 'January 2025', 8: 'November 2021', 9: 'November 2023' }[major];
+        return { status: 'end-of-life', label: `Drupal ${major} reached end of life${eol ? ` in ${eol}` : ''}`, source: 'drupal.org support policy' };
+      }
+      const xml = await cachedJsonOrText('drupal-current', 'https://updates.drupal.org/release-history/drupal/current', { text: true, maxBytes: 32_768 });
+      const branches = (/<supported_branches>([^<]+)<\/supported_branches>/.exec(xml)?.[1] || '').split(',').map((b) => b.trim()).filter(Boolean);
+      const latest = /<version>(\d+\.\d+\.\d+)<\/version>/.exec(xml)?.[1] || null;
+      const source = 'updates.drupal.org release history';
+      if (/^\d+\.\d+\.\d+$/.test(version)) {
+        const branch = branches.find((b) => version.startsWith(b));
+        return branch
+          ? { status: 'supported', label: `Supported branch ${branch.replace(/\.$/, '.x')}`, latest, supportedBranches: branches, source }
+          : { status: 'end-of-life', label: `Branch ${version.split('.').slice(0, 2).join('.')}.x no longer receives security fixes`, latest, supportedBranches: branches, source };
+      }
+      if (major && branches.some((b) => b.startsWith(`${major}.`))) {
+        return { status: 'supported', label: `Drupal ${major} has supported branches (exact version unknown)`, latest, supportedBranches: branches, source };
+      }
+      if (major) return { status: 'end-of-life', label: `Drupal ${major} has no supported branches`, latest, supportedBranches: branches, source };
+      return { status: 'unknown', label: 'Exact Drupal version could not be determined', latest, supportedBranches: branches, source };
+    }
+
+    if (name === 'Joomla') {
+      const major = versionMajor(version);
+      const data = await cachedJsonOrText('joomla-latest', 'https://downloads.joomla.org/api/v1/latest/cms');
+      const branches = (data.branches || []).map((b) => ({ major: parseInt(/(\d+)/.exec(b.branch)?.[1] || '0', 10), version: b.version })).filter((b) => b.major);
+      const majors = [...new Set(branches.map((b) => b.major))].sort((a, b) => b - a);
+      const supportedMajors = majors.slice(0, 2); // Joomla supports the current and the previous major
+      const latest = branches.find((b) => b.major === majors[0])?.version || null;
+      const source = 'downloads.joomla.org';
+      if (!major) return { status: 'unknown', label: `Joomla ${version} (exact version unknown)`, latest, source };
+      if (!supportedMajors.includes(major)) return { status: 'end-of-life', label: `Joomla ${major} is end-of-life`, latest, source };
+      const branchLatest = branches.find((b) => b.major === major)?.version;
+      if (/^\d+\.\d+\.\d+$/.test(version) && branchLatest && compareVersions(version, branchLatest) < 0) {
+        return { status: 'outdated', label: `Behind the latest ${major}.x release (${branchLatest})`, latest, source };
+      }
+      return { status: 'supported', label: `Joomla ${major} is supported`, latest, source };
+    }
+
+    if (name === 'Magento' && versionMajor(version) === 1) {
+      return { status: 'end-of-life', label: 'Magento 1 reached end of life in June 2020', source: 'Adobe support policy' };
+    }
+    if (name === 'Ghost' && versionMajor(version) && versionMajor(version) < 5) {
+      return { status: 'end-of-life', label: `Ghost ${versionMajor(version)} is no longer supported`, source: 'Ghost support policy' };
+    }
+  } catch (error) {
+    return { status: 'unknown', label: `Release data unavailable: ${error.message}`, source: null };
+  }
+  return { status: 'unknown', label: 'No public support data for this platform', source: null };
+}
+
+async function analyzeCms({ technologies, html, renderedRequests, finalUrl }) {
+  const assetUrls = [
+    ...(html ? extractAssetUrls(html) : []),
+    ...((renderedRequests || []).map((r) => r.url))
+  ];
+  let origin = null;
+  try { origin = new URL(finalUrl).origin; } catch { /* ignore */ }
+
+  const found = [];
+  for (const t of technologies) {
+    const entry = Object.entries(CMS_PLATFORMS).find(([, meta]) => meta.aliases.some((re) => re.test(t.name)));
+    if (!entry || found.some((f) => f.name === entry[0])) continue;
+    const [name, meta] = entry;
+    const { version, source, disclosed } = await detectCmsVersion(name, { techVersion: t.version, techEvidence: t.evidence, assetUrls, html, origin });
+    const support = await checkCmsSupport(name, version, !!meta.hosted);
+    found.push({ name, type: meta.type, hosted: !!meta.hosted, version, versionSource: source, versionDisclosed: !!disclosed, evidence: t.evidence || [], detectedVia: t.sources || [], support });
+    if (version && !t.version) t.version = version; // keep the technologies table consistent
+  }
+
+  // WooCommerce runs on WordPress; list the CMS first
+  found.sort((a, b) => (a.type.includes('plugin') ? 1 : 0) - (b.type.includes('plugin') ? 1 : 0));
+  return { detected: found.length > 0, primary: found[0]?.name || null, platforms: found };
+}
+
+// ---------------------------------------------------------------------------
 // Off-domain resources (scripts, styles, images, fonts, frames, API calls)
 // ---------------------------------------------------------------------------
 
@@ -2827,6 +3063,15 @@ function buildFindings(report) {
     }
   }
 
+  // CMS / platform
+  for (const p of report.cms?.platforms || []) {
+    const v = p.version ? `${p.name} ${p.version}` : p.name;
+    if (p.support.status === 'insecure') add('high', 'CMS', `${v} has known security vulnerabilities`, `${p.support.label}. Latest release: ${p.support.latest || 'n/a'}.`);
+    else if (p.support.status === 'end-of-life') add('high', 'CMS', `${v} is end-of-life`, `${p.support.label}. It no longer receives security fixes.`);
+    else if (p.support.status === 'outdated') add('medium', 'CMS', `${v} is not the latest release`, `${p.support.label}${p.support.latest ? `. Latest: ${p.support.latest}` : ''}.`);
+    if (p.versionDisclosed && p.version) add('low', 'Information disclosure', `${p.name} version disclosed`, `Version ${p.version} is published via ${p.versionSource}. Removing it makes targeted attacks slightly harder.`);
+  }
+
   // Affiliate activity
   const aff = report.affiliate;
   if (aff?.suspectedStuffing) {
@@ -2895,6 +3140,7 @@ async function runAiAssessment(env, model, report) {
     cdn: report.network.cdn.providers.map((p) => p.name),
     hosting: report.network.ips.map((i) => `${i.ip} AS${i.asn ?? '?'} ${i.asnName ?? ''}`),
     technologies: report.technologies.slice(0, 25).map((t) => `${t.name}${t.version ? ` ${t.version}` : ''}`),
+    cms: (report.cms?.platforms || []).map((p) => `${p.name}${p.version ? ` ${p.version}` : ''} (${p.support.status})`),
     offDomain: report.offDomain ? { domains: report.offDomain.domainCount, scriptDomains: report.offDomain.scriptDomainCount, scriptsWithoutSri: report.offDomain.scriptsWithoutSri, byCategory: report.offDomain.byCategory } : null,
     affiliate: report.affiliate ? { verdict: report.affiliate.verdict, networks: report.affiliate.networks, backgroundRequests: report.affiliate.background.length } : null,
     cookies: report.cookies ? { total: report.cookies.total, thirdParty: report.cookies.thirdParty, tracking: report.cookies.tracking, byCategory: report.cookies.byCategory } : null,
@@ -3073,6 +3319,13 @@ export async function runUrlScan(rawTarget, options = {}) {
     bannerLibraries
   });
 
+  const cms = await analyzeCms({
+    technologies,
+    html: isHtml ? body.text : '',
+    renderedRequests: screenshot.success ? screenshot._requests : [],
+    finalUrl
+  });
+
   const altSvc = headers.get('alt-svc') || '';
   const http2 = tls.alpn === 'h2' || dns.httpsRecordAlpn?.includes('h2') ? true : (tls.probed && tls.alpn ? false : null);
   const http3 = /\bh3(-\d+)?=/.test(altSvc) || dns.httpsRecordAlpn?.includes('h3') ? true : null;
@@ -3123,6 +3376,7 @@ export async function runUrlScan(rawTarget, options = {}) {
     },
     cookies: cookieReport,
     offDomain,
+    cms,
     affiliate: analyzeAffiliate({
       redirectChain: redirects.chain,
       requests: screenshot.success ? screenshot._requests : [],
@@ -3172,6 +3426,9 @@ export const _internal = {
   fingerprintTechnologies,
   probeTls,
   matchAffiliate,
+  analyzeCms,
+  detectCmsVersion,
+  checkCmsSupport,
   analyzeOffDomain,
   identifyScriptBanner,
   analyzeAffiliate,

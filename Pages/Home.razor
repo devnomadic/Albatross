@@ -605,6 +605,34 @@
                     </div>
 
                     <div class="url-scan-card url-scan-wide">
+                        <div class="url-scan-card-title">📰 CMS / Platform</div>
+                        @if (scan.Cms?.Detected == true)
+                        {
+                            <table class="url-scan-table">
+                                <thead><tr><th>Platform</th><th>Type</th><th>Version</th><th>How the version was found</th><th>Support status</th><th>Latest</th></tr></thead>
+                                <tbody>
+                                    @foreach (var p in scan.Cms.Platforms ?? new())
+                                    {
+                                        <tr class="@(p.Support?.Status is "insecure" or "end-of-life" ? "row-vuln" : "")">
+                                            <td title="@string.Join("\n", p.Evidence ?? new())"><strong>@p.Name</strong></td>
+                                            <td>@p.Type</td>
+                                            <td>@(p.Version ?? "unknown")</td>
+                                            <td class="url-scan-muted">@(p.VersionSource ?? "not exposed")</td>
+                                            <td><span class="chip @CmsStatusClass(p.Support?.Status)" title="@p.Support?.Source">@CmsStatusText(p.Support?.Status)</span> <span class="url-scan-muted">@p.Support?.Label</span></td>
+                                            <td>@(p.Support?.Latest ?? "-")</td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                            <div class="url-scan-muted url-scan-note">ℹ️ Support status comes from the official release data (api.wordpress.org, updates.drupal.org, downloads.joomla.org), cached for 12 hours. Hosted platforms like Shopify or Wix are patched by the vendor.</div>
+                        }
+                        else
+                        {
+                            <div class="url-scan-muted">No content management system or site platform was detected.</div>
+                        }
+                    </div>
+
+                    <div class="url-scan-card url-scan-wide">
                         <div class="url-scan-card-title">🍪 Cookies (@(scan.Cookies?.Total ?? 0))</div>
                         @if (scan.Cookies is { Total: > 0 } ck)
                         {
@@ -1240,6 +1268,25 @@
         "Tracking" => items.Where(c => c.Category is "Analytics" or "Marketing").ToList(),
         "With issues" => items.Where(c => c.Issues?.Any() == true).ToList(),
         _ => items
+    };
+
+    private static string CmsStatusText(string? status) => status switch
+    {
+        "latest" => "Latest",
+        "supported" => "Supported",
+        "outdated" => "Outdated",
+        "insecure" => "Insecure",
+        "end-of-life" => "End of life",
+        "vendor-managed" => "Vendor managed",
+        _ => "Unknown"
+    };
+
+    private static string CmsStatusClass(string? status) => status switch
+    {
+        "latest" or "supported" or "vendor-managed" => "chip-good",
+        "outdated" => "chip-warn",
+        "insecure" or "end-of-life" => "chip-bad",
+        _ => "chip-unknown"
     };
 
     private static string ResourceCategoryClass(string? category) => category switch
