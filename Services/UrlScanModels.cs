@@ -19,6 +19,7 @@ namespace Albatross.Services
         [JsonPropertyName("http")] public UrlScanHttp? Http { get; set; }
         [JsonPropertyName("tls")] public UrlScanTls? Tls { get; set; }
         [JsonPropertyName("cookies")] public UrlScanCookies? Cookies { get; set; }
+        [JsonPropertyName("scanBlocked")] public UrlScanBlocked? ScanBlocked { get; set; }
         [JsonPropertyName("cms")] public UrlScanCms? Cms { get; set; }
         [JsonPropertyName("offDomain")] public UrlScanOffDomain? OffDomain { get; set; }
         [JsonPropertyName("affiliate")] public UrlScanAffiliate? Affiliate { get; set; }
@@ -58,6 +59,7 @@ namespace Albatross.Services
         [JsonPropertyName("fetchError")] public string? FetchError { get; set; }
         [JsonPropertyName("securityScore")] public int? SecurityScore { get; set; }
         [JsonPropertyName("riskLevel")] public string? RiskLevel { get; set; }
+        [JsonPropertyName("scoreNote")] public string? ScoreNote { get; set; }
         [JsonPropertyName("findingCounts")] public Dictionary<string, int>? FindingCounts { get; set; }
         [JsonPropertyName("durationMs")] public long? DurationMs { get; set; }
     }
@@ -130,6 +132,23 @@ namespace Albatross.Services
     }
 
     /// <summary>
+    /// Bot protection / WAF block page detected for the scanner's request and/or the browser.
+    /// </summary>
+    public class UrlScanBlocked
+    {
+        [JsonPropertyName("blocked")] public bool Blocked { get; set; }
+        [JsonPropertyName("provider")] public string? Provider { get; set; }
+        [JsonPropertyName("kind")] public string? Kind { get; set; }
+        [JsonPropertyName("scope")] public string? Scope { get; set; }
+        [JsonPropertyName("fetchBlocked")] public bool FetchBlocked { get; set; }
+        [JsonPropertyName("browserBlocked")] public bool? BrowserBlocked { get; set; }
+        [JsonPropertyName("statusCode")] public int? StatusCode { get; set; }
+        [JsonPropertyName("evidence")] public List<string>? Evidence { get; set; }
+        [JsonPropertyName("message")] public string? Message { get; set; }
+        [JsonPropertyName("analysedRenderedPage")] public bool AnalysedRenderedPage { get; set; }
+    }
+
+    /// <summary>
     /// CMS / platform detection with version and support status.
     /// </summary>
     public class UrlScanCms
@@ -149,6 +168,7 @@ namespace Albatross.Services
         [JsonPropertyName("versionDisclosed")] public bool VersionDisclosed { get; set; }
         [JsonPropertyName("evidence")] public List<string>? Evidence { get; set; }
         [JsonPropertyName("detectedVia")] public List<string>? DetectedVia { get; set; }
+        [JsonPropertyName("confidence")] public string? Confidence { get; set; }
         [JsonPropertyName("support")] public UrlScanCmsSupport? Support { get; set; }
     }
 

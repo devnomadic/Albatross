@@ -1219,7 +1219,7 @@ const HTML_FINGERPRINTS = [
   { name: 'Adobe Experience Manager', category: 'CMS', pattern: /\/etc\.clientlibs\/|\/content\/dam\/|\/libs\/granite\// },
   { name: 'Sitecore', category: 'CMS', pattern: /\/-\/media\/|\/sitecore\/shell\// },
   { name: 'BigCommerce', category: 'E-commerce', pattern: /cdn\d*\.bigcommerce\.com/ },
-  { name: 'HubSpot CMS', category: 'CMS', pattern: /\/_hcms\/|\.hs-sites\.com|hs-scripts\.com/ },
+  { name: 'HubSpot CMS', category: 'CMS', pattern: /\/_hcms\/|\.hs-sites\.com|hubspotusercontent-[a-z0-9]+\.net\/hubfs\/[^\s\"']+\.(?:css|js)/ },
   { name: 'Next.js', category: 'JavaScript framework', pattern: /\/_next\/static\/|__NEXT_DATA__/ },
   { name: 'Nuxt', category: 'JavaScript framework', pattern: /\/_nuxt\/|window\.__NUXT__/ },
   { name: 'Gatsby', category: 'Static site generator', pattern: /id="___gatsby"|\/page-data\/app-data\.json/ },
@@ -1259,7 +1259,14 @@ const COOKIE_FINGERPRINTS = [
   { pattern: /^CraftSessionId$/i, name: 'Craft CMS', category: 'CMS' },
   { pattern: /^PrestaShop-/i, name: 'PrestaShop', category: 'E-commerce' },
   { pattern: /^OCSESSID$/i, name: 'OpenCart', category: 'E-commerce' },
-  { pattern: /^SC_ANALYTICS_GLOBAL_COOKIE$/i, name: 'Sitecore', category: 'CMS' }
+  { pattern: /^SC_ANALYTICS_GLOBAL_COOKIE$/i, name: 'Sitecore', category: 'CMS' },
+  { pattern: /^exp_(tracker|last_visit|last_activity|csrf_token)$/i, name: 'ExpressionEngine', category: 'CMS' },
+  { pattern: /^(GUEST_LANGUAGE_ID|COOKIE_SUPPORT|LFR_SESSION_STATE_\d+)$/i, name: 'Liferay', category: 'CMS' },
+  { pattern: /^(sw-states|sw-context-token|sw-cache-hash)$/i, name: 'Shopware', category: 'E-commerce' },
+  { pattern: /^(EPi:StateMarker|EPiServer\.|\.EPiForm)/i, name: 'Optimizely CMS', category: 'CMS' },
+  { pattern: /^grav-site-/i, name: 'Grav', category: 'CMS' },
+  { pattern: /^kirby_session$/i, name: 'Kirby', category: 'CMS' },
+  { pattern: /^statamic_session$/i, name: 'Statamic', category: 'CMS' }
 ];
 
 function parseServerSoftware(value) {
@@ -2328,8 +2335,12 @@ async function renderPage(puppeteer, env, url, targetDomain, holder) {
     });
 
     let navigationWarning = null;
+    let mainStatus = null;
+    let mainHeaders = null;
     try {
-      await page.goto(url, { waitUntil: 'networkidle2', timeout: SCAN_LIMITS.screenshotTimeoutMs });
+      const mainResponse = await page.goto(url, { waitUntil: 'networkidle2', timeout: SCAN_LIMITS.screenshotTimeoutMs });
+      mainStatus = mainResponse?.status() ?? null;
+      mainHeaders = mainResponse?.headers() ?? null;
     } catch (error) {
       navigationWarning = error.message; // still screenshot whatever loaded
     }
@@ -2337,6 +2348,8 @@ async function renderPage(puppeteer, env, url, targetDomain, holder) {
     const runtimeLibraries = await page.evaluate(detectRuntimeLibraries).catch(() => ({}));
     const hiddenElements = await page.evaluate(detectHiddenElements).catch(() => []);
     const domResources = await page.evaluate(detectResourceElements).catch(() => []);
+    const renderedHtml = await page.content().then((h) => h.substring(0, 1_500_000)).catch(() => null);
+    const pageTitle = await page.title().catch(() => null);
     await Promise.race([Promise.allSettled(scriptReads), new Promise((r) => setTimeout(r, 4000))]);
     for (const [u, size] of transferSizes) {
       const meta = responses.get(u);
@@ -2377,7 +2390,11 @@ async function renderPage(puppeteer, env, url, targetDomain, holder) {
       _cookies: cookies,
       _hiddenElements: hiddenElements,
       _responses: responses,
-      _domResources: domResources
+      _domResources: domResources,
+      _html: renderedHtml,
+      _title: pageTitle,
+      _mainStatus: mainStatus,
+      _mainHeaders: mainHeaders
     };
   } catch (error) {
     return { success: false, error: `Screenshot failed: ${error.message}` };
@@ -2404,7 +2421,7 @@ const CMS_PLATFORMS = {
   'Concrete CMS': { type: 'Self-hosted CMS', aliases: [/^concrete( cms|5)?$/i] },
   'Adobe Experience Manager': { type: 'Enterprise CMS', aliases: [/^adobe experience manager$/i] },
   Sitecore: { type: 'Enterprise CMS', aliases: [/^sitecore$/i] },
-  Magento: { type: 'Self-hosted e-commerce', aliases: [/^magento$/i] },
+  Magento: { type: 'Self-hosted e-commerce (Adobe Commerce)', aliases: [/^magento$/i, /^adobe commerce\b/i] },
   PrestaShop: { type: 'Self-hosted e-commerce', aliases: [/^prestashop$/i] },
   OpenCart: { type: 'Self-hosted e-commerce', aliases: [/^opencart$/i] },
   WooCommerce: { type: 'WordPress e-commerce plugin', aliases: [/^woocommerce$/i] },
@@ -2413,7 +2430,46 @@ const CMS_PLATFORMS = {
   Squarespace: { type: 'Hosted website builder', hosted: true, aliases: [/^squarespace$/i] },
   Wix: { type: 'Hosted website builder', hosted: true, aliases: [/^wix(\.com)?( website builder)?$/i] },
   Webflow: { type: 'Hosted website builder', hosted: true, aliases: [/^webflow$/i] },
-  'HubSpot CMS': { type: 'Hosted CMS', hosted: true, aliases: [/^hubspot( cms)?$/i] }
+  'HubSpot CMS': { type: 'Hosted CMS', hosted: true, aliases: [/^hubspot( cms)?$/i] },
+  Sitefinity: { type: 'Enterprise CMS', aliases: [/^sitefinity$/i] },
+  'DNN (DotNetNuke)': { type: 'Self-hosted CMS', aliases: [/^(dnn|dotnetnuke)( platform)?$/i] },
+  Kentico: { type: 'Enterprise CMS', aliases: [/^kentico( xperience)?$/i] },
+  Blogger: { type: 'Hosted blog platform', hosted: true, aliases: [/^blogger$/i] },
+  Weebly: { type: 'Hosted website builder', hosted: true, aliases: [/^weebly$/i] },
+  'GoDaddy Website Builder': { type: 'Hosted website builder', hosted: true, aliases: [/^godaddy website builder$/i] },
+  Duda: { type: 'Hosted website builder', hosted: true, aliases: [/^duda$/i] },
+  Jimdo: { type: 'Hosted website builder', hosted: true, aliases: [/^jimdo$/i] },
+  // Traditional & open source
+  SilverStripe: { type: 'Self-hosted CMS', aliases: [/^silverstripe\b/i] },
+  ExpressionEngine: { type: 'Self-hosted CMS', aliases: [/^expressionengine\b/i] },
+  'Backdrop CMS': { type: 'Self-hosted CMS', aliases: [/^backdrop( cms)?\b/i] },
+  // Headless & API-first (detected through the hosts that serve their content)
+  Contentful: { type: 'Headless CMS (SaaS)', hosted: true, aliases: [/^contentful\b/i] },
+  Sanity: { type: 'Headless CMS (SaaS)', hosted: true, aliases: [/^sanity\b/i] },
+  Strapi: { type: 'Headless CMS (self-hosted or cloud)', aliases: [/^strapi\b/i] },
+  'Payload CMS': { type: 'Headless CMS (self-hosted or cloud)', aliases: [/^payload( cms)?\b/i] },
+  Storyblok: { type: 'Headless CMS (SaaS)', hosted: true, aliases: [/^storyblok\b/i] },
+  Directus: { type: 'Headless CMS (self-hosted or cloud)', aliases: [/^directus\b/i] },
+  'Kontent.ai': { type: 'Headless CMS (SaaS)', hosted: true, aliases: [/^kontent(\.ai)?\b/i] },
+  Hygraph: { type: 'Headless CMS (SaaS)', hosted: true, aliases: [/^(hygraph|graphcms)\b/i] },
+  Prismic: { type: 'Headless CMS (SaaS)', hosted: true, aliases: [/^prismic\b/i] },
+  TinaCMS: { type: 'Headless Git-backed CMS', aliases: [/^tina( ?cms)?\b/i] },
+  // Enterprise DXP & hybrid
+  'Optimizely CMS': { type: 'Enterprise DXP', aliases: [/^(optimizely cms|episerver)\b/i] },
+  CoreMedia: { type: 'Enterprise DXP', aliases: [/^coremedia\b/i] },
+  Magnolia: { type: 'Enterprise DXP', aliases: [/^magnolia\b/i] },
+  Bloomreach: { type: 'Enterprise DXP', aliases: [/^(bloomreach|hippo)\b/i] },
+  Liferay: { type: 'Enterprise DXP', aliases: [/^liferay\b/i] },
+  OpenText: { type: 'Enterprise CMS', aliases: [/^(opentext|teamsite|vignette)\b/i] },
+  // E-commerce & headless commerce
+  Saleor: { type: 'Headless commerce', aliases: [/^saleor\b/i] },
+  Medusa: { type: 'Headless commerce', aliases: [/^medusa(js)?\b/i] },
+  Shopware: { type: 'Self-hosted e-commerce', aliases: [/^shopware\b/i] },
+  // Flat-file & Git-based
+  Statamic: { type: 'Flat-file CMS', aliases: [/^statamic\b/i] },
+  'Decap CMS': { type: 'Git-based CMS', aliases: [/^(decap|netlify) cms\b/i] },
+  Kirby: { type: 'Flat-file CMS', aliases: [/^kirby\b/i] },
+  Grav: { type: 'Flat-file CMS', aliases: [/^grav( ?cms)?\b/i] }
 };
 
 const CMS_CACHE_TTL_SECONDS = 12 * 3600;
@@ -2585,7 +2641,138 @@ async function checkCmsSupport(name, version, hosted) {
   return { status: 'unknown', label: 'No public support data for this platform', source: null };
 }
 
-async function analyzeCms({ technologies, html, renderedRequests, finalUrl }) {
+/**
+ * Keyword fallback: strong phrases and markers platforms leave in their own HTML (credit lines,
+ * signature comments, characteristic class names / URL shapes). Bare product names are deliberately
+ * not matched, so an article that merely mentions "WordPress" does not count.
+ * A capture group, where present, picks up a version from the same phrase.
+ */
+const POWERED_BY = String.raw`(?:proudly\s+)?(?:powered|built|made|created)\s+(?:by|with|on|using)\s*(?:<[^>]{0,200}>\s*)*`;
+const VERSION_AFTER = String.raw`(?:\s*(?:<[^>]{0,200}>\s*)*v?(\d+(?:\.\d+){0,2})\b)?`;
+const kw = (src, flags = 'i') => new RegExp(src, flags);
+const CMS_KEYWORDS = [
+  ['WordPress', kw(`${POWERED_BY}wordpress${VERSION_AFTER}`), 'credit line'],
+  ['WordPress', /class=["'][^"']*\bwp-block-[a-z]/i, 'wp-block- classes'],
+  ['WordPress', /wpemojiSettings|wp-emoji-release/i, 'WordPress emoji script'],
+  ['WordPress', /\/xmlrpc\.php\?rsd/i, 'xmlrpc.php RSD link'],
+  ['WordPress', /<!--[^>]{0,80}Yoast SEO plugin/i, 'Yoast SEO comment'],
+  ['Drupal', kw(`${POWERED_BY}drupal${VERSION_AFTER}`), 'credit line'],
+  ['Drupal', /data-drupal-selector|drupal-settings-json/i, 'Drupal settings markup'],
+  ['Joomla', kw(`${POWERED_BY}joomla!?${VERSION_AFTER}`), 'credit line'],
+  ['Joomla', /index\.php\?option=com_[a-z]+/i, 'index.php?option=com_ URLs'],
+  ['TYPO3', /This website is powered by TYPO3/i, 'TYPO3 signature comment'],
+  ['Squarespace', /<!--\s*This is Squarespace\.\s*-->/i, 'Squarespace signature comment'],
+  ['Squarespace', kw(`${POWERED_BY}squarespace`), 'credit line'],
+  ['Webflow', /This site was created in Webflow/i, 'Webflow signature comment'],
+  ['Wix', kw(`${POWERED_BY}wix(?:\\.com)?\\b`), 'credit line'],
+  ['Shopify', kw(`${POWERED_BY}shopify`), 'credit line'],
+  ['Shopify', /Shopify\.shop\s*=/i, 'Shopify.shop script'],
+  ['Ghost', kw(`${POWERED_BY}ghost\\b${VERSION_AFTER}`), 'credit line'],
+  ['Magento', /mage\/cookies|Magento_[A-Z][a-zA-Z]+\//, 'Magento module paths'],
+  ['PrestaShop', kw(`${POWERED_BY}prestashop`), 'credit line'],
+  ['PrestaShop', /var prestashop\s*=/i, 'prestashop JS object'],
+  ['OpenCart', kw(`${POWERED_BY}opencart`), 'credit line'],
+  ['OpenCart', /index\.php\?route=(?:product|common|checkout|information)\//i, 'index.php?route= URLs'],
+  ['Umbraco', kw(`${POWERED_BY}umbraco`), 'credit line'],
+  ['Craft CMS', kw(`${POWERED_BY}craft\\s*cms`), 'credit line'],
+  ['Concrete CMS', kw(`${POWERED_BY}concrete(?:\\s*cms|5)`), 'credit line'],
+  ['Sitefinity', /Telerik\.Sitefinity|data-sf-element|sf_pagesitemap/i, 'Sitefinity markup'],
+  ['DNN (DotNetNuke)', /\/DesktopModules\/|dnn_ContentPane|DNN Platform/i, 'DNN markup'],
+  ['Kentico', /\/CMSPages\/|CMSPreferredCulture|\/kentico\//i, 'Kentico markup'],
+  ['Blogger', /blogger\.com\/static|<b:skin|blogblog\.com/i, 'Blogger assets'],
+  ['Weebly', /editmysite\.com|_W\.configDomain/i, 'Weebly assets'],
+  ['GoDaddy Website Builder', /img1\.wsimg\.com|GoDaddy Website Builder/i, 'GoDaddy assets'],
+  ['Duda', /irp\.cdn-website\.com|dmAlbum|dudaone/i, 'Duda assets'],
+  ['Jimdo', /jimdo(?:cdn)?\.com/i, 'Jimdo assets'],
+  // Traditional & open source
+  ['SilverStripe', /\/_?resources\/(?:vendor\/)?silverstripe\/|silverstripe-/i, 'SilverStripe resource paths'],
+  ['ExpressionEngine', /\/themes\/ee\/|name=["']ACT["']|exp_csrf_token/i, 'ExpressionEngine markup'],
+  ['Backdrop CMS', /\/core\/misc\/backdrop\.js|Backdrop\.settings/i, 'Backdrop core script'],
+  // Headless & API-first
+  ['Contentful', /\b(?:images|assets|videos|downloads)\.ctfassets\.net\//i, 'Contentful asset host (ctfassets.net)'],
+  ['Sanity', /\bcdn\.sanity\.io\/(?:images|files)\//i, 'Sanity asset host (cdn.sanity.io)'],
+  ['Strapi', /\.strapiapp\.com|x-powered-by:\s*strapi/i, 'Strapi host / header'],
+  ['Payload CMS', /\/api\/media\/file\/|x-powered-by:\s*payload/i, 'Payload media route / header'],
+  ['Storyblok', /\ba(?:-[a-z]{2})?\.storyblok\.com\/f\/|app\.storyblok\.com|storyblok-v2-latest\.js/i, 'Storyblok asset host'],
+  ['Directus', /\.directus\.(?:app|cloud)\b|\/directus\/assets\//i, 'Directus host / asset path'],
+  ['Kontent.ai', /\b(?:preview-)?assets-[a-z]{2}-\d{2}\.kc-usercontent\.com/i, 'Kontent.ai asset host'],
+  ['Hygraph', /\bmedia\.graphassets\.com|\.hygraph\.com|\.graphcms\.com/i, 'Hygraph asset host'],
+  ['Prismic', /\b(?:images|[a-z0-9-]+\.cdn)\.prismic\.io|static\.cdn\.prismic\.io/i, 'Prismic asset host'],
+  ['TinaCMS', /\bassets\.tina\.io|content\.tinajs\.io|data-tina-field/i, 'TinaCMS assets / fields'],
+  // Enterprise DXP & hybrid
+  ['Optimizely CMS', /\/(?:globalassets|contentassets)\/|EPiServer|epi-editmode/i, 'Optimizely (Episerver) content paths'],
+  ['CoreMedia', /\/resource\/blob\/\d+\/|data-cm-metadata|coremedia\.(?:min\.)?js/i, 'CoreMedia blob paths / metadata'],
+  ['Magnolia', /\/dam\/jcr:|\/\.resources\/[a-z0-9-]+\/|mgnl-/i, 'Magnolia DAM / resource paths'],
+  ['Bloomreach', /\/binaries\/content\/(?:gallery|assets)\/|_cmsinternal|hippo-/i, 'Bloomreach (Hippo) binaries paths'],
+  ['Liferay', /Liferay\.(?:ThemeDisplay|authToken|Portlet)|\/o\/frontend-js-|\/combo\?browserId=|liferay-portal:/i, 'Liferay markup / header'],
+  ['OpenText', /vgnextoid|vgnextchannel|vgn-ext-templating|\/iw-mount\//i, 'OpenText (Vignette / TeamSite) URLs'],
+  // E-commerce & headless commerce
+  ['Saleor', /\.saleor\.cloud|saleor-storefront/i, 'Saleor Cloud API'],
+  ['Medusa', /\.medusajs\.app|@medusajs\/|x-publishable-api-key/i, 'Medusa backend'],
+  ['Shopware', /\/bundles\/storefront\/|window\.router\[['"]frontend\.|shopware\.php|sw-csrf/i, 'Shopware storefront'],
+  // Flat-file & Git-based
+  ['Statamic', /\/vendor\/statamic\/|data-statamic/i, 'Statamic vendor assets'],
+  ['Decap CMS', /decap-cms|netlify-cms|identity\.netlify\.com\/v1\/netlify-identity-widget\.js/i, 'Decap / Netlify CMS script'],
+  ['Kirby', /\/media\/pages\/[^"'\s]+\/[0-9a-f]{10,}-\d+\//i, 'Kirby media paths'],
+  ['Grav', /\/user\/(?:themes|plugins)\/[a-z0-9_-]+\//i, 'Grav user theme / plugin paths']
+];
+
+/** Credit-line and generator-tag names for the simple keyword search (one pattern pair per platform). */
+const CMS_CREDIT_NAMES = {
+  SilverStripe: 'silver\\s?stripe', ExpressionEngine: 'expression\\s?engine', 'Backdrop CMS': 'backdrop\\s*cms',
+  Contentful: 'contentful', Sanity: 'sanity(?:\\.io)?', Strapi: 'strapi', 'Payload CMS': 'payload\\s*cms', Storyblok: 'storyblok',
+  Directus: 'directus', 'Kontent.ai': 'kontent\\.ai', Hygraph: 'hygraph', Prismic: 'prismic', TinaCMS: 'tina\\s*cms',
+  'Optimizely CMS': '(?:optimizely\\s*cms|episerver)', CoreMedia: 'coremedia', Magnolia: 'magnolia(?:\\s*cms)?', Bloomreach: 'bloomreach',
+  Liferay: 'liferay', OpenText: 'opentext', Saleor: 'saleor', Medusa: 'medusa(?:js)?', Shopware: 'shopware', Statamic: 'statamic',
+  'Decap CMS': 'decap\\s*cms', Kirby: 'kirby(?:\\s*cms)?', Grav: 'grav(?:\\s*cms)?', 'Craft CMS': 'craft\\s*cms', 'Concrete CMS': 'concrete\\s*(?:cms|5)',
+  Ghost: 'ghost', TYPO3: 'typo3', 'Adobe Experience Manager': 'adobe\\s*experience\\s*manager', Sitecore: 'sitecore', Kentico: 'kentico',
+  BigCommerce: 'bigcommerce', WooCommerce: 'woocommerce', PrestaShop: 'prestashop', Magento: '(?:magento|adobe\\s*commerce)'
+};
+for (const [name, nameRe] of Object.entries(CMS_CREDIT_NAMES)) {
+  if (!CMS_KEYWORDS.some(([n, , label]) => n === name && label === 'credit line')) {
+    CMS_KEYWORDS.push([name, kw(`${POWERED_BY}${nameRe}\\b${VERSION_AFTER}`), 'credit line']);
+  }
+  CMS_KEYWORDS.push([name, kw(`<meta[^>]+name=["']generator["'][^>]+content=["']\\s*${nameRe}\\b(?:\\s*(?:cms|platform|commerce))?${VERSION_AFTER}`), 'meta generator']);
+}
+
+/**
+ * Regions where genuine platform credits appear: <footer> blocks, elements whose id/class mentions
+ * footer/credit/copyright/site-info/powered, HTML comments and the last part of the document.
+ * Credit-line phrases are only matched here, so article text ("our site was built with WordPress")
+ * does not trigger a detection.
+ */
+function creditRegions(html) {
+  if (!html) return '';
+  const parts = [];
+  for (const m of html.matchAll(/<footer\b[\s\S]{0,20000}?<\/footer>/gi)) parts.push(m[0]);
+  for (const m of html.matchAll(/<[a-z]+\b[^>]*\b(?:id|class)=["'][^"']*(?:footer|credit|copyright|site-info|powered|colophon)[^"']*["'][^>]*>[\s\S]{0,1500}/gi)) parts.push(m[0]);
+  for (const m of html.matchAll(/<!--[\s\S]{0,500}?-->/g)) parts.push(m[0]);
+  parts.push(html.substring(Math.floor(html.length * 0.85)));
+  return parts.join('\n');
+}
+
+function keywordMatches(texts, extraTexts = []) {
+  const hits = new Map(); // platform -> { evidence: [], version }
+  const scoped = texts.map(creditRegions);
+  texts = [...texts, ...extraTexts]; // request URLs and response headers: markers only, never credit lines
+  for (const [name, re, label] of CMS_KEYWORDS) {
+    const pool = label === 'credit line' ? scoped : texts;
+    for (const text of pool) {
+      if (!text) continue;
+      const m = re.exec(text);
+      if (!m) continue;
+      const hit = hits.get(name) || { evidence: [], version: null };
+      const snippet = m[0].replace(/^<meta[^>]*content=["']/i, '').replace(/<!--|-->/g, ' ').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().substring(0, 80);
+      if (!hit.evidence.some((e) => e.startsWith(label))) hit.evidence.push(`${label}: "${snippet}"`);
+      if (!hit.version && m[1]) hit.version = m[1];
+      hits.set(name, hit);
+      break;
+    }
+  }
+  return hits;
+}
+
+async function analyzeCms({ technologies, html, renderedHtml, renderedRequests, finalUrl, headers }) {
   const assetUrls = [
     ...(html ? extractAssetUrls(html) : []),
     ...((renderedRequests || []).map((r) => r.url))
@@ -2604,7 +2791,54 @@ async function analyzeCms({ technologies, html, renderedRequests, finalUrl }) {
     if (version && !t.version) t.version = version; // keep the technologies table consistent
   }
 
-  // WooCommerce runs on WordPress; list the CMS first
+  for (const f of found) f.confidence = 'high';
+
+  // Keyword fallback over the fetched and rendered HTML
+  const requestText = (renderedRequests || []).map((r) => r.url).join('\n');
+  const headerText = headers ? [...headers].map(([k, v]) => `${k}: ${v}`).join('\n') : '';
+  const keywordHits = keywordMatches([html, renderedHtml], [requestText, headerText]);
+  for (const [name, hit] of keywordHits) {
+    const existing = found.find((f) => f.name === name);
+    if (existing) {
+      // Already fingerprinted: a version found in a credit line can still fill a gap
+      if (!existing.version && hit.version) {
+        existing.version = hit.version;
+        existing.versionSource = 'version in credit line';
+        existing.versionDisclosed = true;
+        existing.support = await checkCmsSupport(name, hit.version, existing.hosted);
+      }
+      existing.evidence = [...existing.evidence, ...hit.evidence].slice(0, 6);
+      continue;
+    }
+    const meta = CMS_PLATFORMS[name];
+    const detected = await detectCmsVersion(name, { techVersion: hit.version, techEvidence: [], assetUrls, html, origin });
+    const { version, disclosed } = detected;
+    let source = detected.source;
+    if (source === 'detected with technology fingerprint' && hit.version) {
+      source = hit.evidence.some((e) => e.startsWith('meta generator')) ? 'meta generator' : 'version in credit line';
+    }
+    const finalVersion = version || hit.version || null;
+    found.push({
+      name,
+      type: meta.type,
+      hosted: !!meta.hosted,
+      version: finalVersion,
+      versionSource: source || (hit.version ? 'version in credit line' : null),
+      versionDisclosed: !!disclosed || !!hit.version,
+      evidence: hit.evidence,
+      detectedVia: ['keyword'],
+      confidence: hit.evidence.length >= 2 ? 'medium' : 'low',
+      support: await checkCmsSupport(name, finalVersion, !!meta.hosted)
+    });
+    // Surface keyword-only platforms in the technologies table too
+    if (!technologies.some((t) => t.name === name)) {
+      technologies.push({ name, category: meta.hosted ? 'Website builder' : 'CMS', version: finalVersion, sources: ['keyword'], evidence: hit.evidence.slice(0, 3), vulnerabilities: [] });
+    }
+  }
+
+  // WooCommerce runs on WordPress; list the CMS first, then by confidence
+  const confRank = { high: 0, medium: 1, low: 2 };
+  found.sort((a, b) => (confRank[a.confidence] - confRank[b.confidence]) || 0);
   found.sort((a, b) => (a.type.includes('plugin') ? 1 : 0) - (b.type.includes('plugin') ? 1 : 0));
   return { detected: found.length > 0, primary: found[0]?.name || null, platforms: found };
 }
@@ -2949,6 +3183,99 @@ function analyzeAffiliate({ redirectChain, requests, hiddenElements, cookieItems
 }
 
 // ---------------------------------------------------------------------------
+// Bot protection / WAF block-page detection
+// ---------------------------------------------------------------------------
+
+/**
+ * Signatures of block, challenge and rate-limit pages served by bot-protection and WAF products.
+ * `body` patterns run against the HTML (and page title); `header` patterns against "name: value" lines.
+ */
+const BLOCK_SIGNATURES = [
+  { provider: 'Imperva (Incapsula)', kind: 'block', body: /Incapsula incident ID|_Incapsula_Resource|Request unsuccessful\. Incapsula/i, header: /^x-iinfo:/im },
+  { provider: 'Cloudflare', kind: 'challenge', body: /<title>Just a moment\.\.\.<\/title>|cf-chl-|challenge-platform\/|cf_chl_opt|Checking your browser before accessing/i, header: /^cf-mitigated:\s*challenge/im },
+  { provider: 'Cloudflare', kind: 'block', body: /Attention Required! \| Cloudflare|Sorry, you have been blocked|cf-error-details|error code: 10(?:0\d|1\d|20)\b/i },
+  { provider: 'Akamai', kind: 'block', body: /Access Denied[\s\S]{0,600}Reference\s*#\s*[\d.a-f]+|errors\.edgesuite\.net/i, header: /^server:\s*AkamaiGHost/im, requireBody: true },
+  { provider: 'AWS WAF', kind: 'block', body: /Request blocked\.[\s\S]{0,400}Generated by cloudfront|awswaf|aws-waf-token/i, header: /^x-amzn-waf-action:/im },
+  { provider: 'Sucuri', kind: 'block', body: /Sucuri WebSite Firewall - Access Denied|sucuri\.net\/privacy-policy|cloudproxy@sucuri/i, header: /^x-sucuri-block:/im },
+  { provider: 'DataDome', kind: 'challenge', body: /geo\.captcha-delivery\.com|ct\.captcha-delivery\.com|dd=\{['"]rt['"]/i, header: /^x-datadome:|^x-dd-b:/im },
+  { provider: 'HUMAN (PerimeterX)', kind: 'challenge', body: /px-captcha|_pxCaptcha|Press & Hold to confirm you are|perimeterx\.net\/[^"']*captcha/i },
+  { provider: 'F5 BIG-IP ASM', kind: 'block', body: /The requested URL was rejected\. Please consult with your administrator[\s\S]{0,200}support ID/i },
+  { provider: 'Azure Front Door WAF', kind: 'block', body: /The request is blocked\.[\s\S]{0,300}(?:x-azure-ref|Azure)/i },
+  { provider: 'Barracuda WAF', kind: 'block', body: /barra_counter_session|BNI__BARRACUDA_LB_COOKIE|You have been blocked by the Barracuda/i },
+  { provider: 'ModSecurity', kind: 'block', body: /This error was generated by Mod_Security|Not Acceptable![\s\S]{0,200}appropriate representation of the requested resource could not be found/i },
+  { provider: 'Wordfence', kind: 'block', body: /Generated by Wordfence|Your access to this site has been limited by the site owner/i },
+  { provider: 'Fastly / Varnish', kind: 'block', body: /<title>(?:Error )?40[13] (?:Forbidden|Unauthorized)<\/title>[\s\S]{0,800}Varnish cache server/i },
+  { provider: 'Vercel', kind: 'challenge', body: /Vercel Security Checkpoint|x-vercel-mitigated/i, header: /^x-vercel-mitigated:\s*challenge/im },
+  { provider: 'Generic CAPTCHA', kind: 'challenge', body: /<title>[^<]{0,60}(?:captcha|are you a (?:robot|human)|verify you are human|bot check)[^<]{0,60}<\/title>/i }
+];
+
+function headerLines(headers) {
+  if (!headers) return '';
+  const entries = typeof headers.entries === 'function' ? [...headers.entries()] : Object.entries(headers);
+  return entries.map(([k, v]) => `${k.toLowerCase()}: ${v}`).join('\n');
+}
+
+/**
+ * Decide whether a response is a bot-protection / WAF page rather than the real site.
+ */
+export function detectBotBlock({ status, headers, html, title }) {
+  // Decode entities: Akamai writes "Reference&#32;#" and "errors&#46;edgesuite&#46;net"
+  const text = decodeHtmlEntities(`${title ? `<title>${title}</title>\n` : ''}${(html || '').substring(0, 200_000)}`);
+  const hdr = headerLines(headers);
+  for (const sig of BLOCK_SIGNATURES) {
+    const bodyHit = sig.body && sig.body.exec(text);
+    const headerHit = sig.header && sig.header.exec(hdr);
+    if (sig.requireBody ? bodyHit : (bodyHit || (headerHit && status >= 400))) {
+      const evidence = [];
+      if (bodyHit) evidence.push(`page content: "${bodyHit[0].replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().substring(0, 90)}"`);
+      if (headerHit) evidence.push(`header ${headerHit[0].trim().substring(0, 80)}`);
+      if (status) evidence.push(`HTTP ${status}`);
+      // A "block" page that asks the visitor to solve a CAPTCHA is really a challenge
+      const kind = sig.kind === 'block' && /captcha|additional security check|verify (?:that )?you are (?:a )?human|i am human/i.test(text) ? 'challenge' : sig.kind;
+      return { blocked: true, provider: sig.provider, kind, statusCode: status ?? null, evidence };
+    }
+  }
+  // Generic: an error status with a tiny page that talks about being blocked
+  const visible = (html || '').replace(/<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>/gi, '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+  if ((status === 403 || status === 429 || status === 503) && visible.length < 2000 && /access denied|forbidden|blocked|too many requests|rate limit|unusual traffic|not authori[sz]ed/i.test(visible)) {
+    return {
+      blocked: true,
+      provider: 'Unidentified',
+      kind: status === 429 ? 'rate-limit' : 'block',
+      statusCode: status,
+      evidence: [`HTTP ${status}`, `page content: "${visible.substring(0, 90)}"`]
+    };
+  }
+  if (status === 429) return { blocked: true, provider: 'Unidentified', kind: 'rate-limit', statusCode: 429, evidence: ['HTTP 429 Too Many Requests'] };
+  return { blocked: false };
+}
+
+function summarizeBlock(fetchResult, browserResult) {
+  const fetchBlocked = !!fetchResult?.blocked;
+  const browserBlocked = !!browserResult?.blocked;
+  if (!fetchBlocked && !browserBlocked) return { blocked: false, fetchBlocked: false, browserBlocked: browserResult ? false : null };
+  const primary = browserBlocked ? browserResult : fetchResult;
+  const scope = fetchBlocked && browserBlocked ? 'both' : fetchBlocked ? 'scanner-request' : 'browser';
+  const kindText = { challenge: 'served a bot challenge', 'rate-limit': 'rate-limited the scan', block: 'blocked the scan' }[primary.kind] || 'blocked the scan';
+  const message = scope === 'both'
+    ? `${primary.provider} ${kindText}. Results describe the block page, not the real site.`
+    : scope === 'scanner-request'
+      ? `${primary.provider} ${kindText} for the scanner's direct request, but the browser loaded the page. Page analysis uses the rendered page; header and cookie results may describe the block response.`
+      : `${primary.provider} ${kindText} in the browser, but the scanner's direct request got through. Screenshot, cookies, off-domain resources and affiliate results may describe the block page.`;
+  return {
+    blocked: true,
+    provider: primary.provider,
+    kind: primary.kind,
+    scope,
+    fetchBlocked,
+    browserBlocked: browserResult ? browserBlocked : null,
+    statusCode: primary.statusCode,
+    evidence: [...new Set([...(fetchResult?.evidence || []).map((e) => `scanner: ${e}`), ...(browserResult?.evidence || []).map((e) => `browser: ${e}`)])].slice(0, 6),
+    message
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Findings + scoring
 // ---------------------------------------------------------------------------
 
@@ -2958,6 +3285,11 @@ const SEVERITY_ORDER = ['critical', 'high', 'medium', 'low', 'info'];
 function buildFindings(report) {
   const findings = [];
   const add = (severity, category, title, detail) => findings.push({ severity, category, title, detail });
+
+  // Scan limitations (informational: not a weakness of the site)
+  if (report.scanBlocked?.blocked) {
+    add('info', 'Scan', `Scan ${report.scanBlocked.kind === 'challenge' ? 'challenged' : report.scanBlocked.kind === 'rate-limit' ? 'rate-limited' : 'blocked'} by ${report.scanBlocked.provider}`, report.scanBlocked.message);
+  }
 
   // Redirects
   const r = report.redirects;
@@ -3140,6 +3472,7 @@ async function runAiAssessment(env, model, report) {
     cdn: report.network.cdn.providers.map((p) => p.name),
     hosting: report.network.ips.map((i) => `${i.ip} AS${i.asn ?? '?'} ${i.asnName ?? ''}`),
     technologies: report.technologies.slice(0, 25).map((t) => `${t.name}${t.version ? ` ${t.version}` : ''}`),
+    scanBlocked: report.scanBlocked?.blocked ? `${report.scanBlocked.provider} ${report.scanBlocked.kind} (${report.scanBlocked.scope}); results may describe the block page` : null,
     cms: (report.cms?.platforms || []).map((p) => `${p.name}${p.version ? ` ${p.version}` : ''} (${p.support.status})`),
     offDomain: report.offDomain ? { domains: report.offDomain.domainCount, scriptDomains: report.offDomain.scriptDomainCount, scriptsWithoutSri: report.offDomain.scriptsWithoutSri, byCategory: report.offDomain.byCategory } : null,
     affiliate: report.affiliate ? { verdict: report.affiliate.verdict, networks: report.affiliate.networks, backgroundRequests: report.affiliate.background.length } : null,
@@ -3277,6 +3610,18 @@ export async function runUrlScan(rawTarget, options = {}) {
   const body = finalResponse ? await readBodyLimited(finalResponse).catch(() => ({ text: '', truncated: false, bytes: 0 })) : { text: '', truncated: false, bytes: 0 };
   const isHtml = /html|xml/i.test(headers.get('content-type') || '') || /^\s*<(!doctype|html)/i.test(body.text);
 
+  // Bot protection / WAF: check the scanner's own request and the browser's page load separately
+  const fetchBlock = detectBotBlock({ status: finalResponse?.status, headers, html: body.text });
+  const browserBlock = screenshot.success
+    ? detectBotBlock({ status: screenshot._mainStatus, headers: screenshot._mainHeaders, html: screenshot._html, title: screenshot._title })
+    : null;
+  const scanBlocked = summarizeBlock(fetchBlock, browserBlock);
+  // If only the scanner's request was blocked, analyse the page the browser actually rendered
+  const useRendered = fetchBlock.blocked && browserBlock && !browserBlock.blocked && !!screenshot._html;
+  const pageHtml = useRendered ? screenshot._html : (isHtml ? body.text : '');
+  const pageIsHtml = useRendered || isHtml;
+  if (scanBlocked.blocked) scanBlocked.analysedRenderedPage = useRendered;
+
   let securityTxt = null;
   try {
     securityTxt = await checkSecurityTxt(new URL(finalUrl).origin);
@@ -3294,7 +3639,7 @@ export async function runUrlScan(rawTarget, options = {}) {
     requests: screenshot.success ? screenshot._requests : [],
     responses: screenshot.success ? screenshot._responses : null,
     domResources: screenshot.success ? screenshot._domResources : [],
-    html: isHtml ? body.text : '',
+    html: pageHtml,
     pageUrl: finalUrl,
     targetDomain: registrableDomain || hostname,
     browserInspected: !!screenshot.success,
@@ -3312,7 +3657,7 @@ export async function runUrlScan(rawTarget, options = {}) {
 
   const technologies = fingerprintTechnologies({
     headers,
-    html: isHtml ? body.text : '',
+    html: pageHtml,
     cookies,
     runtimeLibraries: screenshot.runtimeLibraries,
     renderedRequests: screenshot._requests,
@@ -3321,7 +3666,9 @@ export async function runUrlScan(rawTarget, options = {}) {
 
   const cms = await analyzeCms({
     technologies,
-    html: isHtml ? body.text : '',
+    html: pageHtml,
+    renderedHtml: screenshot.success ? screenshot._html : null,
+    headers,
     renderedRequests: screenshot.success ? screenshot._requests : [],
     finalUrl
   });
@@ -3346,6 +3693,10 @@ export async function runUrlScan(rawTarget, options = {}) {
   delete screenshotPublic._hiddenElements;
   delete screenshotPublic._responses;
   delete screenshotPublic._domResources;
+  delete screenshotPublic._html;
+  delete screenshotPublic._title;
+  delete screenshotPublic._mainStatus;
+  delete screenshotPublic._mainHeaders;
 
   const report = {
     scanType: 'url',
@@ -3389,17 +3740,25 @@ export async function runUrlScan(rawTarget, options = {}) {
     domain: { name: registrableDomain, registration, dns },
     network: { ips: ipIntel, cdn },
     technologies,
-    content: isHtml ? analyzeContent(body.text, finalUrl) : { title: null, scripts: { total: 0, external: 0, withoutSri: [] }, mixedContent: [], insecureForms: [], thirdPartyScriptHosts: [] },
+    content: pageIsHtml ? analyzeContent(pageHtml, finalUrl) : { title: null, scripts: { total: 0, external: 0, withoutSri: [] }, mixedContent: [], insecureForms: [], thirdPartyScriptHosts: [] },
     securityTxt,
     screenshot: screenshotPublic
   };
   report.summary.title = report.content.title;
+  report.scanBlocked = scanBlocked;
+  report.summary.scanBlocked = scanBlocked.blocked;
   if (screenshot.thirdPartyHosts) report.content.renderedThirdPartyHosts = screenshot.thirdPartyHosts;
 
   report.findings = buildFindings(report);
   const score = scoreFindings(report.findings);
   report.summary.securityScore = score.securityScore;
   report.summary.riskLevel = score.riskLevel;
+  if (scanBlocked.blocked && scanBlocked.scope === 'both') {
+    // Every page-level check saw the block page, so a score would describe the WAF, not the site
+    report.summary.securityScore = null;
+    report.summary.riskLevel = 'unknown';
+    report.summary.scoreNote = 'Not scored: the site blocked both the scanner and the browser.';
+  }
   report.summary.findingCounts = score.counts;
 
   report.aiAssessment = options.enableAI
@@ -3426,7 +3785,9 @@ export const _internal = {
   fingerprintTechnologies,
   probeTls,
   matchAffiliate,
+  summarizeBlock,
   analyzeCms,
+  keywordMatches,
   detectCmsVersion,
   checkCmsSupport,
   analyzeOffDomain,
